@@ -1,0 +1,50 @@
+name: Publish MeloX sync-9 prerelease
+on:
+  push:
+    branches: [codex/publish-listen-together-sync-9]
+    paths: [.github/workflows/publish-sync-9.yml]
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: publish-listen-together-sync-9
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN: '42528090237'
+      BUILD_COMMIT: 514ecdf84be6abfce82629cfbfc18432660edf77
+      TAG: unsigned-listen-together-sync-9
+    steps:
+      - name: Verify and publish existing unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$BUILD_RUN" \
+            | jq -e --arg commit "$BUILD_COMMIT" '.head_sha == $commit and .conclusion == "success"'
+          gh run download "$BUILD_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name MeloX-iOS-unsigned --dir "$RUNNER_TEMP/sync-9"
+          cd "$RUNNER_TEMP/sync-9"
+          printf '%s  %s\n' baf8fbb97a433785c5dfd0422b997e5ff8f1787bb4e45a3a2018a9b7ad335d10 MeloX-iOS-unsigned.ipa | sha256sum -c
+          unzip -tq MeloX-iOS-unsigned.ipa
+          mv MeloX-iOS-unsigned.ipa MeloX-iOS-unsigned-sync-9.ipa
+          cat > "$RUNNER_TEMP/sync-9-release.md" <<'EOF'
+          一起听切歌、暂停和进度操作按来源上报。连续操作依序发送，歌单更新与播放命令分开处理。后台混音移除了统一忽略音频中断的 600 毫秒窗口。
+
+          包含 iOS 主应用、歌词组件和 Apple Watch 应用。此 IPA 未签名，安装前需要自行签名。
+
+          播放回归测试与包完整性检查已通过。双端网易云房间同步及后台混音尚待真机验证。
+
+          - 构建提交：`514ecdf84be6abfce82629cfbfc18432660edf77`
+          - [构建记录](https://github.com/Ranco7/MeloX/actions/runs/42528090237)
+          - SHA-256：`baf8fbb97a433785c5dfd0422b997e5ff8f1787bb4e45a3a2018a9b7ad335d10`
+          EOF
+          gh release create "$TAG" MeloX-iOS-unsigned-sync-9.ipa \
+            --repo "$GITHUB_REPOSITORY" --target "$BUILD_COMMIT" \
+            --prerelease --latest=false --title 'MeloX iOS 未签名 · 一起听同步 9' \
+            --notes-file "$RUNNER_TEMP/sync-9-release.md"
