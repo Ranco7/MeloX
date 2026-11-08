@@ -112,7 +112,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="unsigned-listen-together-play-modes-6"
+          TAG="unsigned-listen-together-play-modes-7"
           IPA="build/MeloX-iOS-unsigned.ipa"
           NOTES="${RUNNER_TEMP}/unsigned-ipa-notes.md"
           cat > "${NOTES}" <<EOF
@@ -125,7 +125,7 @@ jobs:
           - Commit: \`${GITHUB_SHA}\`
           - Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
 
-          一起听与播放修复仍在。新增设置「后台混音保活」：可始终混音，或在被其他应用打断后改为混音续播。安装前需要自行签名，包内没有 embedded.mobileprovision。
+          一起听与播放修复仍在。功能模块里可以打开「与其他应用同时播放」，打开游戏时音乐不会被暂停。安装前需要自行签名，包内没有 embedded.mobileprovision。
           EOF
 
           if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
@@ -134,14 +134,14 @@ jobs:
               --repo "${GITHUB_REPOSITORY}" \
               --prerelease \
               --target "${GITHUB_SHA}" \
-              --title "MeloX iOS unsigned (listen together play modes 6)" \
+              --title "MeloX iOS unsigned (listen together play modes 7)" \
               --notes-file "${NOTES}"
           else
             gh release create "${TAG}" "${IPA}" \
               --repo "${GITHUB_REPOSITORY}" \
               --prerelease \
               --target "${GITHUB_SHA}" \
-              --title "MeloX iOS unsigned (listen together play modes 6)" \
+              --title "MeloX iOS unsigned (listen together play modes 7)" \
               --notes-file "${NOTES}"
           fi
           gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}"
