@@ -112,7 +112,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="unsigned-listen-together-play-modes-5"
+          TAG="unsigned-listen-together-play-modes-6"
           IPA="build/MeloX-iOS-unsigned.ipa"
           NOTES="${RUNNER_TEMP}/unsigned-ipa-notes.md"
           cat > "${NOTES}" <<EOF
@@ -134,14 +134,14 @@ jobs:
               --repo "${GITHUB_REPOSITORY}" \
               --prerelease \
               --target "${GITHUB_SHA}" \
-              --title "MeloX iOS unsigned (listen together play modes 5)" \
+              --title "MeloX iOS unsigned (listen together play modes 6)" \
               --notes-file "${NOTES}"
           else
             gh release create "${TAG}" "${IPA}" \
               --repo "${GITHUB_REPOSITORY}" \
               --prerelease \
               --target "${GITHUB_SHA}" \
-              --title "MeloX iOS unsigned (listen together play modes 5)" \
+              --title "MeloX iOS unsigned (listen together play modes 6)" \
               --notes-file "${NOTES}"
           fi
           gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}"
