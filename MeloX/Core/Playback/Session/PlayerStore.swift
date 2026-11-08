@@ -237,6 +237,10 @@ final class PlayerStore {
     private var listenTogetherSavedPlaybackOptions:
         ListenTogetherSavedPlaybackOptions?
 
+    /// Set when the user changes shuffle or repeat after the room session
+    /// starts, so the initial server snapshot cannot overwrite that choice.
+    private var listenTogetherPlayModeTouched = false
+
     init(
         api: NeteaseAPI,
         settings: AppSettings,
@@ -331,6 +335,7 @@ final class PlayerStore {
                 autoMixEnabled: isAutoMixEnabled
             )
         isListenTogetherSessionActive = true
+        listenTogetherPlayModeTouched = false
         repeatMode = .all
         if isShuffled {
             playbackQueue.toggleShuffle()
@@ -349,6 +354,7 @@ final class PlayerStore {
         }
         listenTogetherSavedPlaybackOptions = nil
         isListenTogetherSessionActive = false
+        listenTogetherPlayModeTouched = false
         repeatMode = saved.repeatMode
         if isShuffled != saved.wasShuffled {
             playbackQueue.toggleShuffle()
@@ -378,17 +384,23 @@ final class PlayerStore {
         }
 
         isHeartModeActive = false
-        if adoptsRoomPlayMode {
+        if adoptsRoomPlayMode, !listenTogetherPlayModeTouched {
             applyListenTogetherPlayMode(playMode)
         }
-        // A pause or zero-seek for the song we just auto-advanced into is the
-        // echo of the load gap (isPlaying is still false). Applying it reloads
-        // that song paused at 0:00. Leave the command unconsumed so a real
+        // A pause for the song we just auto-advanced into is the echo of the
+        // load gap (isPlaying is still false). Leave it unconsumed so a real
         // pause can apply once this handoff finishes.
         if !shouldPlay,
            isPreparingListenTogetherAutoplay,
            currentSong?.id == targetSongID {
             return false
+        }
+        // The same handoff already owns this song. Reloading it here cancels
+        // the in-flight source request and opens another paused gap.
+        if shouldPlay,
+           isPreparingListenTogetherAutoplay,
+           currentSong?.id == targetSongID {
+            return true
         }
         if shouldIgnoreStaleListenTogetherTransport(
             songs: songs,
@@ -960,6 +972,9 @@ final class PlayerStore {
     }
 
     func cycleRepeatMode() {
+        if isListenTogetherSessionActive {
+            listenTogetherPlayModeTouched = true
+        }
         cancelAutoMixPreparation()
         switch repeatMode {
         case .off:
@@ -976,6 +991,9 @@ final class PlayerStore {
     }
 
     func toggleShuffle() {
+        if isListenTogetherSessionActive {
+            listenTogetherPlayModeTouched = true
+        }
         cancelAutoMixPreparation()
         playbackQueue.toggleShuffle()
         if isShuffled {

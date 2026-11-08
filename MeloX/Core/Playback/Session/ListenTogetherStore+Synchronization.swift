@@ -117,6 +117,14 @@ extension ListenTogetherStore {
             )
         ) / 1_000
 
+        // Defer before opening the report-suppression window. A no-op poll
+        // must not swallow the play command for the track now loading.
+        if !shouldPlay,
+           player.isPreparingListenTogetherAutoplay,
+           player.currentSong?.id == targetSongID {
+            return
+        }
+
         isApplyingRemoteState = true
         suppressReportsUntil = Date.now.addingTimeInterval(1)
         defer { isApplyingRemoteState = false }
@@ -133,8 +141,6 @@ extension ListenTogetherStore {
             commandType: command?.commandType
         )
         guard applied else {
-            // The handoff is still loading. Don't hold the report window
-            // shut, or the real play command never leaves the device.
             suppressReportsUntil = .distantPast
             return
         }
