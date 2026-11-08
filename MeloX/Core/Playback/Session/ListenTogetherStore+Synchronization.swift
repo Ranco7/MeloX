@@ -120,7 +120,7 @@ extension ListenTogetherStore {
         isApplyingRemoteState = true
         suppressReportsUntil = Date.now.addingTimeInterval(1)
         defer { isApplyingRemoteState = false }
-        await player.synchronizeListenTogetherPlayback(
+        let applied = await player.synchronizeListenTogetherPlayback(
             songs: songs,
             targetSongID: targetSongID,
             progress: progress,
@@ -129,8 +129,15 @@ extension ListenTogetherStore {
             // Polls must not copy the room play mode. Doing so clears a
             // local repeat or shuffle choice on every echoed command.
             adoptsRoomPlayMode: initial,
-            playMode: payload.playlist?.playMode
+            playMode: payload.playlist?.playMode,
+            commandType: command?.commandType
         )
+        guard applied else {
+            // The handoff is still loading. Don't hold the report window
+            // shut, or the real play command never leaves the device.
+            suppressReportsUntil = .distantPast
+            return
+        }
 
         lastPlaylistSignature = playlistSignature
         lastCommandSignature = commandSignature
