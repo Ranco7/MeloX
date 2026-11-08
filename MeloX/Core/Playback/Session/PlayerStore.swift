@@ -100,11 +100,11 @@ final class PlayerStore {
     var listenTogetherDisplaySongIDs: [Int] {
         queue.map(\.id)
     }
+    /// Room playlist reports stay in display order. Shuffle only chooses the
+    /// next track on this device; publishing the permutation makes the server
+    /// echo a reordered queue back to both sides.
     var listenTogetherRandomSongIDs: [Int] {
-        guard isShuffled else { return listenTogetherDisplaySongIDs }
-        return playbackQueue.persistedShuffleOrder.compactMap { index in
-            queue.indices.contains(index) ? queue[index].id : nil
-        }
+        listenTogetherDisplaySongIDs
     }
     var isAutoMixTransitioning: Bool {
         autoMixTransitionProgress != nil
@@ -356,6 +356,7 @@ final class PlayerStore {
         progress targetProgress: TimeInterval,
         isPlaying shouldPlay: Bool,
         shouldSeek: Bool,
+        adoptsRoomPlayMode: Bool,
         playMode: String?
     ) async {
         guard !songs.isEmpty,
@@ -366,7 +367,9 @@ final class PlayerStore {
         }
 
         isHeartModeActive = false
-        applyListenTogetherPlayMode(playMode)
+        if adoptsRoomPlayMode {
+            applyListenTogetherPlayMode(playMode)
+        }
         let queueChanged = songs.map(\.id) != queue.map(\.id)
         let songChanged = currentSong?.id != targetSongID
 
@@ -429,9 +432,6 @@ final class PlayerStore {
             repeatMode = .all
         } else {
             repeatMode = .off
-        }
-        if isShuffled {
-            playbackQueue.toggleShuffle()
         }
         updateQueueModeIndicator()
     }
@@ -914,7 +914,6 @@ final class PlayerStore {
     }
 
     func cycleRepeatMode() {
-        guard !isListenTogetherSessionActive else { return }
         cancelAutoMixPreparation()
         switch repeatMode {
         case .off:
@@ -931,7 +930,6 @@ final class PlayerStore {
     }
 
     func toggleShuffle() {
-        guard !isListenTogetherSessionActive else { return }
         cancelAutoMixPreparation()
         playbackQueue.toggleShuffle()
         if isShuffled {

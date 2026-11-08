@@ -1,0 +1,145 @@
+name: Unsigned iOS IPA / 未签名 iOS IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - cursor/listen-together-play-modes-ecf2
+
+permissions:
+  contents: write
+
+concurrency:
+  group: unsigned-ios-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    name: Build unsigned iOS IPA / 构建未签名 iOS IPA
+    runs-on: xcode-27
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout / 检出代码
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode 27.1 / 选择 Xcode 27.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          XCODE_APP=""
+          for candidate in /Applications/Xcode_27.1.app /Applications/Xcode_27.1.0.app /Applications/Xcode.app; do
+            if [[ -d "${candidate}" ]]; then
+              XCODE_APP="${candidate}"
+              break
+            fi
+          done
+          if [[ -z "${XCODE_APP}" ]]; then
+            echo "::error::Xcode 27.1 was not found on the xcode-27 runner"
+            exit 1
+          fi
+          sudo xcode-select -s "${XCODE_APP}/Contents/Developer"
+          xcodebuild -version
+          xcodebuild -showsdks
+          SDK_VERSION="$(xcrun --sdk iphoneos --show-sdk-version)"
+          echo "iphoneos SDK ${SDK_VERSION}"
+          IFS=. read -r SDK_MAJOR SDK_MINOR _ <<< "${SDK_VERSION}"
+          if (( SDK_MAJOR < 27 || (SDK_MAJOR == 27 && ${SDK_MINOR:-0} < 1) )); then
+            echo "::error::iOS 27.1 SDK or later is required; found ${SDK_VERSION}"
+            exit 1
+          fi
+
+      - name: Build unsigned IPA / 构建未签名 IPA
+        shell: bash
+        run: bash build_ios_unsigned.sh
+
+      - name: Inspect unsigned IPA / 检查未签名 IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          IPA="build/MeloX-iOS-unsigned.ipa"
+          APP="build/IPA/Payload/MeloX.app"
+          test -d "${APP}"
+          test -f "${IPA}"
+          unzip -tq "${IPA}"
+
+          echo "size: $(du -h "${IPA}" | awk '{print $1}')"
+          echo "bytes: $(wc -c < "${IPA}" | tr -d ' ')"
+          shasum -a 256 "${IPA}"
+
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "${APP}/Info.plist")"
+          SHORT_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "${APP}/Info.plist")"
+          BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "${APP}/Info.plist")"
+          echo "CFBundleIdentifier: ${BUNDLE_ID}"
+          echo "CFBundleShortVersionString: ${SHORT_VERSION}"
+          echo "CFBundleVersion: ${BUILD_VERSION}"
+
+          echo "Frameworks:"
+          find "${APP}/Frameworks" -maxdepth 1 -mindepth 1 -print 2>/dev/null || echo "(none)"
+          echo "PlugIns:"
+          find "${APP}/PlugIns" -maxdepth 1 -mindepth 1 -print 2>/dev/null || echo "(none)"
+          echo "Watch:"
+          find "${APP}/Watch" -maxdepth 2 -name '*.app' -print 2>/dev/null || echo "(none)"
+
+          if find "${APP}" -name 'embedded.mobileprovision' -print | grep -q .; then
+            echo "::error::embedded.mobileprovision was found"
+            exit 1
+          fi
+          echo "embedded.mobileprovision: absent"
+
+          set +e
+          SIGN_INFO="$(codesign -dv --verbose=4 "${APP}" 2>&1)"
+          set -e
+          echo "${SIGN_INFO}"
+          if [[ "${SIGN_INFO}" != *"code object is not signed at all"* ]]; then
+            echo "::error::App is signed; refusing to publish"
+            exit 1
+          fi
+
+      - name: Upload IPA artifact / 上传 IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: MeloX-iOS-unsigned
+          path: build/MeloX-iOS-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish prerelease / 发布预发布版本
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="unsigned-listen-together-play-modes"
+          IPA="build/MeloX-iOS-unsigned.ipa"
+          NOTES="${RUNNER_TEMP}/unsigned-ipa-notes.md"
+          cat > "${NOTES}" <<EOF
+          Unsigned MeloX iOS + Apple Watch build for local Listen Together play modes.
+
+          This IPA is unsigned. Sign it before installing. No embedded.mobileprovision is included.
+
+          - Commit: \`${GITHUB_SHA}\`
+          - Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          一起听本地随机播放 / 单曲循环 / 列表循环的未签名 iOS + Apple Watch 安装包。安装前需要自行签名，包内没有 embedded.mobileprovision。
+          EOF
+
+          if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${TAG}" "${IPA}" --repo "${GITHUB_REPOSITORY}" --clobber
+            gh release edit "${TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --prerelease \
+              --target "${GITHUB_SHA}" \
+              --title "MeloX iOS unsigned (listen together play modes)" \
+              --notes-file "${NOTES}"
+          else
+            gh release create "${TAG}" "${IPA}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --prerelease \
+              --target "${GITHUB_SHA}" \
+              --title "MeloX iOS unsigned (listen together play modes)" \
+              --notes-file "${NOTES}"
+          fi
+          gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}"

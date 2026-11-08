@@ -126,6 +126,9 @@ extension ListenTogetherStore {
             progress: progress,
             isPlaying: shouldPlay,
             shouldSeek: initial || commandChanged,
+            // Polls must not copy the room play mode. Doing so clears a
+            // local repeat or shuffle choice on every echoed command.
+            adoptsRoomPlayMode: initial,
             playMode: payload.playlist?.playMode
         )
 
