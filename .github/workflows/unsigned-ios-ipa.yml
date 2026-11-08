@@ -112,20 +112,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          TAG="unsigned-listen-together-play-modes-4"
+          TAG="unsigned-listen-together-play-modes-5"
           IPA="build/MeloX-iOS-unsigned.ipa"
           NOTES="${RUNNER_TEMP}/unsigned-ipa-notes.md"
           cat > "${NOTES}" <<EOF
           Unsigned MeloX iOS + Apple Watch build for local Listen Together play modes.
 
-          This build keeps Listen Together auto-advance from pausing at 0:00 or seeking back to the start, and retries a transient missing song URL before showing the region/copyright alert.
+          This build adds optional background mix modes so another app’s exclusive audio session does not leave MeloX paused. Listen-together playback fixes stay in place.
 
           This IPA is unsigned. Sign it before installing. No embedded.mobileprovision is included.
 
           - Commit: \`${GITHUB_SHA}\`
           - Workflow run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
 
-          一起听本地随机播放 / 单曲循环 / 列表循环的未签名 iOS + Apple Watch 安装包。此构建避免切歌后被自己的进度回声拉回开头，并在播放地址暂时为空时自动重试，再提示地区或版权限制。安装前需要自行签名，包内没有 embedded.mobileprovision。
+          一起听与播放修复仍在。新增设置「后台混音保活」：可始终混音，或在被其他应用打断后改为混音续播。安装前需要自行签名，包内没有 embedded.mobileprovision。
           EOF
 
           if gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
@@ -134,14 +134,14 @@ jobs:
               --repo "${GITHUB_REPOSITORY}" \
               --prerelease \
               --target "${GITHUB_SHA}" \
-              --title "MeloX iOS unsigned (listen together play modes 4)" \
+              --title "MeloX iOS unsigned (listen together play modes 5)" \
               --notes-file "${NOTES}"
           else
             gh release create "${TAG}" "${IPA}" \
               --repo "${GITHUB_REPOSITORY}" \
               --prerelease \
               --target "${GITHUB_SHA}" \
-              --title "MeloX iOS unsigned (listen together play modes 4)" \
+              --title "MeloX iOS unsigned (listen together play modes 5)" \
               --notes-file "${NOTES}"
           fi
           gh release view "${TAG}" --repo "${GITHUB_REPOSITORY}"
