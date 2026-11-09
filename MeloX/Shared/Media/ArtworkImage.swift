@@ -8,6 +8,7 @@ struct ArtworkImage: View {
     var aspectRatio: CGFloat = 1
 
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.displayScale) private var displayScale
 
     var body: some View {
         GeometryReader { proxy in
@@ -32,10 +33,13 @@ struct ArtworkImage: View {
         guard let url else { return nil }
 
         var request = ImageRequest(url: url)
+        // Nuke's thumbnail size is expressed in pixels; SwiftUI points would
+        // under-sample the image on 2x/3x displays.
+        let pixelScale = max(displayScale, 1)
         request.thumbnail = ImageRequest.ThumbnailOptions(
             size: CGSize(
-                width: max(size.width, 1),
-                height: max(size.height, 1)
+                width: max(size.width, 1) * pixelScale,
+                height: max(size.height, 1) * pixelScale
             ),
             contentMode: .aspectFill
         )
