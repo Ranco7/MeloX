@@ -112,17 +112,24 @@ struct UserListeningRankView: View {
     }
 
     private var controls: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 12) {
-                periodPicker
-                Spacer(minLength: 0)
-                playAllButton
+        VStack(alignment: .leading, spacing: 6) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 12) {
+                    periodPicker
+                    Spacer(minLength: 0)
+                    playAllButton
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    periodPicker
+                    playAllButton
+                }
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                periodPicker
-                playAllButton
-            }
+            Text(selectedPeriod.description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 12)
