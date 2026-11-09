@@ -32,7 +32,7 @@ struct AlbumDetailView: View {
 
     init(context: AlbumRouteContext) {
         let cachedAssets = ArtworkAccentColorProvider.cachedDetailAssets(
-            for: context.picURL.flatMap(URL.init(string:))
+            for: context.albumSummary.artworkURL
         )
         id = context.id
         initialAlbum = context.albumSummary

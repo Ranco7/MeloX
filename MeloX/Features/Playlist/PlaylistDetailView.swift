@@ -43,7 +43,7 @@ struct PlaylistDetailView: View {
 
     init(playlist context: PlaylistRouteContext) {
         let cachedAssets = ArtworkAccentColorProvider.cachedDetailAssets(
-            for: context.coverURLString.flatMap(URL.init(string:))
+            for: context.playlistSummary.artworkURL
         )
         id = context.id
         initialPlaylist = context.playlistSummary
@@ -56,7 +56,7 @@ struct PlaylistDetailView: View {
 
     init(toplist context: PlaylistRouteContext) {
         let cachedAssets = ArtworkAccentColorProvider.cachedDetailAssets(
-            for: context.coverURLString.flatMap(URL.init(string:))
+            for: context.playlistSummary.artworkURL
         )
         id = context.id
         initialPlaylist = context.playlistSummary
