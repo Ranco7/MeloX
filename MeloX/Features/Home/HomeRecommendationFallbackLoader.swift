@@ -1,7 +1,13 @@
 import Foundation
+import OSLog
 
 @MainActor
 struct HomeRecommendationFallbackLoader {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "MeloX",
+        category: "HomeRecommendations"
+    )
+
     private let api: NeteaseAPI
     private let serverFeed: HomeRecommendationFeed
     private let region: HomeMusicRegion
@@ -74,8 +80,12 @@ struct HomeRecommendationFallbackLoader {
         guard !serverFeed.contains(.recommendedPlaylists) else {
             return []
         }
-        return (try? await api.recommendedPlaylists(limit: 12))
-            ?? []
+        do {
+            return try await api.recommendedPlaylists(limit: 12)
+        } catch {
+            Self.logFailure("recommendedPlaylists", error: error)
+            return []
+        }
     }
 
     private func tailoredSongs() async -> [Song] {
@@ -83,12 +93,15 @@ struct HomeRecommendationFallbackLoader {
         else {
             return []
         }
-        return (
-            try? await api.personalizedNewSongs(
+        do {
+            return try await api.personalizedNewSongs(
                 region: region,
                 limit: 12
             )
-        ) ?? []
+        } catch {
+            Self.logFailure("personalizedNewSongs", error: error)
+            return []
+        }
     }
 
     private func roamingSongs() async -> [Song] {
@@ -96,12 +109,15 @@ struct HomeRecommendationFallbackLoader {
               !serverFeed.contains(.likedSongRoaming) else {
             return []
         }
-        return (
-            try? await api.personalFM(
+        do {
+            return try await api.personalFM(
                 mode: .explore,
                 limit: 12
             )
-        ) ?? []
+        } catch {
+            Self.logFailure("personalFM", error: error)
+            return []
+        }
     }
 
     private func similarSongs() async -> [Song] {
@@ -111,12 +127,15 @@ struct HomeRecommendationFallbackLoader {
               ) else {
             return []
         }
-        return (
-            try? await api.similarSongs(
+        do {
+            return try await api.similarSongs(
                 id: likedSong.id,
                 limit: 12
             )
-        ) ?? []
+        } catch {
+            Self.logFailure("similarSongs", error: error)
+            return []
+        }
     }
 
     private func podcastPrograms() async -> [PodcastProgram] {
@@ -126,9 +145,12 @@ struct HomeRecommendationFallbackLoader {
         ) else {
             return []
         }
-        return (
-            try? await api.recommendedPodcastPrograms(limit: 12)
-        ) ?? []
+        do {
+            return try await api.recommendedPodcastPrograms(limit: 12)
+        } catch {
+            Self.logFailure("recommendedPodcastPrograms", error: error)
+            return []
+        }
     }
 
     private func trendingSongs() async -> HomeTrendingFallbacks {
@@ -143,12 +165,15 @@ struct HomeRecommendationFallbackLoader {
         if region == .all {
             let requestedCount =
                 needsRecent && needsRegional ? 24 : 12
-            let songs = (
-                try? await api.topSongs(
+            var songs: [Song] = []
+            do {
+                songs = try await api.topSongs(
                     region: .all,
                     limit: requestedCount
                 )
-            ) ?? []
+            } catch {
+                Self.logFailure("topSongs", error: error)
+            }
             if needsRecent && needsRegional {
                 return HomeTrendingFallbacks(
                     recent: Array(songs.prefix(12)),
@@ -182,12 +207,15 @@ struct HomeRecommendationFallbackLoader {
         region: HomeMusicRegion
     ) async -> [Song] {
         guard isNeeded else { return [] }
-        return (
-            try? await api.topSongs(
+        do {
+            return try await api.topSongs(
                 region: region,
                 limit: 12
             )
-        ) ?? []
+        } catch {
+            Self.logFailure("topSongs", error: error)
+            return []
+        }
     }
 
     private func makeFallbacks(
@@ -272,6 +300,19 @@ struct HomeRecommendationFallbackLoader {
         HomeRecommendationFallback(
             title: .standard,
             content: content
+        )
+    }
+
+    private static func logFailure(
+        _ endpoint: String,
+        error: Error
+    ) {
+        guard !Task.isCancelled,
+              (error as? URLError)?.code != .cancelled else {
+            return
+        }
+        logger.error(
+            "Home fallback \(endpoint, privacy: .public) failed: \(error.localizedDescription, privacy: .public)"
         )
     }
 }
