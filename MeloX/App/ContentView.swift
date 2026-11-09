@@ -635,6 +635,17 @@ struct ContentView: View {
         // inset inside a tab's navigation stack can keep a stale height after
         // a Stage Manager resize or keyboard dismissal. The transparent inset
         // below only reserves scroll clearance, so it never moves the bar.
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if selectedTab == tab && usesFloatingMiniPlayer && showsMiniPlayer {
+                Color.clear
+                    .frame(
+                        height: Self.floatingMiniPlayerClearance
+                    )
+                    .accessibilityHidden(true)
+            }
+        }
+        // Keep the bar outside the clearance inset so its bottom edge is the
+        // actual content/window bottom rather than the top of the spacer.
         .overlay(alignment: .bottom) {
             if selectedTab == tab && usesFloatingMiniPlayer && showsMiniPlayer {
                 GeometryReader { proxy in
@@ -662,15 +673,6 @@ struct ContentView: View {
                     )
                 }
                 .ignoresSafeArea(.keyboard, edges: .bottom)
-            }
-        }
-        .safeAreaInset(edge: .bottom, spacing: 0) {
-            if selectedTab == tab && usesFloatingMiniPlayer && showsMiniPlayer {
-                Color.clear
-                    .frame(
-                        height: Self.floatingMiniPlayerClearance
-                    )
-                    .accessibilityHidden(true)
             }
         }
     }

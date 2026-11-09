@@ -92,7 +92,7 @@ class FloatingMiniPlayerChecks(unittest.TestCase):
         self.assertIn(".ignoresSafeArea(.keyboard, edges: .bottom)", source)
         self.assertEqual(source.count("TabletMiniPlayerView("), 1)
         inset = source.split(".safeAreaInset(edge: .bottom, spacing: 0)", 1)[1]
-        inset = inset.split("\n    }", 1)[0]
+        inset = inset.split(".overlay(alignment: .bottom)", 1)[0]
         self.assertNotIn("TabletMiniPlayerView", inset)
         self.assertIn("Color.clear", inset)
 
