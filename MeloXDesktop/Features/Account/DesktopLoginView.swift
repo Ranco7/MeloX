@@ -118,7 +118,7 @@ enum DesktopNeteaseCookieStore {
     static let dataStore = WKWebsiteDataStore.default()
 
     static func authenticatedCookieHeader() async -> String? {
-        let cookies = await allCookies().filter(isUsableNeteaseCookie)
+        let cookies = await allCookies().filter(isUsableAccountCookie)
         guard cookies.contains(where: { $0.name == "MUSIC_U" && !$0.value.isEmpty }) else {
             return nil
         }
@@ -142,8 +142,12 @@ enum DesktopNeteaseCookieStore {
         }
     }
 
-    private static func isUsableNeteaseCookie(_ cookie: HTTPCookie) -> Bool {
-        isNeteaseCookie(cookie) && (cookie.expiresDate.map { $0 > Date() } ?? true)
+    private static func isUsableAccountCookie(_ cookie: HTTPCookie) -> Bool {
+        let domain = cookie.domain
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            .lowercased()
+        return domain == "music.163.com"
+            && (cookie.expiresDate.map { $0 > Date() } ?? true)
     }
 
     private static func isNeteaseCookie(_ cookie: HTTPCookie) -> Bool {
