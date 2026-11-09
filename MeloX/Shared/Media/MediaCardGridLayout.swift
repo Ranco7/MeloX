@@ -33,3 +33,12 @@ struct MediaCardGridLayout {
         )
     }
 }
+
+enum MusicCollectionLayout {
+    static let wideInset: CGFloat = 32
+    static let wideLayoutBreakpoint: CGFloat = 710
+    static let heroArtworkRatio: CGFloat = 0.28
+    static let maximumHeroArtworkSize: CGFloat = 300
+    static let trackArtistColumnRatio: CGFloat = 0.24
+    static let maximumTrackArtistColumnWidth: CGFloat = 220
+}

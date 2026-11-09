@@ -254,7 +254,7 @@ private struct PlaylistTrackRow: View {
                 .accessibilityLabel(L10n.format("ui.song.more_actions", song.name))
             }
         }
-        .padding(.leading, usesWideRows ? (showsArtwork ? 18 : musicCollectionWideInset) : 20)
+        .padding(.leading, usesWideRows ? (showsArtwork ? 18 : MusicCollectionLayout.wideInset) : 20)
         .padding(.trailing, usesWideRows ? 26 : 8)
         .padding(.vertical, usesWideRows ? 4 : (showsArtwork ? 8 : 11))
         .background(

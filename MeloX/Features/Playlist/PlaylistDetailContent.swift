@@ -1,8 +1,6 @@
 import SwiftUI
 import UIKit
 
-let musicCollectionWideInset: CGFloat = 32
-
 struct PlaylistDetailContent: View {
     let playlist: Playlist
     let toplistSummary: Playlist?
@@ -150,18 +148,33 @@ struct MusicCollectionDetailLayout<Hero: View, Tracks: View>: View {
             && !dynamicTypeSize.isAccessibilitySize ? measuredWideWidth : nil
 
         LazyVStack(spacing: 0) {
-            hero(wideWidth.map { min($0 * 0.28, 300) })
+            hero(
+                wideWidth.map {
+                    min(
+                        $0 * MusicCollectionLayout.heroArtworkRatio,
+                        MusicCollectionLayout.maximumHeroArtworkSize
+                    )
+                }
+            )
             if wideWidth != nil {
                 Divider()
-                    .padding(.horizontal, musicCollectionWideInset)
+                    .padding(.horizontal, MusicCollectionLayout.wideInset)
             }
-            tracks(wideWidth.map { min(($0 - 2 * musicCollectionWideInset) * 0.24, 220) })
+            tracks(
+                wideWidth.map {
+                    min(
+                        ($0 - 2 * MusicCollectionLayout.wideInset)
+                            * MusicCollectionLayout.trackArtistColumnRatio,
+                        MusicCollectionLayout.maximumTrackArtistColumnWidth
+                    )
+                }
+            )
         }
         .padding(.bottom, 32)
         .frame(maxWidth: .infinity)
         .onGeometryChange(for: CGFloat?.self) { geometry in
             let width = geometry.size.width
-            return width >= 710 ? width : nil
+            return width >= MusicCollectionLayout.wideLayoutBreakpoint ? width : nil
         } action: { measuredWideWidth = $0 }
     }
 }
@@ -259,7 +272,7 @@ struct StandardMusicCollectionDetailHero: View {
                 .frame(minHeight: wideArtworkSize, alignment: .bottom)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, musicCollectionWideInset)
+            .padding(.horizontal, MusicCollectionLayout.wideInset)
             .padding(.top, 28)
             .padding(.bottom, 36)
         } else {
@@ -391,7 +404,7 @@ private struct ToplistDetailHero: View {
             ArtworkImage(url: artworkURL, cornerRadius: 12, aspectRatio: 1.55)
                 .frame(maxWidth: 420)
                 .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
-                .padding(.horizontal, musicCollectionWideInset)
+                .padding(.horizontal, MusicCollectionLayout.wideInset)
                 .padding(.top, 28)
         } else {
             ArtworkImage(url: artworkURL, cornerRadius: 0)
