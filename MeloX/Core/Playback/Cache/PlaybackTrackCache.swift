@@ -91,7 +91,7 @@ actor PlaybackTrackCache {
         guard source.url.isFileURL == false,
               let scheme = source.url.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
-              !isStreamingPlaylistURL(source.url),
+              !Self.isStreamingPlaylistURL(source.url),
               activeSongID == nil,
               cachedFileURL(for: songID, quality: source.quality) == nil else {
             return
@@ -388,8 +388,8 @@ actor PlaybackTrackCache {
 /// byte count or the declared Content-Length exceeds the cache limit. The
 /// system `download` convenience API has no per-chunk hook, so an oversized
 /// response would already be on disk before the caller could validate it.
-private final class BoundedTrackTransfer: NSObject, URLSessionDataDelegate,
-    @unchecked Sendable {
+private nonisolated final class BoundedTrackTransfer: NSObject,
+    URLSessionDataDelegate, @unchecked Sendable {
     private enum TransferError: LocalizedError {
         case invalidResponse
         case rejectedResponse
@@ -434,6 +434,11 @@ private final class BoundedTrackTransfer: NSObject, URLSessionDataDelegate,
         continuation: CheckedContinuation<HTTPURLResponse, Error>
     ) {
         lock.lock()
+        guard !finished else {
+            lock.unlock()
+            continuation.resume(throwing: URLError(.cancelled))
+            return
+        }
         self.continuation = continuation
         let wasCancelled = cancelled
         lock.unlock()
@@ -456,12 +461,17 @@ private final class BoundedTrackTransfer: NSObject, URLSessionDataDelegate,
         lock.lock()
         self.session = session
         self.task = task
-        let cancelledBeforeResume = cancelled
-        lock.unlock()
-        if cancelledBeforeResume {
+        guard !cancelled, !finished else {
+            lock.unlock()
             task.cancel()
+            finish(.failure(URLError(.cancelled)))
+            return
         }
+        // Resuming while holding the lock orders this against cancel(): it
+        // either latches before this point or cancels the running task, so the
+        // continuation is completed exactly once on both paths.
         task.resume()
+        lock.unlock()
     }
 
     func cancel() {
@@ -506,17 +516,25 @@ private final class BoundedTrackTransfer: NSObject, URLSessionDataDelegate,
             finish(.failure(TransferError.writeFailed))
             return
         }
+        let handle: FileHandle
         do {
-            let handle = try FileHandle(forWritingTo: destinationURL)
-            lock.lock()
-            fileHandle = handle
-            self.response = httpResponse
-            lock.unlock()
+            handle = try FileHandle(forWritingTo: destinationURL)
         } catch {
             completionHandler(.cancel)
             finish(.failure(TransferError.writeFailed))
             return
         }
+        lock.lock()
+        guard !finished, !cancelled else {
+            lock.unlock()
+            try? handle.close()
+            completionHandler(.cancel)
+            finish(.failure(URLError(.cancelled)))
+            return
+        }
+        fileHandle = handle
+        self.response = httpResponse
+        lock.unlock()
         completionHandler(.allow)
     }
 
@@ -526,26 +544,33 @@ private final class BoundedTrackTransfer: NSObject, URLSessionDataDelegate,
         didReceive data: Data
     ) {
         lock.lock()
-        let handle = fileHandle
-        let overflow =
-            receivedBytes + Int64(data.count) > maximumBytes
-        lock.unlock()
-        guard !overflow else {
+        guard !finished, !cancelled, let handle = fileHandle else {
+            let wasCancelled = cancelled
+            lock.unlock()
+            dataTask.cancel()
+            finish(
+                .failure(
+                    wasCancelled
+                        ? URLError(.cancelled)
+                        : TransferError.writeFailed
+                )
+            )
+            return
+        }
+        guard receivedBytes + Int64(data.count) <= maximumBytes else {
+            lock.unlock()
             dataTask.cancel()
             finish(.failure(TransferError.tooLarge))
             return
         }
-        guard let handle else {
-            dataTask.cancel()
-            finish(.failure(TransferError.writeFailed))
-            return
-        }
         do {
+            // Keep the write under the lock so `finish` cannot close the
+            // handle halfway through a chunk.
             try handle.write(contentsOf: data)
-            lock.lock()
             receivedBytes += Int64(data.count)
             lock.unlock()
         } catch {
+            lock.unlock()
             dataTask.cancel()
             finish(.failure(TransferError.writeFailed))
         }
@@ -563,7 +588,12 @@ private final class BoundedTrackTransfer: NSObject, URLSessionDataDelegate,
         lock.lock()
         let response = self.response
         let byteCount = receivedBytes
+        let wasCancelled = cancelled
         lock.unlock()
+        if wasCancelled {
+            finish(.failure(URLError(.cancelled)))
+            return
+        }
         guard let response, byteCount > 0 else {
             finish(.failure(TransferError.invalidResponse))
             return

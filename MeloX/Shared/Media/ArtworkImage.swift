@@ -73,17 +73,6 @@ struct ArtworkImage: View {
                 request: imageRequest(for: proxy.size),
                 transaction: Transaction(animation: imageLoadAnimation)
             ) { state in
-                if let url,
-                   let image = state.image,
-                   let response = state.response {
-                    ArtworkImageMemoryCache.shared.store(
-                        image,
-                        byteCost: ArtworkImageMemoryCache.byteCost(
-                            of: response.image
-                        ),
-                        for: url
-                    )
-                }
                 content(
                     image: state.image ?? cachedImage,
                     hasError: state.error != nil
@@ -91,6 +80,19 @@ struct ArtworkImage: View {
                 .frame(
                     width: proxy.size.width,
                     height: proxy.size.height
+                )
+            }
+            .onCompletion { result in
+                guard let url,
+                      case let .success(response) = result else {
+                    return
+                }
+                ArtworkImageMemoryCache.shared.store(
+                    Image(uiImage: response.image),
+                    byteCost: ArtworkImageMemoryCache.byteCost(
+                        of: response.image
+                    ),
+                    for: url
                 )
             }
             .onDisappear(.lowerPriority)

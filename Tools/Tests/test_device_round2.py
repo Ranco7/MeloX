@@ -36,7 +36,7 @@ class PlaybackTrackCacheChecks(unittest.TestCase):
         self.assertIn("URLSessionDataDelegate", source)
         self.assertIn("didReceive data: Data", source)
         self.assertIn("httpResponse.expectedContentLength > maximumBytes", source)
-        self.assertIn("receivedBytes + Int64(data.count) > maximumBytes", source)
+        self.assertIn("receivedBytes + Int64(data.count) <= maximumBytes", source)
         self.assertIn("dataTask.cancel()", source)
         self.assertIn("activeSongID == nil", source)
         self.assertIn("configuration.urlCache = nil", source)
@@ -74,6 +74,32 @@ class PlaybackTrackCacheChecks(unittest.TestCase):
         self.assertIn("playbackCacheDirectory", locations)
         self.assertIn("PlaybackTrackCache.clearCache()", maintenance)
         self.assertIn("playbackCacheBytes", maintenance)
+
+    def test_transfer_is_nonisolated_and_cancel_safe(self):
+        source = read("MeloX/Core/Playback/Cache/PlaybackTrackCache.swift")
+        self.assertIn(
+            "private nonisolated final class BoundedTrackTransfer", source
+        )
+        self.assertIn(
+            "continuation.resume(throwing: URLError(.cancelled))", source
+        )
+        self.assertIn("self.continuation = continuation", source)
+        self.assertIn("let wasCancelled = cancelled", source)
+        self.assertIn("task.resume()\n        lock.unlock()", source)
+        self.assertIn(
+            "guard !finished, !cancelled, let handle = fileHandle", source
+        )
+        self.assertIn("guard !finished else {", source)
+
+    def test_playback_source_is_explicitly_nonisolated(self):
+        for path in (
+            "MeloX/Core/Playback/Queue/PlaybackSource.swift",
+            "MeloXDesktop/Core/Playback/Queue/PlaybackSource.swift",
+        ):
+            self.assertIn(
+                "nonisolated struct PlaybackSource: Equatable, Sendable",
+                read(path),
+            )
 
 
 class LayoutGuardsChecks(unittest.TestCase):
@@ -174,7 +200,9 @@ class ArtworkChecks(unittest.TestCase):
         app = read("MeloX/App/MeloXApp.swift")
         self.assertIn("quantizedPixelLength", source)
         self.assertIn("ArtworkImageMemoryCache", source)
-        self.assertIn("state.response", source)
+        self.assertNotIn("state.response", source)
+        self.assertIn(".onCompletion { result in", source)
+        self.assertIn("Image(uiImage: response.image)", source)
         self.assertIn("byteCost: ArtworkImageMemoryCache.byteCost(", source)
         self.assertIn("cgImage.bytesPerRow * cgImage.height", source)
         self.assertNotIn("cost: 512 * 1_024", source)
