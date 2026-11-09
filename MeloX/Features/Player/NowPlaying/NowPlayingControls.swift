@@ -7,27 +7,38 @@ struct NowPlayingProgressControl: View {
     let song: Song
 
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 6) {
             NowPlayingProgressSlider(maximum: progressMaximum)
 
-            NowPlayingProgressTimeRow()
-                .overlay {
-                    Group {
-                        if player.isAutoMixTransitioning {
-                            NowPlayingAutoMixStatus()
-                        } else {
-                            NowPlayingQualityMenu()
-                        }
-                    }
-                    .animation(
-                        .smooth(duration: 0.25),
-                        value: player.isAutoMixTransitioning
+            HStack(spacing: 10) {
+                NowPlayingProgressElapsedTime()
+                    .frame(
+                        maxWidth: .infinity,
+                        alignment: .leading
                     )
+
+                Group {
+                    if player.isAutoMixTransitioning {
+                        NowPlayingAutoMixStatus()
+                    } else {
+                        NowPlayingQualityMenu()
+                    }
                 }
-                .font(.caption2.monospacedDigit())
-                .foregroundStyle(.white.opacity(0.5))
+                .layoutPriority(1)
+                .animation(
+                    .smooth(duration: 0.25),
+                    value: player.isAutoMixTransitioning
+                )
+
+                NowPlayingProgressRemainingTime()
+                    .frame(
+                        maxWidth: .infinity,
+                        alignment: .trailing
+                    )
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.white.opacity(0.5))
         }
-        .frame(height: 52)
     }
 
     private var progressMaximum: TimeInterval {
@@ -63,17 +74,23 @@ private struct NowPlayingProgressSlider: View {
     }
 }
 
-private struct NowPlayingProgressTimeRow: View {
+private struct NowPlayingProgressElapsedTime: View {
     @Environment(PlayerStore.self) private var player
 
     var body: some View {
-        HStack {
-            Text(formatPlaybackTime(player.progress))
+        Text(formatPlaybackTime(player.progress))
+            .lineLimit(1)
+    }
+}
 
-            Spacer()
+private struct NowPlayingProgressRemainingTime: View {
+    @Environment(PlayerStore.self) private var player
 
-            Text("−\(formatPlaybackTime(max(player.duration - player.progress, 0)))")
-        }
+    var body: some View {
+        Text(
+            "−\(formatPlaybackTime(max(player.duration - player.progress, 0)))"
+        )
+        .lineLimit(1)
     }
 }
 
@@ -102,6 +119,7 @@ private struct NowPlayingAutoMixStatus: View {
 
             Text("ui.player.mixing")
                 .fontWeight(.medium)
+                .lineLimit(1)
 
             ProgressView(
                 value:
@@ -171,6 +189,8 @@ private struct NowPlayingQualityMenu: View {
                 Image(systemName: "waveform")
                     .font(.system(size: 9, weight: .semibold))
                 Text(displayedQualityTitle)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
             }
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
@@ -178,6 +198,7 @@ private struct NowPlayingQualityMenu: View {
                 .white.opacity(0.12),
                 in: .rect(cornerRadius: 7)
             )
+            .frame(minHeight: NowPlayingPortraitLayout.minimumTouchTarget)
             .contentShape(.rect)
         }
         .tint(.white)

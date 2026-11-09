@@ -169,9 +169,7 @@ struct NowPlayingQueuePage: View {
     }
 
     private var bottomContentInset: CGFloat {
-        presentation == .portrait
-            ? NowPlayingBottomControls.coreHeight
-            : 12
+        presentation == .portrait ? 0 : 12
     }
 
     private var reservedSongHeaderHeight: CGFloat {

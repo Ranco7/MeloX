@@ -2,11 +2,10 @@ import SwiftUI
 import UIKit
 
 struct NowPlayingView: View {
-    private static let portraitHorizontalPadding: CGFloat = 32
-
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.accessibilityVoiceOverEnabled)
     private var accessibilityVoiceOverEnabled
@@ -315,17 +314,78 @@ struct NowPlayingView: View {
     }
 
     private func portraitContent(for song: Song) -> some View {
-        VStack(spacing: 0) {
-            dismissalHandle
+        GeometryReader { proxy in
+            let layout = portraitLayout(for: proxy.size)
 
-            pageContent(for: song)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay(alignment: .bottom) {
-                    portraitPlayerControlsLayer(for: song)
+            // One structure for every window size. When the pages and the
+            // control band fit, the stack is exactly as tall as the window and
+            // `scrollBounceBehavior(.basedOnSize)` leaves it static; in a very
+            // short window the stack grows to the page floor and scrolls as one
+            // unit, so no control is clipped and nothing is rebuilt on resize.
+            ScrollView(.vertical) {
+                VStack(spacing: 0) {
+                    dismissalHandle
+
+                    pageContent(for: song, layout: layout)
+                        .frame(
+                            maxWidth: .infinity,
+                            height: layout.pageAreaHeight
+                        )
+
+                    portraitPlayerControls(
+                        for: song,
+                        layout: layout
+                    )
+                    .allowsHitTesting(!hidesLyricsControls)
+                    .accessibilityHidden(hidesLyricsControls)
+                    .overlay {
+                        if hidesLyricsControls,
+                           settings.lyricsStyle != .appleMusic {
+                            Color.clear
+                                .contentShape(.rect)
+                                .onTapGesture {
+                                    handleLyricsInterfaceInteraction()
+                                }
+                                .accessibilityHidden(true)
+                        }
+                    }
                 }
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicators(.hidden)
+            .safeAreaPadding(
+                .bottom,
+                NowPlayingPortraitLayout.bottomSafeAreaPadding
+            )
         }
-        .padding(.horizontal, Self.portraitHorizontalPadding)
-        .safeAreaPadding(.bottom, 3)
+    }
+
+    private func portraitLayout(
+        for size: CGSize
+    ) -> NowPlayingPortraitLayout {
+        NowPlayingPortraitLayout(
+            viewport: size,
+            textScale: portraitTextScale,
+            showsUtilityRow: usesExpandedAppleMusicLyricsLayout
+        )
+    }
+
+    private var portraitTextScale: CGFloat {
+        switch dynamicTypeSize {
+        case .xSmall, .small, .medium, .large:
+            1
+        case .xLarge:
+            1.08
+        case .xxLarge:
+            1.16
+        case .xxxLarge:
+            1.24
+        case .accessibility1, .accessibility2,
+             .accessibility3, .accessibility4, .accessibility5:
+            1.35
+        @unknown default:
+            1
+        }
     }
 
     @ViewBuilder
@@ -352,35 +412,14 @@ struct NowPlayingView: View {
         }
     }
 
-    private func portraitPlayerControlsLayer(
-        for song: Song
+    private func portraitPlayerControls(
+        for song: Song,
+        layout: NowPlayingPortraitLayout
     ) -> some View {
-        ZStack(alignment: .bottom) {
-            portraitPlayerControls(for: song)
-                .allowsHitTesting(!hidesLyricsControls)
-                .accessibilityHidden(hidesLyricsControls)
-
-            if hidesLyricsControls,
-               settings.lyricsStyle != .appleMusic {
-                Color.clear
-                    .frame(maxWidth: .infinity)
-                    .frame(
-                        height: NowPlayingBottomControls.overlayHeight
-                    )
-                    .contentShape(.rect)
-                    .onTapGesture {
-                        handleLyricsInterfaceInteraction()
-                    }
-                    .accessibilityHidden(true)
-            }
-        }
-        .frame(height: NowPlayingBottomControls.overlayHeight)
-    }
-
-    private func portraitPlayerControls(for song: Song) -> some View {
         NowPlayingBottomControls(
             song: song,
             page: pageSelection,
+            layout: layout,
             showsLyricsUtilities:
                 usesExpandedAppleMusicLyricsLayout,
             hasLyricsTranslations: hasLyricsTranslations,
@@ -467,10 +506,10 @@ struct NowPlayingView: View {
             Capsule()
                 .fill(.white.opacity(0.52))
                 .frame(width: 60, height: 5)
-                .padding(.top, 8)
+                .padding(.top, 12)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: 34)
+        .frame(height: NowPlayingPortraitLayout.dismissalHandleHeight)
         .contentShape(.rect)
         .onTapGesture {
             dismiss()
@@ -483,80 +522,74 @@ struct NowPlayingView: View {
         }
     }
 
-    private func pageContent(for song: Song) -> some View {
+    private func pageContent(
+        for song: Song,
+        layout: NowPlayingPortraitLayout
+    ) -> some View {
         ZStack(alignment: .top) {
-            transientArtworkPageContent(for: song)
-                .frame(
-                    maxWidth: .infinity,
-                    maxHeight: .infinity
-                )
-                .clipped()
+            transientArtworkPageContent(
+                for: song,
+                layout: layout
+            )
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity
+            )
+            .clipped()
 
-            residentQueuePage(for: song)
+            residentQueuePage(
+                for: song,
+                layout: layout
+            )
 
             if settings.lyricsStyle == .appleMusic {
-                residentAppleMusicLyricsPage(for: song)
+                residentAppleMusicLyricsPage(
+                    for: song,
+                    layout: layout
+                )
             } else if page == .lyrics {
-                portraitLyricsPage(for: song)
-                    .clipped()
-                    .transition(
-                        pageContentTransition(for: .lyrics)
-                    )
+                portraitLyricsPage(
+                    for: song,
+                    layout: layout
+                )
+                .clipped()
+                .padding(.horizontal, layout.horizontalMargin)
+                .transition(
+                    pageContentTransition(for: .lyrics)
+                )
             }
 
             if page != .artwork {
-                sharedPortraitSongHeader(for: song)
-                    .offset(y: sharedPortraitSongHeaderOffset)
-                    .clipped()
-                    .transition(
-                        NowPlayingPageTransition.songHeader(
-                            reducesMotion: accessibilityReduceMotion
-                        )
+                sharedPortraitSongHeader(
+                    for: song,
+                    layout: layout
+                )
+                .offset(y: sharedPortraitSongHeaderOffset)
+                .clipped()
+                .transition(
+                    NowPlayingPageTransition.songHeader(
+                        reducesMotion: accessibilityReduceMotion
                     )
+                )
             }
 
         }
         .background {
             if keepsStableArtworkFrameMeasurement {
-                artworkFrameMeasurement(for: song)
+                artworkFrameMeasurement(
+                    for: song,
+                    layout: layout
+                )
             }
         }
         .overlay {
             GeometryReader { _ in
-                if portraitArtworkFrame.width > 0 {
-                    NowPlayingPortraitArtwork(
-                        song: song,
-                        isArtworkPage: page == .artwork
-                    )
-                    .frame(
-                        width: portraitArtworkFrame.width,
-                        height: portraitArtworkFrame.height
-                    )
-                    .position(
-                        x:
-                            portraitArtworkFrame.midX
-                            + Self.portraitHorizontalPadding,
-                        y: portraitArtworkFrame.midY
-                    )
-                    .animation(
-                        accessibilityReduceMotion
-                            ? nil
-                            : NowPlayingPageTransition
-                                .motion
-                                .artworkResize
-                                .animation,
-                        value: isPortraitArtworkExpanded
-                    )
-                    .allowsHitTesting(false)
-                }
+                portraitArtworkOverlay(
+                    for: song,
+                    layout: layout
+                )
             }
-            // Keep page-transition clipping vertically while allowing the
-            // expanded artwork to use the portrait layout's side margins.
             .clipped()
-            .padding(
-                .horizontal,
-                -Self.portraitHorizontalPadding
-            )
         }
         .coordinateSpace(
             name: NowPlayingPortraitCoordinateSpace.name
@@ -565,11 +598,13 @@ struct NowPlayingView: View {
 
     @ViewBuilder
     private func transientArtworkPageContent(
-        for song: Song
+        for song: Song,
+        layout: NowPlayingPortraitLayout
     ) -> some View {
         if page == .artwork {
             NowPlayingArtworkPage(
                 song: song,
+                layout: layout,
                 artworkNamespace: pageArtworkNamespace,
                 usesArtworkTransition: false,
                 showsArtwork: false,
@@ -583,10 +618,12 @@ struct NowPlayingView: View {
     }
 
     private func artworkFrameMeasurement(
-        for song: Song
+        for song: Song,
+        layout: NowPlayingPortraitLayout
     ) -> some View {
         NowPlayingArtworkPage(
             song: song,
+            layout: layout,
             artworkNamespace: pageArtworkNamespace,
             usesArtworkTransition: false,
             showsArtwork: false,
@@ -631,9 +668,11 @@ struct NowPlayingView: View {
     }
 
     private func residentQueuePage(
-        for song: Song
+        for song: Song,
+        layout: NowPlayingPortraitLayout
     ) -> some View {
         let visualState = residentQueueVisualState
+        let horizontalMargin = layout.horizontalMargin
 
         return NowPlayingQueuePage(
             song: song,
@@ -649,6 +688,7 @@ struct NowPlayingView: View {
             }
         )
         .clipped()
+        .padding(.horizontal, horizontalMargin)
         .nowPlayingQueuePagePresentation(
             visualState: visualState,
             opacityTransition: pageTransition.queueOpacityTransition,
@@ -669,6 +709,7 @@ struct NowPlayingView: View {
 
     private func portraitLyricsPage(
         for song: Song,
+        layout: NowPlayingPortraitLayout,
         onInitialFocusPrepared: (() -> Void)? = nil
     ) -> some View {
         NowPlayingLyricsPage(
@@ -696,12 +737,14 @@ struct NowPlayingView: View {
     }
 
     private func residentAppleMusicLyricsPage(
-        for song: Song
+        for song: Song,
+        layout: NowPlayingPortraitLayout
     ) -> some View {
         let visualState = residentLyricsVisualState
 
         return portraitLyricsPage(
             for: song,
+            layout: layout,
             onInitialFocusPrepared: {
                 markLyricsContentPrepared(for: song.id)
             }
@@ -746,7 +789,8 @@ struct NowPlayingView: View {
     }
 
     private func sharedPortraitSongHeader(
-        for song: Song
+        for song: Song,
+        layout: NowPlayingPortraitLayout
     ) -> some View {
         NowPlayingSongHeader(
             song: song,
@@ -755,15 +799,50 @@ struct NowPlayingView: View {
             usesArtworkTransition: false,
             showsArtwork: false
         )
+        .padding(.horizontal, layout.horizontalMargin)
     }
 
-    private var portraitArtworkFrame: CGRect {
+    @ViewBuilder
+    private func portraitArtworkOverlay(
+        for song: Song,
+        layout: NowPlayingPortraitLayout
+    ) -> some View {
+        let artworkFrame = portraitArtworkFrame(layout: layout)
+        if artworkFrame.width > 0 {
+            NowPlayingPortraitArtwork(
+                song: song,
+                isArtworkPage: page == .artwork
+            )
+            .frame(
+                width: artworkFrame.width,
+                height: artworkFrame.height
+            )
+            .position(
+                x: artworkFrame.midX,
+                y: artworkFrame.midY
+            )
+            .animation(
+                accessibilityReduceMotion
+                    ? nil
+                    : NowPlayingPageTransition
+                        .motion
+                        .artworkResize
+                        .animation,
+                value: isPortraitArtworkExpanded
+            )
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func portraitArtworkFrame(
+        layout: NowPlayingPortraitLayout
+    ) -> CGRect {
         if page == .artwork {
             return displayedArtworkPageFrame
         }
 
         return CGRect(
-            x: 0,
+            x: layout.horizontalMargin,
             y: sharedPortraitSongHeaderOffset,
             width: NowPlayingSongHeader.referenceHeight,
             height: NowPlayingSongHeader.referenceHeight

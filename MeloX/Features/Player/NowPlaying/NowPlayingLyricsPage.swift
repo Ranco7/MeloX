@@ -121,7 +121,7 @@ struct NowPlayingLyricsPage: View {
     private var appleMusicBottomOverlayHeight: CGFloat {
         switch presentation {
         case .portrait:
-            NowPlayingBottomControls.overlayHeight
+            0
         case .landscape:
             50
         case .tablet:
@@ -131,9 +131,7 @@ struct NowPlayingLyricsPage: View {
 
     private var portraitContentBottomInset: CGFloat {
         guard presentation == .portrait else { return 0 }
-        return settings.lyricsStyle == .appleMusic
-            ? 12
-            : NowPlayingBottomControls.coreHeight
+        return settings.lyricsStyle == .appleMusic ? 12 : 0
     }
 
     private var usesReferencePortraitLayout: Bool {

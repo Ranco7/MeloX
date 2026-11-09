@@ -68,24 +68,27 @@ struct NowPlayingSongHeader: View {
                 .frame(width: artworkSize, height: artworkSize)
 
             VStack(alignment: .leading, spacing: 2) {
+                Text(song.name)
+                    .font(
+                        usesReferenceLayout
+                            ? .title3.weight(.semibold)
+                            : .headline
+                    )
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
                 HStack(spacing: 8) {
-                    Text(song.name)
-                        .font(
-                            usesReferenceLayout
-                                ? .title3.weight(.semibold)
-                                : .headline
-                        )
+                    Text(artistText)
+                        .font(usesReferenceLayout ? .title3 : .subheadline)
+                        .foregroundStyle(.white.opacity(0.64))
                         .lineLimit(1)
-                        .layoutPriority(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
 
                     HeartModeNowPlayingBadge()
                     ListenTogetherNowPlayingBadge()
                 }
-
-                Text(artistText)
-                    .font(usesReferenceLayout ? .title3 : .subheadline)
-                    .foregroundStyle(.white.opacity(0.64))
-                    .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -93,6 +96,7 @@ struct NowPlayingSongHeader: View {
                 song: song,
                 showsFavoriteButton: !usesReferenceLayout
             )
+            .fixedSize()
         }
     }
 
@@ -163,7 +167,7 @@ struct NowPlayingLandscapeSongHeader: View {
                             "arrow.up.left.and.arrow.down.right"
                     )
                     .font(.title3.weight(.medium))
-                    .frame(width: 40, height: 40)
+                    .frame(width: 44, height: 44)
                     .background(.white.opacity(0.13), in: .circle)
                     .contentShape(.circle)
                 }

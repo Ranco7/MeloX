@@ -50,6 +50,8 @@ private struct NowPlayingTabletMetadata: View {
                 Text(song.name)
                     .font(.headline)
                     .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
                 Text(
                     [song.artistText, song.album?.name]
@@ -59,6 +61,7 @@ private struct NowPlayingTabletMetadata: View {
                 .font(.subheadline)
                 .foregroundStyle(.white.opacity(0.6))
                 .lineLimit(1)
+                .truncationMode(.tail)
 
                 HStack(spacing: 8) {
                     HeartModeNowPlayingBadge()
@@ -66,8 +69,10 @@ private struct NowPlayingTabletMetadata: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
 
             NowPlayingSongActions(song: song)
+                .fixedSize()
         }
     }
 }

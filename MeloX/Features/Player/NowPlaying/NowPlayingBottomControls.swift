@@ -1,15 +1,12 @@
 import SwiftUI
 
 struct NowPlayingBottomControls: View {
-    static let utilityHeight: CGFloat = 62
-    static let coreHeight: CGFloat = 279
-    static let overlayHeight = utilityHeight + coreHeight
-
     @Environment(\.accessibilityReduceMotion)
     private var accessibilityReduceMotion
 
     let song: Song
     @Binding var page: NowPlayingPage
+    let layout: NowPlayingPortraitLayout
     let showsLyricsUtilities: Bool
     let hasLyricsTranslations: Bool
     let hasLyricsRomanizations: Bool
@@ -17,48 +14,54 @@ struct NowPlayingBottomControls: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            NowPlayingLyricsUtilityControls(
-                isVisible:
-                    showsLyricsUtilities
-                    && !isInterfaceHidden,
-                hasTranslations: hasLyricsTranslations,
-                hasRomanizations: hasLyricsRomanizations
-            )
-            .frame(height: Self.utilityHeight, alignment: .top)
+            if showsLyricsUtilities {
+                NowPlayingLyricsUtilityControls(
+                    isVisible: !isInterfaceHidden,
+                    hasTranslations: hasLyricsTranslations,
+                    hasRomanizations: hasLyricsRomanizations
+                )
+                .frame(
+                    height: layout.utilityHeight,
+                    alignment: .top
+                )
+            }
 
             coreControls
         }
-        .frame(height: Self.overlayHeight)
+        .padding(.horizontal, layout.horizontalMargin)
     }
 
     private var coreControls: some View {
         VStack(spacing: 0) {
             interfaceLayer(.progress) {
                 NowPlayingProgressControl(song: song)
+                    .frame(minHeight: layout.progressHeight)
             }
 
             Color.clear
-                .frame(height: 19)
+                .frame(height: layout.progressTransportGap)
 
             interfaceLayer(.transport) {
                 NowPlayingTransportControls()
+                    .frame(height: layout.transportHeight)
             }
 
             Color.clear
-                .frame(height: 31)
+                .frame(height: layout.transportVolumeGap)
 
             interfaceLayer(.volume) {
                 NowPlayingVolumeControl()
+                    .frame(height: layout.volumeHeight)
             }
 
             Color.clear
-                .frame(height: 3)
+                .frame(height: layout.volumeSelectorGap)
 
             interfaceLayer(.pageSelector) {
                 NowPlayingPageSelector(page: $page)
+                    .frame(height: layout.pageSelectorHeight)
             }
         }
-        .frame(height: Self.coreHeight)
         .background {
             Color.clear
                 .contentShape(.rect)
