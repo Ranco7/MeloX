@@ -23,6 +23,12 @@ private struct SidebarArtworkRequest: Hashable {
     let url: URL
 }
 
+// Only read on the main actor after the task group completes.
+private struct SidebarArtworkResult: @unchecked Sendable {
+    let request: SidebarArtworkRequest
+    let image: UIImage?
+}
+
 private struct HeartModeLaunchReadiness: Equatable {
     let hasRestoredPlayback: Bool
     let isLoggedIn: Bool
@@ -485,26 +491,52 @@ struct ContentView: View {
     private func loadSidebarArtwork(_ requests: [SidebarArtworkRequest]) async {
         let activeRequests = Set(requests)
         sidebarArtwork = sidebarArtwork.filter { activeRequests.contains($0.key) }
-        let renderer = UIGraphicsImageRenderer(size: Self.sidebarArtworkSize)
-        let bounds = CGRect(origin: .zero, size: Self.sidebarArtworkSize)
-        for request in requests where sidebarArtwork[request] == nil {
-            guard !Task.isCancelled else { return }
-            var imageRequest = ImageRequest(url: request.url)
-            imageRequest.thumbnail = ImageRequest.ThumbnailOptions(
-                size: Self.sidebarArtworkSize,
-                contentMode: .aspectFill
-            )
-            guard let image = try? await ImagePipeline.shared.image(for: imageRequest),
-                  !Task.isCancelled, image.size.width > 0, image.size.height > 0 else { continue }
+        let missingRequests = requests.filter { sidebarArtwork[$0] == nil }
+        guard !missingRequests.isEmpty else { return }
+
+        let size = Self.sidebarArtworkSize
+        let loadedImages = await withTaskGroup(
+            of: SidebarArtworkResult.self,
+            returning: [SidebarArtworkRequest: UIImage].self
+        ) { group in
+            for request in missingRequests {
+                group.addTask {
+                    var imageRequest = ImageRequest(url: request.url)
+                    imageRequest.thumbnail = ImageRequest.ThumbnailOptions(
+                        size: size,
+                        contentMode: .aspectFill
+                    )
+                    let image = try? await ImagePipeline.shared.image(for: imageRequest)
+                    return SidebarArtworkResult(request: request, image: image)
+                }
+            }
+
+            var images: [SidebarArtworkRequest: UIImage] = [:]
+            for await result in group {
+                guard let image = result.image,
+                      image.size.width > 0,
+                      image.size.height > 0 else { continue }
+                images[result.request] = image
+            }
+            return images
+        }
+        guard !Task.isCancelled, !loadedImages.isEmpty else { return }
+
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let bounds = CGRect(origin: .zero, size: size)
+        var rendered: [SidebarArtworkRequest: UIImage] = [:]
+        for (request, image) in loadedImages {
             let scale = max(bounds.width / image.size.width, bounds.height / image.size.height)
             let width = image.size.width * scale
             let height = image.size.height * scale
-            sidebarArtwork[request] = renderer.image { _ in
+            rendered[request] = renderer.image { _ in
                 UIBezierPath(roundedRect: bounds, cornerRadius: 4).addClip()
                 image.draw(in: CGRect(x: bounds.midX - width / 2, y: bounds.midY - height / 2,
                                       width: width, height: height))
             }
         }
+        guard !rendered.isEmpty else { return }
+        sidebarArtwork.merge(rendered) { _, new in new }
     }
 
     private var shortcutVisibility: Visibility {
