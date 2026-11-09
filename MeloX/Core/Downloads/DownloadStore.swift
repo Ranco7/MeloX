@@ -373,6 +373,10 @@ final class DownloadStore {
                   (200..<300).contains(httpResponse.statusCode) else {
                 throw DownloadError.invalidResponse
             }
+            try validateDownloadedFile(
+                at: temporaryURL,
+                response: httpResponse
+            )
 
             let installed = try storage.installDownloadedFile(
                 from: temporaryURL,
@@ -431,6 +435,88 @@ final class DownloadStore {
         download.receivedByteCount = progress.receivedByteCount
         download.expectedByteCount = progress.expectedByteCount
         activeDownloads[songID] = download
+    }
+
+    private func validateDownloadedFile(
+        at url: URL,
+        response: HTTPURLResponse
+    ) throws {
+        if let mimeType = response.mimeType?.lowercased() {
+            if mimeType.hasPrefix("text/")
+                || mimeType == "application/json"
+                || mimeType.hasSuffix("+json")
+                || mimeType == "application/xml"
+                || mimeType.hasSuffix("+xml") {
+                throw DownloadError.invalidResponse
+            }
+        }
+
+        let values = try url.resourceValues(
+            forKeys: [.fileSizeKey]
+        )
+        let byteCount = Int64(values.fileSize ?? 0)
+        guard byteCount > 0 else {
+            throw DownloadError.emptyFile
+        }
+        let expectedByteCount =
+            response.expectedContentLength
+        if expectedByteCount > 0,
+           byteCount < expectedByteCount {
+            throw DownloadError.invalidResponse
+        }
+        guard Self.hasAudioFileSignature(at: url) else {
+            throw DownloadError.invalidResponse
+        }
+    }
+
+    private static func hasAudioFileSignature(
+        at url: URL
+    ) -> Bool {
+        guard let handle = try? FileHandle(
+            forReadingFrom: url
+        ) else {
+            return false
+        }
+        defer { try? handle.close() }
+        guard let header = try? handle.read(upToCount: 16),
+              !header.isEmpty else {
+            return false
+        }
+
+        let bytes = [UInt8](header)
+        if bytes.starts(with: [0x49, 0x44, 0x33]) {
+            return true // ID3-tagged MP3
+        }
+        if bytes.starts(with: [0x66, 0x4C, 0x61, 0x43]) {
+            return true // FLAC
+        }
+        if bytes.starts(with: [0x4F, 0x67, 0x67, 0x53]) {
+            return true // Ogg
+        }
+        if bytes.starts(with: [0x52, 0x49, 0x46, 0x46]) {
+            return true // RIFF/WAV
+        }
+        if bytes.starts(with: [0x4D, 0x41, 0x43, 0x20]) {
+            return true // APE
+        }
+        if bytes.starts(with: [0x1A, 0x45, 0xDF, 0xA3]) {
+            return true // Matroska/WebM
+        }
+        if bytes.starts(with: [0x30, 0x26, 0xB2, 0x75]) {
+            return true // ASF/WMA
+        }
+        if bytes.count >= 8,
+           bytes[4..<8].elementsEqual(
+               [0x66, 0x74, 0x79, 0x70] as [UInt8]
+           ) {
+            return true // MP4/M4A ftyp box
+        }
+        if bytes.count >= 2,
+           bytes[0] == 0xFF,
+           (bytes[1] & 0xE0) == 0xE0 {
+            return true // MPEG/ADTS frame sync
+        }
+        return false
     }
 
     private func startQueuedDownloadsIfNeeded() {
