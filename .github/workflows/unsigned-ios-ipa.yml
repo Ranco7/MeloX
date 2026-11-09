@@ -63,6 +63,14 @@ jobs:
         shell: bash
         run: python3 Tools/Tests/test_sidebar_playlists.py
 
+      - name: Run artwork background color regression
+        shell: bash
+        run: |
+          swiftc MeloX/Core/Artwork/ArtworkBackgroundColor.swift \
+            Tests/Artwork/ArtworkBackgroundColorChecks.swift \
+            -o "$RUNNER_TEMP/artwork-background-checks"
+          "$RUNNER_TEMP/artwork-background-checks"
+
       - name: Build unsigned IPA / 构建未签名 IPA
         shell: bash
         run: bash build_ios_unsigned.sh
