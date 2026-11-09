@@ -38,17 +38,29 @@ final class SongRecognitionStore {
     private(set) var audioSource: SongRecognitionAudioSource = .microphone
 
     @ObservationIgnored
-    private let recorder = SongRecognitionAudioRecorder()
+    private let recorder: any SongRecognitionRecording
 
     @ObservationIgnored
-    private let fingerprintGenerator =
-        NeteaseAudioFingerprintGenerator()
+    private let fingerprintGenerator: any AudioFingerprintGenerating
 
     @ObservationIgnored
     private var recognitionTask: Task<Void, Never>?
 
     @ObservationIgnored
     private var generation = 0
+
+    init() {
+        recorder = SongRecognitionAudioRecorder()
+        fingerprintGenerator = NeteaseAudioFingerprintGenerator()
+    }
+
+    init(
+        recorder: any SongRecognitionRecording,
+        fingerprintGenerator: any AudioFingerprintGenerating
+    ) {
+        self.recorder = recorder
+        self.fingerprintGenerator = fingerprintGenerator
+    }
 
     func start(
         api: NeteaseAPI,

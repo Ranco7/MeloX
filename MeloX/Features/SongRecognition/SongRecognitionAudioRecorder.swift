@@ -46,7 +46,19 @@ struct SongRecognitionAudioSnapshot {
 }
 
 @MainActor
-final class SongRecognitionAudioRecorder {
+protocol SongRecognitionRecording: AnyObject {
+    func start(
+        maximumDuration: Int?,
+        source: SongRecognitionAudioSource
+    ) async throws
+    func snapshot() throws -> SongRecognitionAudioSnapshot?
+    func prepareForConcurrentPlayback()
+    func cancel()
+    func stop()
+}
+
+@MainActor
+final class SongRecognitionAudioRecorder: SongRecognitionRecording {
     static let fingerprintSampleRate = 8_000.0
     private static let continuousWindowDuration = 9
 
