@@ -38,6 +38,8 @@ private struct HeartModeLaunchReadiness: Equatable {
 struct ContentView: View {
     private static let sidebarArtworkSize = CGSize(width: 24, height: 24)
     private static let floatingMiniPlayerClearance: CGFloat = 76
+    private static let floatingMiniPlayerOuterPadding: CGFloat = 14
+    private static let floatingMiniPlayerWideContentPadding: CGFloat = 16
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -339,17 +341,57 @@ struct ContentView: View {
 
     @ViewBuilder
     private var playerAwareTabView: some View {
-        if #available(iOS 26.1, *) {
-            tabs.tabViewBottomAccessory(isEnabled: showsMiniPlayer && !usesFloatingMiniPlayer) {
-                if showsMiniPlayer && !usesFloatingMiniPlayer {
-                    miniPlayer
+        Group {
+            if #available(iOS 26.1, *) {
+                tabs.tabViewBottomAccessory(isEnabled: showsMiniPlayer && !usesFloatingMiniPlayer) {
+                    if showsMiniPlayer && !usesFloatingMiniPlayer {
+                        miniPlayer
+                    }
+                }
+            } else {
+                tabs.tabViewBottomAccessory {
+                    if showsMiniPlayer && !usesFloatingMiniPlayer {
+                        miniPlayer
+                    }
                 }
             }
-        } else {
-            tabs.tabViewBottomAccessory {
-                if showsMiniPlayer && !usesFloatingMiniPlayer {
-                    miniPlayer
+        }
+        // Root-level overlay: a tab's NavigationStack frame is shortened by
+        // the keyboard and Stage Manager transitions, which is what could
+        // leave the bar in the middle of the window. Ignoring the keyboard
+        // safe area here keeps the bar at the window's bottom edge.
+        .overlay(alignment: .bottom) {
+            if usesFloatingMiniPlayer && showsMiniPlayer {
+                GeometryReader { proxy in
+                    TabletMiniPlayerView(
+                        artworkTransitionID: playerTransitionID,
+                        artworkTransitionNamespace:
+                            playerTransitionNamespace,
+                        collectionPalette:
+                            tabletCollectionChrome[selectedTab]?.palette,
+                        usesWideLayout:
+                            proxy.size.width
+                            - Self.floatingMiniPlayerOuterPadding * 2
+                            - Self.floatingMiniPlayerWideContentPadding
+                            >= TabletMiniPlayerView
+                                .minimumControlsWidth,
+                        onOpen: openPlayer
+                    )
+                    .padding(
+                        .horizontal,
+                        Self.floatingMiniPlayerOuterPadding
+                    )
+                    .padding(
+                        .bottom,
+                        max(proxy.safeAreaInsets.bottom, 0) + 8
+                    )
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: .bottom
+                    )
                 }
+                .ignoresSafeArea(.keyboard, edges: .bottom)
             }
         }
     }
@@ -631,10 +673,9 @@ struct ContentView: View {
                 set: { tabletCollectionChrome[tab] = $0 }
             )
         )
-        // The floating bar is an overlay instead of a safe-area inset: an
-        // inset inside a tab's navigation stack can keep a stale height after
-        // a Stage Manager resize or keyboard dismissal. The transparent inset
-        // below only reserves scroll clearance, so it never moves the bar.
+        // The floating bar lives at the root (see `playerAwareTabView`); this
+        // transparent inset only reserves scroll clearance in the selected
+        // tab, so it never moves the bar or keeps a stale inset height.
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if selectedTab == tab && usesFloatingMiniPlayer && showsMiniPlayer {
                 Color.clear
@@ -642,37 +683,6 @@ struct ContentView: View {
                         height: Self.floatingMiniPlayerClearance
                     )
                     .accessibilityHidden(true)
-            }
-        }
-        // Keep the bar outside the clearance inset so its bottom edge is the
-        // actual content/window bottom rather than the top of the spacer.
-        .overlay(alignment: .bottom) {
-            if selectedTab == tab && usesFloatingMiniPlayer && showsMiniPlayer {
-                GeometryReader { proxy in
-                    TabletMiniPlayerView(
-                        artworkTransitionID: playerTransitionID,
-                        artworkTransitionNamespace:
-                            playerTransitionNamespace,
-                        collectionPalette:
-                            tabletCollectionChrome[tab]?.palette,
-                        usesWideLayout:
-                            proxy.size.width
-                            - 28
-                            >= TabletMiniPlayerView.minimumControlsWidth,
-                        onOpen: openPlayer
-                    )
-                    .padding(.horizontal, 14)
-                    .padding(
-                        .bottom,
-                        max(proxy.safeAreaInsets.bottom, 0) + 8
-                    )
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: .infinity,
-                        alignment: .bottom
-                    )
-                }
-                .ignoresSafeArea(.keyboard, edges: .bottom)
             }
         }
     }
