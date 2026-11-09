@@ -1,6 +1,18 @@
 import CoreGraphics
 
 struct NowPlayingTabletLayout {
+    /// Height range over which the player column grows from its base width.
+    private static let playerWidthGrowthStartHeight: CGFloat = 600
+    private static let playerWidthGrowthHeightRange: CGFloat = 168
+    private static let basePlayerWidth: CGFloat = 320
+    private static let playerWidthGrowth: CGFloat = 102
+    /// Scale references matching the native iPad layout at its design size.
+    private static let elementScaleReferenceHeight: CGFloat = 768
+    private static let elementScaleReferenceWidth: CGFloat = 1_200
+    private static let splitViewWidthRatio: CGFloat = 0.5
+    private static let splitViewHorizontalInset: CGFloat = 40
+    private static let filledRegionHorizontalInset: CGFloat = 48
+
     let viewport: CGSize
     var fillsRegion = false
 
@@ -9,13 +21,20 @@ struct NowPlayingTabletLayout {
     static let bottomBarHeight: CGFloat = 64
 
     private var heightProgress: CGFloat {
-        min(max((viewport.height - 600) / 168, 0), 1)
+        min(
+            max(
+                (viewport.height - Self.playerWidthGrowthStartHeight)
+                    / Self.playerWidthGrowthHeightRange,
+                0
+            ),
+            1
+        )
     }
 
     var elementScale: CGFloat {
         min(
-            max(viewport.height / 768, 1),
-            max(viewport.width / 1_200, 1)
+            max(viewport.height / Self.elementScaleReferenceHeight, 1),
+            max(viewport.width / Self.elementScaleReferenceWidth, 1)
         )
     }
 
@@ -24,13 +43,28 @@ struct NowPlayingTabletLayout {
         return max(viewport.height - Self.chromeHeight - Self.bottomBarHeight, 0)
     }
 
+    private var scaledPlayerWidth: CGFloat {
+        (Self.basePlayerWidth + heightProgress * Self.playerWidthGrowth)
+            * elementScale
+    }
+
     var playerWidth: CGFloat {
         if fillsRegion {
-            return max(min((320 + heightProgress * 102) * elementScale, viewport.width - 48), 1)
+            return max(
+                min(
+                    scaledPlayerWidth,
+                    viewport.width - Self.filledRegionHorizontalInset
+                ),
+                1
+            )
         }
         // Preserve the desktop proportions while leaving room for both
         // columns in portrait and resizable iPad windows.
-        return min((320 + heightProgress * 102) * elementScale, viewport.width * 0.5 - 40)
+        return min(
+            scaledPlayerWidth,
+            viewport.width * Self.splitViewWidthRatio
+                - Self.splitViewHorizontalInset
+        )
     }
 
     var playerLeading: CGFloat {
