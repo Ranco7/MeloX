@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 struct DownloadTransferProgress: Sendable {
     let receivedByteCount: Int64
@@ -19,6 +20,11 @@ struct DownloadTransferResult: Sendable {
 final class DownloadTransferClient: NSObject, @preconcurrency URLSessionDownloadDelegate {
     typealias ProgressHandler = @MainActor (DownloadTransferProgress) -> Void
 
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "MeloX",
+        category: "Downloads"
+    )
+
     private struct Transfer {
         let continuation: CheckedContinuation<DownloadTransferResult, Error>
         let progressHandler: ProgressHandler
@@ -36,6 +42,28 @@ final class DownloadTransferClient: NSObject, @preconcurrency URLSessionDownload
     init(configuration: URLSessionConfiguration = .default) {
         self.configuration = configuration
         super.init()
+        removeOrphanedStagedFiles()
+    }
+
+    private func removeOrphanedStagedFiles() {
+        let directory =
+            AppStorageLocations.downloadTransferDirectory()
+        guard let contents = try? FileManager.default
+            .contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil
+            ) else {
+            return
+        }
+        for url in contents {
+            do {
+                try FileManager.default.removeItem(at: url)
+            } catch {
+                Self.logger.error(
+                    "Failed to remove orphaned download transfer \(url.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                )
+            }
+        }
     }
 
     func download(
