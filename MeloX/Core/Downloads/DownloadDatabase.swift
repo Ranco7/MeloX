@@ -1,7 +1,13 @@
 import Foundation
 import GRDB
+import OSLog
 
 final class DownloadDatabase {
+    private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "MeloX",
+        category: "Downloads"
+    )
+
     private let databaseQueue: DatabaseQueue
 
     init(
@@ -28,10 +34,19 @@ final class DownloadDatabase {
 
     func fetchDownloads() throws -> [DownloadedSong] {
         try databaseQueue.read { database in
-            try DownloadRecord
+            let records = try DownloadRecord
                 .order(Column("downloadedAt").desc)
                 .fetchAll(database)
-                .map { try $0.downloadedSong() }
+            return records.compactMap { record in
+                do {
+                    return try record.downloadedSong()
+                } catch {
+                    Self.logger.error(
+                        "Skipping corrupt download record \(record.songID): \(error.localizedDescription, privacy: .public)"
+                    )
+                    return nil
+                }
+            }
         }
     }
 
