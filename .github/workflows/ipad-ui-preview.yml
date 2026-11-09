@@ -48,6 +48,10 @@ jobs:
               raise SystemExit("No available iPad Simulator found")
           PY
 
+      - name: Start iPad before compiling
+        shell: bash
+        run: xcrun simctl boot "$PREVIEW_IPAD"
+
       - name: Build with synthetic preview data
         shell: bash
         run: |
@@ -59,26 +63,30 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/preview-build" \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO COMPILER_INDEX_STORE_ENABLE=NO
 
-      - name: Capture representative iPad and iPhone screens
+      - name: Capture iPad and compact screens
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           APP="$RUNNER_TEMP/preview-build/Build/Products/Debug-iphonesimulator/MeloX.app"
           BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
+          # The preview only runs the iOS app in the simulator.
+          rm -rf "$APP/Watch" "$APP/PlugIns"
           mkdir -p preview
+          limited() {
+            perl -e 'alarm shift @ARGV; exec @ARGV or die $!;' "$@"
+          }
           boot() {
             local device="$1"
-            xcrun simctl bootstatus "$device" -b
-            xcrun simctl status_bar "$device" override --time "9:41" --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState unplugged --batteryLevel 100
-            xcrun simctl install "$device" "$APP"
+            limited 160 xcrun simctl bootstatus "$device" -b
+            limited 60 xcrun simctl install "$device" "$APP"
           }
           capture() {
             local device="$1"
             local screenshot="$2"
             shift 2
-            xcrun simctl launch --terminate-running-process "$device" "$BUNDLE_ID" --melox-ui-preview "$@"
+            limited 45 xcrun simctl launch --terminate-running-process "$device" "$BUNDLE_ID" --melox-ui-preview "$@"
             sleep 4
-            xcrun simctl io "$device" screenshot "preview/$screenshot.png"
+            limited 20 xcrun simctl io "$device" screenshot "preview/$screenshot.png"
             sips -g pixelWidth -g pixelHeight "preview/$screenshot.png"
           }
           boot "$PREVIEW_IPAD"
@@ -86,13 +94,10 @@ jobs:
           capture "$PREVIEW_IPAD" iPad-Listening-Rank-All-Time --preview-all
           capture "$PREVIEW_IPAD" iPad-Song-Recognition --preview-recognition
           capture "$PREVIEW_IPAD" iPad-Search --preview-search
-          if [[ -n "${PREVIEW_IPHONE:-}" ]]; then
-            boot "$PREVIEW_IPHONE"
-            capture "$PREVIEW_IPHONE" iPhone-Listening-Rank --preview-all
-            capture "$PREVIEW_IPHONE" iPhone-Listening-Rank-Large-Text --preview-large-text
-          fi
+          capture "$PREVIEW_IPAD" iPad-Listening-Rank-Large-Text --preview-large-text
 
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: MeloX-UI-previews
           path: preview/*.png
