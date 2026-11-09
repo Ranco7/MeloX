@@ -47,25 +47,46 @@ extension ListenTogetherStore {
         }
         // Merge nearby actions before sending. Once sent, finish that request
         // before starting the next one so it cannot overtake the newer action.
-        while !Task.isCancelled, sessionRevision == session,
-              pendingTransportReport != nil {
+        var retryDelayMilliseconds = 1_000
+        while !Task.isCancelled, sessionRevision == session {
+            guard operation != .leaving,
+                  let pending = pendingTransportReport else { return }
+            var failedReport = pending
             do {
                 try await Task.sleep(for: .milliseconds(40))
                 guard sessionRevision == session, operation != .leaving,
-                      let pending = pendingTransportReport else { return }
+                      let report = pendingTransportReport else { return }
+                failedReport = report
                 pendingTransportReport = nil
                 try await sendCommand(
-                    type: pending.type,
-                    formerSongID: pending.formerSongID,
-                    targetSongID: pending.targetSongID,
-                    isPlaying: pending.isPlaying,
-                    progressMilliseconds: pending.progressMilliseconds
+                    type: report.type,
+                    formerSongID: report.formerSongID,
+                    targetSongID: report.targetSongID,
+                    isPlaying: report.isPlaying,
+                    progressMilliseconds: report.progressMilliseconds
                 )
+                retryDelayMilliseconds = 1_000
             } catch is CancellationError {
                 return
             } catch {
                 guard !Task.isCancelled, sessionRevision == session else { return }
+                // Keep the failed action unless a newer one is already queued;
+                // otherwise the room would never learn about this pause/seek.
+                if pendingTransportReport == nil {
+                    pendingTransportReport = failedReport
+                }
                 connectionState = .reconnecting
+                do {
+                    try await Task.sleep(
+                        for: .milliseconds(retryDelayMilliseconds)
+                    )
+                } catch {
+                    return
+                }
+                retryDelayMilliseconds = min(
+                    retryDelayMilliseconds * 2,
+                    8_000
+                )
             }
         }
     }
@@ -84,16 +105,35 @@ extension ListenTogetherStore {
                     self.queueReportTask = nil
                 }
             }
-            do {
-                try await Task.sleep(for: .milliseconds(350))
-                guard !Task.isCancelled, let self,
-                      self.sessionRevision == session,
-                      self.operation != .leaving else { return }
-                try await self.sendPlaylistSnapshot()
-            } catch {
-                guard !Task.isCancelled, let self,
-                      self.sessionRevision == session else { return }
-                self.connectionState = .reconnecting
+            var retryDelayMilliseconds = 1_000
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .milliseconds(350))
+                    guard !Task.isCancelled, let self,
+                          self.sessionRevision == session,
+                          self.queueReportRevision == revision,
+                          self.operation != .leaving else { return }
+                    try await self.sendPlaylistSnapshot()
+                    return
+                } catch is CancellationError {
+                    return
+                } catch {
+                    guard !Task.isCancelled, let self,
+                          self.sessionRevision == session,
+                          self.queueReportRevision == revision else { return }
+                    self.connectionState = .reconnecting
+                    do {
+                        try await Task.sleep(
+                            for: .milliseconds(retryDelayMilliseconds)
+                        )
+                    } catch {
+                        return
+                    }
+                    retryDelayMilliseconds = min(
+                        retryDelayMilliseconds * 2,
+                        8_000
+                    )
+                }
             }
         }
     }
@@ -104,9 +144,8 @@ extension ListenTogetherStore {
             throw ListenTogetherSessionError.missingAccount
         }
         let displaySongIDs = player.listenTogetherDisplaySongIDs
-        guard !displaySongIDs.isEmpty else {
-            throw ListenTogetherSessionError.noCurrentSong
-        }
+        // An empty queue is a normal state, not a connection failure.
+        guard !displaySongIDs.isEmpty else { return }
         let randomSongIDs = player.listenTogetherRandomSongIDs
         clientSequence += 1
         try await api.reportListenTogetherPlaylist(
@@ -142,10 +181,9 @@ extension ListenTogetherStore {
     ) async throws {
         guard let room else { return }
         clientSequence += 1
-        locallyReportedCommandSequences.append(clientSequence)
-        if locallyReportedCommandSequences.count > 16 {
-            locallyReportedCommandSequences.removeFirst()
-        }
+        // Record the sequence before the request so an echo cannot be applied
+        // as a remote command if the response is lost.
+        lastLocallyReportedCommandSequence = Int64(clientSequence)
         try await api.reportListenTogetherCommand(
             roomID: room.id,
             commandType: type,
@@ -160,7 +198,8 @@ extension ListenTogetherStore {
     }
 
     func sendHeartbeat() async throws {
-        guard let room,
+        guard operation != .leaving,
+              let room,
               let songID = player.currentSong?.id else {
             return
         }
@@ -178,7 +217,7 @@ extension ListenTogetherStore {
         guard let command,
               let localUserID,
               command.userID == String(localUserID),
-              let sequence = Int(exactly: command.clientSequence) else { return false }
-        return locallyReportedCommandSequences.contains(sequence)
+              command.clientSequence > 0 else { return false }
+        return command.clientSequence <= lastLocallyReportedCommandSequence
     }
 }
