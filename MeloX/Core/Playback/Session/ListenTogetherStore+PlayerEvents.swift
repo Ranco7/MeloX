@@ -146,16 +146,16 @@ extension ListenTogetherStore {
         let displaySongIDs = player.listenTogetherDisplaySongIDs
         // An empty queue is a normal state, not a connection failure.
         guard !displaySongIDs.isEmpty else { return }
-        let randomSongIDs = player.listenTogetherRandomSongIDs
+        let publishedSongIDs = player.listenTogetherPublishedSongIDs
         clientSequence += 1
         try await api.reportListenTogetherPlaylist(
             roomID: room.id,
             userID: localUserID,
             version: clientSequence,
             displaySongIDs: displaySongIDs,
-            randomSongIDs: randomSongIDs.isEmpty
+            randomSongIDs: publishedSongIDs.isEmpty
                 ? displaySongIDs
-                : randomSongIDs
+                : publishedSongIDs
         )
     }
 

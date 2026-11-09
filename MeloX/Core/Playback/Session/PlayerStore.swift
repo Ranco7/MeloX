@@ -119,10 +119,9 @@ final class PlayerStore {
     var listenTogetherDisplaySongIDs: [Int] {
         queue.map(\.id)
     }
-    /// Room playlist reports stay in display order. Shuffle only chooses the
-    /// next track on this device; publishing the permutation makes the server
-    /// echo a reordered queue back to both sides.
-    var listenTogetherRandomSongIDs: [Int] {
+    /// Room playlist reports publish display order, not the shuffle
+    /// permutation; echoing a permutation would reorder both sides.
+    var listenTogetherPublishedSongIDs: [Int] {
         listenTogetherDisplaySongIDs
     }
     /// True while this device is resolving the next listen-together track and
