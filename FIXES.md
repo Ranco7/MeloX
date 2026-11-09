@@ -2014,3 +2014,77 @@
   2. 搜索键盘弹出/收起、分屏/旋转/切 Tab 后，底部条是否仍贴实际窗口底部，列表末行不被遮挡；反复 mini→全屏/下拉关闭。
   3. 起播后先等全曲缓存完成再多处 seek，并测暂停时拖动、交接时暂停/继续、快速切歌；下载完成前或首次切本地仍可有短暂缓冲，不能承诺始终瞬时。
   4. 自己/喜欢歌单无收藏钮、他人歌单仍能收藏；喜欢歌曲时长留白；同一歌单重复打开封面/背景是否更顺；Reduce Motion / 低电量模式仍正常。
+
+## 12 自适应播放页布局
+
+### 12.1 范围与环境
+
+- **基线**：`b1237ad`，分支 `fix/adaptive-player-layout`。源码、测试与本文档均在本地，未推送。
+- **症状来源**：iPad16,3 / iPadOS 27、Stage Manager 约 430pt 宽窗口——标题、艺人、一起听胶囊、更多按钮、进度条、剩余时间与「超清母带」徽标挤在同一条水平带里互相重叠，封面只剩很小一块。Apple Music 对照是干净的竖向堆叠。**本轮没有在本机查看原始截图，也没有模拟器或真机渲染**；结论来自源码推导与确定性几何计算。
+- **约束**：未改版本号、构建号、签名、CI/workflows、`project.pbxproj`；未触碰未跟踪的 `.fix/`；保留上一轮的整曲缓存、迷你播放条根级锚定与崩溃加固。
+
+### 12.2 根因（静态推导）
+
+1. **固定高度覆盖层压在内容之上**。`NowPlayingView.portraitContent` 把 `NowPlayingBottomControls` 作为 `.overlay(alignment: .bottom)` 叠在页面上，并写死约 341pt 高。页面只能靠底部 padding 让位，窄窗口封面被压到下限，元信息仍与控制带抢同一竖向空间。
+2. **进度区把徽标叠在时间行上**。音质菜单以 `.overlay` 盖在「已播放 / 剩余」行上，而不是布局中的兄弟节点，窄窗口下直接压住时间。
+3. **元信息行没有宽度优先级**。标题、一起听/心形胶囊与更多按钮挤在同一 `HStack`，窄窗口标题被挤成省略号且无法换行。
+4. **没有尺寸驱动的重排**：边距与控制带高度都是常量，窗口变窄或变矮时只压缩，不换行也不滚动。
+
+### 12.3 改动
+
+- **新增 `NowPlayingPortraitLayout`**：竖屏几何唯一来源。16–32pt 随宽度爬升的边距；Dynamic Type（1–1.35）放大控制带；折叠手柄按 **44pt** 触控高度入账；封面按剩余空间取正方形边长；短窗压缩控制带间距；极矮窗或大字号触发整页滚动。
+- **`NowPlayingView`**：手柄 → 页面 → 控制带改为真正的竖向兄弟；外层 `ScrollView` + `scrollBounceBehavior(.basedOnSize)`，刚好放下时不滚动，放不下时整页滚动，控件都够得着；不新增 matched transition source。
+- **`NowPlayingArtworkPage`**：**始终**使用 `ScrollView` + `basedOnSize`，不再用估算的元信息高度决定能不能看见文字。封面预算仍用保守的元信息高度；真实两行标题 / 徽章 / 大字号超出估算时由滚动承接，也不会在改窗时来回拆建视图树。
+- **元信息**：标题最多两行并可截断，右侧操作 `.fixedSize()`；艺人单行截断；一起听/心形胶囊单独一行。
+- **进度区**：音质/AutoMix 徽标是时间行的真实兄弟，居中夹在已播放与剩余之间；徽标保留小视觉样式，命中高度 ≥44pt。
+- **触控**：折叠手柄、音质菜单、更多/收藏、迷你播放器播放/下一首、横屏展开按钮、平板迷你播放器相关按钮均 ≥44pt（视觉可更小，透明命中框补足）。
+- **平板列**：`NowPlayingTabletMetadata` 标题截断、操作 `.fixedSize()`，避免与尾部按钮重叠；平板几何路由与竖屏模型分开验证。
+- **工程**：`PBXFileSystemSynchronizedRootGroup` 自动收录新 Swift 文件，无需改 `project.pbxproj`。
+
+### 12.4 尺寸矩阵（确定性计算，非截图）
+
+由生产代码 `NowPlayingPortraitLayout` 在默认 `textScale = 1`、无歌词工具行下计算。**这是几何估算，不是渲染验收**；竖屏路由与平板路由分开列出。
+
+**竖屏路由（`NowPlayingView` portrait）**
+
+| 窗口 | 边距 | 控制带 | 内容高 | 封面 | 页内滚动 | 整页滚动 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 320×480 | 17.6 | 277 | 156 | 96 | 是 | 是 |
+| 375×667 | 20.6 | 307 | 313 | 173 | 否 | 否 |
+| 430×700 | 23.6 | 307 | 346 | 206 | 否 | 否 |
+| 500×400 | 27.5 | 277 | 76 | 96 | 是 | 是 |
+| 700×900 | 32.0 | 307 | 546 | 406 | 否 | 否 |
+| 1024×768 | 32.0 | 307 | 414 | 274 | 否 | 否 |
+| 1366×1024 | 32.0 | 307 | 670 | 420 | 否 | 否 |
+| 1180×820 | 32.0 | 307 | 466 | 326 | 否 | 否 |
+
+短窗下控制带间距会压缩（上表 320×480 / 500×400 的 277 即压缩后）。进度区按含 44pt 音质行计入约 78pt，音量行 44pt，手柄 44pt，元信息预算 110pt。`basedOnSize` 在内容已放下时不会出现弹性滚动。
+
+**平板路由（`NowPlayingTabletLayout`，仅列宽/封面几何）**
+
+对 700×900、1024×768、1366×1024、1180×820、800×500 以及 `fillsRegion` 变体做确定性检查：`playerWidth/panelWidth/artworkSize ≥ 1`、封面不超过列宽、列原点有限。**未声称**平板 chrome 已用截图或模拟器验证。
+
+### 12.5 局限与未验证
+
+- 本执行机几何检查可用；完整 Xcode 编译与未签名 IPA 由协调者在 Mac 上完成。没有模拟器/真机 UI 渲染，也没有对照截图像素验收。
+- 封面预算仍用保守元信息高度；真实高度若更大，靠页内 `basedOnSize` 滚动保证文字可达，中等高度 + 超大字号的观感仍需真机确认。
+- 一起听胶囊独立成行后，窄窗不再挤压标题，但元信息多一行，极矮窗依赖滚动。
+- 横屏 `NowPlayingLandscapeView` 未重做整体结构，只补了展开按钮触控尺寸；它本来就不用旧的 341pt 覆盖层。
+- 侧栏列表切片契约未改；迷你条仍用上一轮的根级锚定。
+- 未跑 FPS / Instruments。
+
+### 12.6 测试
+
+- `Tests/Player/NowPlayingPortraitLayoutChecks.swift`：编译生产 `NowPlayingPortraitLayout` + `NowPlayingTabletLayout`，覆盖 8 个竖屏尺寸、间距压缩、整页滚动、44pt 手柄、Dynamic Type 钳制、工具行、边距/封面单调性，以及平板列几何。
+- 建议命令：
+  ```
+  swiftc MeloX/Features/Player/NowPlaying/NowPlayingPortraitLayout.swift \
+    MeloX/Features/Player/NowPlaying/Tablet/NowPlayingTabletLayout.swift \
+    Tests/Player/NowPlayingPortraitLayoutChecks.swift -o /tmp/portrait-layout
+  /tmp/portrait-layout
+  python3 Tools/Tests/test_device_round2.py -v
+  python3 Tools/Tests/test_playback_song_switch.py
+  python3 Tools/Tests/test_sidebar_playlists.py
+  git diff --check
+  ```
+- 几何检查只证明不变量，不等于 SwiftUI 视觉正确。
