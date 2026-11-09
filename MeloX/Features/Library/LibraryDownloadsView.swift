@@ -7,6 +7,9 @@ struct LibraryDownloadsView: View {
     @Environment(PlayerStore.self) private var player
 
     var body: some View {
+        let activeSongs = activeDownloadSongs
+        let downloaded = filteredDownloads
+        let playableSongs = downloaded.map(\.song)
         List {
             if !isSearching {
                 NavigationLink {
@@ -21,9 +24,9 @@ struct LibraryDownloadsView: View {
                 }
             }
 
-            if !activeDownloadSongs.isEmpty {
+            if !activeSongs.isEmpty {
                 Section("ui.downloads.active") {
-                    ForEach(activeDownloadSongs) { song in
+                    ForEach(activeSongs) { song in
                         TrackRowView(song: song, showsArtwork: true)
                             .swipeActions {
                                 Button(role: .destructive) {
@@ -36,9 +39,9 @@ struct LibraryDownloadsView: View {
                 }
             }
 
-            if !filteredDownloadedSongs.isEmpty {
+            if !playableSongs.isEmpty {
                 Button {
-                    Task { await player.playAll(filteredDownloadedSongs) }
+                    Task { await player.playAll(playableSongs) }
                 } label: {
                     Label(
                         isSearching
@@ -49,12 +52,12 @@ struct LibraryDownloadsView: View {
                 }
             }
 
-            ForEach(filteredDownloads) { download in
+            ForEach(downloaded) { download in
                 Button {
                     Task {
                         await player.play(
                             download.song,
-                            in: filteredDownloadedSongs
+                            in: playableSongs
                         )
                     }
                 } label: {
@@ -72,8 +75,8 @@ struct LibraryDownloadsView: View {
         }
         .listStyle(.plain)
         .overlay {
-            if filteredDownloads.isEmpty,
-               activeDownloadSongs.isEmpty {
+            if downloaded.isEmpty,
+               activeSongs.isEmpty {
                 if isSearching {
                     ContentUnavailableView.search(
                         text: normalizedSearchQuery
@@ -116,10 +119,6 @@ struct LibraryDownloadsView: View {
             ).map(\.id)
         )
         return downloads.downloads.filter { songIDs.contains($0.id) }
-    }
-
-    private var filteredDownloadedSongs: [Song] {
-        filteredDownloads.map(\.song)
     }
 
     private var downloadManagementValue: String {
