@@ -9,6 +9,8 @@ struct NowPlayingAppleMusicBackground: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.effectiveLyricsRefreshRate)
+    private var effectiveLyricsRefreshRate
 
     let artworkURL: URL?
     let isBehindLyrics: Bool
@@ -38,10 +40,7 @@ struct NowPlayingAppleMusicBackground: View {
         GeometryReader { proxy in
             TimelineView(
                 .animation(
-                    // 60 fps is enough for a slowly rotating, heavily blurred
-                    // backdrop; the lyrics page used to ask for 120 fps and
-                    // doubled the full-screen shader cost on ProMotion.
-                    minimumInterval: 1.0 / 60.0,
+                    minimumInterval: backdropMinimumInterval,
                     paused: pausesAnimation
                 )
             ) { context in
@@ -153,6 +152,16 @@ struct NowPlayingAppleMusicBackground: View {
         .id(artworkURL)
         .frame(width: size.width, height: size.height)
         .clipped()
+    }
+
+    /// The backdrop is heavily blurred and mostly covered while lyrics are
+    /// shown, so the 60 fps cap stays there. On the other pages it is the main
+    /// animated surface and follows the user's refresh-rate preference
+    /// (including ProMotion and the Low Power Mode override).
+    private var backdropMinimumInterval: TimeInterval {
+        isBehindLyrics
+            ? 1.0 / 60.0
+            : effectiveLyricsRefreshRate.minimumInterval
     }
 
     private var pausesAnimation: Bool {
