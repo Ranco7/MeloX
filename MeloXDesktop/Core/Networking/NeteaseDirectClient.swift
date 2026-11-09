@@ -148,7 +148,8 @@ final class NeteaseDirectClient {
         guard let encodedObjectKey = objectKey.addingPercentEncoding(withAllowedCharacters: objectKeyAllowed),
               let uploadURL = URL(
                 string: "\(uploadHost.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/\(bucket)/\(encodedObjectKey)?offset=0&complete=true&version=1.0"
-              ) else {
+              ),
+              Self.isAllowedUploadURL(uploadURL) else {
             throw APIError.requestEncoding
         }
 
@@ -171,6 +172,24 @@ final class NeteaseDirectClient {
                     ? HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
                     : responseDescription(data, decodingError: APIError.invalidResponse)
             )
+        }
+    }
+
+    private static func isAllowedUploadURL(_ url: URL) -> Bool {
+        guard url.scheme?.lowercased() == "https",
+              let host = url.host?.lowercased(),
+              !host.isEmpty else {
+            return false
+        }
+        let allowedHostSuffixes = [
+            "127.net",
+            "126.net",
+            "netease.com",
+            "163.com",
+            "163yun.com",
+        ]
+        return allowedHostSuffixes.contains {
+            host == $0 || host.hasSuffix(".\($0)")
         }
     }
 
