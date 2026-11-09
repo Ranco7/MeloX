@@ -11,7 +11,7 @@ enum ArtworkDataLoader {
         )
         var request = URLRequest(
             url: url,
-            cachePolicy: .reloadIgnoringLocalCacheData,
+            cachePolicy: .useProtocolCachePolicy,
             timeoutInterval: 20
         )
         request.setValue(
