@@ -18,7 +18,8 @@ struct PlaylistTrackList: View {
                 .frame(maxWidth: .infinity, minHeight: 180)
         } else {
             LazyVStack(spacing: 0) {
-                ForEach(Array(tracks.enumerated()), id: \.element.id) { index, song in
+                ForEach(tracks.indices, id: \.self) { index in
+                    let song = tracks[index]
                     PlaylistTrackRow(
                         song: song,
                         tracks: tracks,
