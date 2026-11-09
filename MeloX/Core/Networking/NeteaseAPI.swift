@@ -404,9 +404,18 @@ final class NeteaseAPI {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            if Task.isCancelled
+                || (error as? URLError)?.code == .cancelled {
+                throw CancellationError()
+            }
             // YesPlayMusic 在未登录时使用网易云官方外链。iOS 先尝试上面的
-            // HTTPS 化原始音源，仅在失败时保留这个官方兜底，避免静默卡在 00:00。
-            guard settings.cookie.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            // HTTPS 化原始音源；只有明确不可播放时才保留这个官方兜底，
+            // 网络/服务端错误必须原样抛给上层，避免伪装成解析成功。
+            guard let apiError = error as? APIError else {
+                throw error
+            }
+            guard case .noPlayableSource = apiError,
+                  settings.cookie.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   let url = URL(string: "https://music.163.com/song/media/outer/url?id=\(id)") else {
                 throw error
             }
@@ -634,6 +643,19 @@ final class NeteaseAPI {
         } catch is CancellationError {
             throw CancellationError()
         } catch {
+            if Task.isCancelled
+                || (error as? URLError)?.code == .cancelled {
+                throw CancellationError()
+            }
+            guard let apiError = error as? APIError else {
+                throw error
+            }
+            switch apiError {
+            case .notLoggedIn, .emptyResponse:
+                break
+            default:
+                throw error
+            }
             // 兼容旧账号接口；部分账号在 login_status 的 eapi 传输下
             // 只返回空 profile，仍应继续尝试原账号接口。
             let response: AccountResponse = try await client.eapi(
