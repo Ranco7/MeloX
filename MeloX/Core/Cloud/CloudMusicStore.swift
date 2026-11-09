@@ -79,6 +79,11 @@ final class CloudMusicStore {
         do {
             let page = try await api.cloudSongs(limit: pageSize)
             try Task.checkCancellation()
+            guard settings.cookie.trimmingCharacters(
+                in: .whitespacesAndNewlines
+            ) == cookie else {
+                return
+            }
             apply(page, replacing: true)
             loadedCookie = cookie
             phase = .loaded
