@@ -327,10 +327,8 @@ struct NowPlayingView: View {
                     dismissalHandle
 
                     pageContent(for: song, layout: layout)
-                        .frame(
-                            maxWidth: .infinity,
-                            height: layout.pageAreaHeight
-                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: layout.pageAreaHeight)
 
                     portraitPlayerControls(
                         for: song,
