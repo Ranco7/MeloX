@@ -123,6 +123,7 @@ struct SearchDiscoveryView: View {
 
 private struct SearchCategoryCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
 
     let category: SearchMusicCategory
 
@@ -139,6 +140,16 @@ private struct SearchCategoryCard: View {
                     startPoint: .topLeading,
                     endPoint: .bottomTrailing
                 )
+                .overlay {
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.35),
+                            .init(color: .black.opacity(scrimOpacity), location: 1),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                }
                 .overlay(alignment: .topTrailing) {
                     Image(systemName: category.systemImage)
                         .font(.system(size: 60, weight: .bold))
@@ -150,6 +161,10 @@ private struct SearchCategoryCard: View {
             }
             .clipShape(.rect(cornerRadius: 14))
             .contentShape(.rect(cornerRadius: 14))
+    }
+
+    private var scrimOpacity: Double {
+        colorSchemeContrast == .increased ? 0.68 : 0.52
     }
 }
 
