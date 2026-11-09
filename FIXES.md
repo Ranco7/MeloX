@@ -1,6 +1,6 @@
 # MeloX 修复复核报告（FIXES）
 
-**一句话结论**：REVIEW.md 的 143 条 ID 与 8 份批次报告 1:1 对齐（无缺失、无多余、无重复），报告声称 74 条已修复、9 条部分修复、51 条暂缓、8 条有意设计、1 条误报；55 个 pipeline 提交全部真实存在且文件清单与报告逐条一致，但**全部结论均为静态核对，没有编译、没有运行、没有真机验证**，本轮也没有产生任何纠错型代码提交。
+**一句话结论**：REVIEW.md 的 143 条 ID 与 8 份批次报告 1:1 对齐（无缺失、无多余、无重复），报告声称 74 条已修复、9 条部分修复、51 条暂缓、8 条有意设计、1 条误报；复核后将 C15 从已修复降为部分修复（73 条已修复、10 条部分修复，其余状态不变）；55 个 pipeline 提交全部真实存在且文件清单与报告逐条一致，但**全部结论均为静态核对，没有编译、没有运行、没有真机验证**，本轮也没有产生任何纠错型代码提交。
 
 ## 目录
 
@@ -21,7 +21,7 @@
 - **未验证项**：编译、链接、类型检查、单元/回归测试、Instruments/性能测量、真机 UI 与无障碍、App Store 校验、CI 运行、网络与第三方歌词源行为、Keychain/沙盒/entitlements 行为。
 - **报告是"主张"而非证据**：`.fix/reports/b1-audio-playback.json` … `b8-arch.json` 里 `root_cause`/`change`/`verification`/`risk`/`manual_test` 均由执行批次静态阅读代码后填写；本轮复核逐条比对了报告、REVIEW.md、实际 diff、调用方与部分源码，但**没有新增编译或运行证据**。
 - **已核对的内容**：git 范围（base/HEAD/提交数/文件数/diffstat/`git diff --check`）、55 个提交的 subject 与文件清单、报告 ID 集合、每批状态、关键改动区域与调用点、部分被报告点名的源码位置。
-- **未改动的内容**：REVIEW.md、`.fix/`（含 8 份报告）、`.agent-notes.md`、源码、工程文件、CI 均未修改；除本文末尾的一次 FIXES.md 本地文档提交外，未提交、未推送。
+- **未改动的内容**：REVIEW.md、`.fix/`（含 8 份报告）、`.agent-notes.md`、源码、工程文件、CI 均未修改；只新增 FIXES.md 的本地文档提交与后续 C15/证据归因校正；未推送。
 - **本文件的定位**：对"改了什么、没改什么、还剩什么、哪些是风险但未证实"的存档式说明，供后续编译与真机验证使用。
 
 ## 2 总览
@@ -29,7 +29,7 @@
 | 项目 | 值 |
 | --- | --- |
 | base | `b59457f2c4705d2543350e0a43800929c2fe159d` |
-| HEAD | `6bf84314d33f6cd5e2727d012ebae3d7141f1a1c`（短 `6bf8431`） |
+| pipeline HEAD（以下代码统计不含后续文档提交） | `6bf84314d33f6cd5e2727d012ebae3d7141f1a1c`（短 `6bf8431`） |
 | 提交数 | 55 |
 | 改动文件数 | 67 |
 | diffstat | +1566 / −452 |
@@ -37,11 +37,12 @@
 | 范围内 REVIEW.md / `.fix/` 改动 | 无 |
 | REVIEW 唯一 ID | 143 |
 | 报告唯一 ID | 143（1:1 覆盖，缺失 0、多余 0、重复 0） |
-| 状态直方图 | fixed 74、deferred 51、partially_fixed 9、intentional 8、false_positive 1（合计 143） |
+| 原始报告状态 | fixed 74、deferred 51、partially_fixed 9、intentional 8、false_positive 1（合计 143） |
+| 复核后状态 | fixed 73、deferred 51、partially_fixed 10、intentional 8、false_positive 1（C15 降级，合计 143） |
 | 纠错型代码提交 | **0**（未发现可安全落地、又无需编译验证的明确代码缺陷） |
-| 文档提交 | 本文完成后创建一次 `FIXES.md` 本地文档提交（仅该文件；未推送；SHA 见最终 `git log`） |
+| 文档提交 | `65b2336` 首次说明 + 后续 C15/证据归因校正（均仅 FIXES.md；未推送；最终 SHA 见 `git log`） |
 
-**每批条目 / 提交 / 状态**
+**每批条目 / pipeline 提交 / 复核后状态**
 
 | 批次 | 条目 | 提交 | 状态分布 |
 | --- | --- | --- | --- |
@@ -50,10 +51,10 @@
 | b3-ipad-ui | 18 | 8 | fixed 16、deferred 1、intentional 1 |
 | b4-perf-hot | 10 | 4 | fixed 7、deferred 2、partially_fixed 1 |
 | b5-downloads-network | 14 | 11 | fixed 11、partially_fixed 1、deferred 1、false_positive 1 |
-| b6-perf-views | 21 | 12 | fixed 7、partially_fixed 5、deferred 8、intentional 1 |
+| b6-perf-views | 21 | 12 | fixed 6、partially_fixed 6、deferred 8、intentional 1 |
 | b7-sec-build-l10n | 25 | 7 | fixed 7、deferred 16、intentional 2 |
 | b8-arch | 31 | 7 | fixed 6、deferred 21、partially_fixed 1、intentional 3 |
-| **合计** | **143** | **55** | **fixed 74、deferred 51、partially_fixed 9、intentional 8、false_positive 1** |
+| **合计** | **143** | **55** | **fixed 73、deferred 51、partially_fixed 10、intentional 8、false_positive 1** |
 
 ## 3 批次审计
 
@@ -75,8 +76,8 @@
 
 - **状态**：16 fixed（E0、B3、E1、E3、E4、E5、E7、E6、B12、B15、B17、E10、E12、E13、E14、E16）、1 deferred（E15）、1 intentional（E9）。
 - **结论**：8 个提交（`36218a3`、`911514d`、`7c961aa`、`1bc0c53`、`a4bedfa`、`8cb0817`、`9f552e7`、`06aa68f`）真实存在，文件清单与 diff 完全匹配。
-- **差异（运行器异常）**：首次运行 `rc=127` 且 jsonl 为空，唯一错误是 `.fix/run.sh: line 11: its: command not found`——这是 runner 脚本的拼写错误，**不是 Swift 编译输出**，不能据此推断代码正确或错误；重跑后报告与 8 个提交均为真实产物。
-- **残余风险**：E1 使用了报告允许的"至少限制封面"替代方案（居中大幅封面，而非左右分栏），并且仍以 `wideArtistColumnWidth: nil` 调用 `trackContent`，排行榜曲目行仍是窄行；B12 新增私有 `SidebarArtworkResult(@unchecked Sendable)` 承载跨任务传递的 `UIImage`，并把一个非 `Sendable` 字典跨 task group 传递；本批报告建议优先编译 `PlaylistDetailContent.swift` 与 `ContentView.swift`。
+- **差异（运行器异常）**：首次运行 `rc=127` 且 jsonl 为空，唯一错误是 `.fix/run.sh: line 11: its: command not found`——这是 runner 脚本的拼写错误，**不是 Swift 编译输出**，不能据此推断代码正确或错误；现存报告与 8 个提交均为真实产物。现有记录不足以证明 b3 曾完整重跑，故不补写重跑历史。
+- **残余风险**：E1 使用了报告允许的"至少限制封面"替代方案（居中大幅封面，而非左右分栏），并且仍以 `wideArtistColumnWidth: nil` 调用 `trackContent`，排行榜曲目行仍是窄行；B12 新增私有 `SidebarArtworkResult(@unchecked Sendable)` 承载跨任务传递的 `UIImage`，并让包含 UIKit 图像的结果字典经过 task group 边界；其实际 Sendable/隔离诊断取决于 SDK 与 Swift 编译设置；本批报告建议优先编译 `PlaylistDetailContent.swift` 与 `ContentView.swift`。
 
 ### b4-perf-hot（10 条 / 4 提交）
 
@@ -94,15 +95,15 @@
 
 ### b6-perf-views（21 条 / 12 提交）
 
-- **状态**：7 fixed（C8、C15、C17、C20、C21、C24、C25）、5 partially_fixed（C7、C12、C14、C26、C28）、8 deferred（C5、C9、C10、C11、C16、C18、C19、C23）、1 intentional（C27）。
+- **状态（复核后）**：6 fixed（C8、C17、C20、C21、C24、C25）、6 partially_fixed（C7、C12、C14、C15、C26、C28）、8 deferred（C5、C9、C10、C11、C16、C18、C19、C23）、1 intentional（C27）。
 - **结论**：首次 fast 运行**没有留下报告、也没有落地任何编辑**（状态为 NO REPORT）；重新排队 flash/high 运行后产生 12 个真实提交（`350c745`、`05433aa`、`fdb7c08`、`36570c7`、`ea99562`、`c6c0697`、`b624849`、`1031ffa`、`01810aa`、`ad6173c`、`640740f`、`6bf8431`），全部与报告一致。
-- **差异**：无缺失提交；部分修复项的理由均写在报告 `risk` 中（需要更大重构或额外输入）。
-- **残余风险**：C15 只是把 `composition` 提升为 View 的 `private let`（避免 GeometryReader 反复求值），父视图 body 重建仍会重算，不是持久缓存；C25 把 `ForEach` 身份从 `song.id` 改为 `indices`（行内仍显式 `.id(song.id)`），插入/删除/重排时的容器身份需真机确认；C20 并发时首个调用者的 `fallbackPrefersDarkAppearance` 会被共享。
+- **差异**：无缺失提交；原报告 5 条部分修复之外，本轮把 C15 从 fixed 降为部分修复：父级 GeometryReader 仍可重建子视图并重算 composition，不能把 View init 的 let 称为持久缓存。
+- **残余风险**：C15 只是把 `composition` 提升为 View 的 `private let`（只移出子视图自身的 GeometryReader），父视图 body 重建仍会重算，不是持久缓存；C25 把 `ForEach` 身份从 `song.id` 改为 `indices`（行内仍显式 `.id(song.id)`），插入/删除/重排时的容器身份需真机确认；C20 并发时首个调用者的 `fallbackPrefersDarkAppearance` 会被共享。
 
 ### b7-sec-build-l10n（25 条 / 7 提交）
 
 - **状态**：7 fixed（F3、F4、F5、F6、F13、F20、F23）、16 deferred（F0、F1、F2、F7、F8、F9、F10、F11、F15、F16、F17、F18、F19、F21、F22、B13）、2 intentional（F12、F14）。
-- **结论**：7 个提交（`5c5e8a7`、`479579e`、`225b104`、`2940ba3`、`ea5936f`、`f46b09b`、`d3ef15f`）与报告一致；F5/F6 额外同步修改了 MeloXDesktop 的复制实现（报告只点名 iOS），这是范围内一致的范围扩展。
+- **结论**：7 个提交（`5c5e8a7`、`479579e`、`225b104`、`2940ba3`、`ea5936f`、`f46b09b`、`d3ef15f`）与报告一致；F5/F6 的报告 files 与 change 均明确包含 iOS、MeloXDesktop 两份实现，实际提交与之相符，不存在未报告的范围扩展。
 - **差异**：无缺失/多余提交；F12（`screen-capture` 后台模式）与 F14（手表独立语言）判定为有意设计，未改。
 - **残余风险（是风险，不是已证实缺陷）**：F5 要求登录 Cookie 的 domain 必须等于 `music.163.com`，若登录流程把 `MUSIC_U` 写在 `.163.com` 上，登录会一直等待；F6 要求 NOS LBS 上传地址为 `https` 且命中 `127.net/126.net/netease.com/163.com/163yun.com`（含子域）白名单，新 CDN 或 IP 会让云盘上传以 `requestEncoding` 失败，且只校验初始 URL、不校验重定向目标；F20 的 DEBUG `assertionFailure` 在任一 target 缺 lproj 时会崩溃。
 
@@ -111,7 +112,7 @@
 - **状态**：6 fixed（D22、D24、D27、D28、D29、D32）、1 partially_fixed（D17）、21 deferred、3 intentional 亮点（E17、E18、E19）。
 - **结论**：7 个提交（`82a8047`、`56d179a`、`956ead6`、`220e7b4`、`66ffb04`、`6895b7e`、`31830a7`）真实存在，共 14 个既有源文件，与报告"仅修改 14 个既有源文件、未新增文件"一致。
 - **差异**：D17 只完成依赖注入（新增 `SongRecognitionRecording` / `AudioFingerprintGenerating` 协议与 `init(recorder:fingerprintGenerator:)`），**Store 生命周期仍跟随 View**，未达到报告期望的 Environment 注入，故为部分修复。
-- **残余风险**：D24 的多行前导 `*` 运算符写法被 tree-sitter 语法检查额外报出 1 条诊断（与基线既有同类写法一致，属语法分析器限制，不是已确认的编译错误）；D28 删除 iOS 未使用 API 后若后续需要需重新添加。
+- **残余风险**：D24 的多行前导 `*` 运算符写法被 tree-sitter 语法检查在 1 处额外报出 2 条诊断（与基线既有同类写法一致，属语法分析器限制，不是已确认的编译错误）；D28 删除 iOS 未使用 API 后若后续需要需重新添加。
 
 ## 4 ID 覆盖与合并说明
 
@@ -123,7 +124,7 @@
 
 ## 5 逐项结论
 
-以下每节对应 REVIEW.md 的一个 ID，状态标签沿用报告（A12 为复核后的"误报"覆盖）。"提交"为该 ID 关联的真实短 SHA；"静态核对，未编译"表示只做了代码/调用方阅读，没有任何编译或运行证据。
+以下每节对应 REVIEW.md 的一个 ID，状态标签以复核结论为准：C15 从原报告 fixed 降为部分修复；A12 维持原报告的误报结论。"提交"为该 ID 关联的真实短 SHA；"静态核对，未编译"表示只做了代码/调用方阅读，没有任何编译或运行证据。
 
 ## 5.1 b1-audio-playback（8 条）
 
@@ -492,7 +493,7 @@
 - **提交**：`a4bedfa`
 - **验证**：读 21-30、431-433、484-540，确认 group 内只访问 Nuke 与局部变量、渲染仍在主 actor；静态核对，未编译。
 - **手测**：iPad 登录收藏超过 40 个歌单的账号冷启动，侧栏封面应更快出现，展开滚动无明显卡顿。
-- **风险/遗留**：首屏最多约 41 个并发图片请求；用 `@unchecked Sendable` 包装跨任务传递的 `UIImage`，并把一个非 `Sendable` 字典跨 task group 传递——需编译确认并发安全。
+- **风险/遗留**：首屏最多约 41 个并发图片请求；用 `@unchecked Sendable` 包装跨任务传递的 `UIImage`，并让包含 UIKit 图像的结果字典经过 task group 边界；其实际 Sendable/隔离诊断取决于 SDK 与 Swift 编译设置——需编译确认并发安全。
 
 ### B15 已修复
 
@@ -951,16 +952,16 @@
 - **手测**：逐字歌词播放，确认高亮渐变方向（含 RTL 歌词）与修改前一致。
 - **风险/遗留**：低；Gradient 内容与原算法相同；剩余工作是缓存发光模糊图层。
 
-### C15 已修复
+### C15 暂缓（部分已修复）
 
-- **结论**：EVA 排版从 GeometryReader 闭包内提升到 View 的 `private let`，几何变化不再重排。
+- **结论**：仅把 EVA 排版计算移出子视图自身的 GeometryReader；父级重建时 init 仍会重新计算，没有持久缓存，原 REVIEW 的反复排版问题尚未完全解决。
 - **原因**：`EVALyricCompositionView` 在 GeometryReader 闭包里每次 body/geometry 求值都调用 `EVALyricLayoutEngine.composition`（归一化文本、Array 字符、shuffle、计算所有 block frame），外层还有 `.id(currentLine.id)` 强制重建。
 - **改动**：把 composition 提升为 `private let`，在新增的 `init(text:fontScale:layoutSeed:layoutSequence:)` 中按 text+seed+sequence 计算一次；body 只读 `composition.blocks`。
 - **文件**：`MeloX/Features/Player/Lyrics/EVA/EVALyricCompositionView.swift`
 - **提交**：`05433aa`
 - **验证**：读 EVALyricsLayout 37-41 确认 composition 只依赖 source/sessionSeed/sequence 且与尺寸无关，EVALyricsView 62-68 调用点使用相同 init 标签；静态核对，未编译。
-- **手测**：进入 EVA 歌词页后旋转设备或改变字号，确认布局正确且不再反复重排。
-- **风险/遗留**：init 标签与顺序不变、composition 是值类型；但这是 View init 计算——`EVALyricsView.swift:53-68` 把该视图构造在**另一层父 GeometryReader 内**，父几何失效仍会重建子视图并重跑 init，所以"旋转后完全不再重排"的表述过强；准确说法是只把计算移出子视图自身的 GeometryReader，且没有持久缓存。状态仍按报告记为"已修复"，此处记录范围限制。
+- **手测**：进入 EVA 歌词页后旋转设备、改变字号或触发父视图更新，用 Instruments/调用次数确认重算频率；不得预设已实现跨重建缓存。
+- **风险/遗留**：init 标签与顺序不变、composition 是值类型；但这是 View init 计算——`EVALyricsView.swift:53-68` 把该视图构造在**另一层父 GeometryReader 内**，父几何失效仍会重建子视图并重跑 init，所以"旋转后完全不再重排"的表述过强；准确说法是只把计算移出子视图自身的 GeometryReader，且没有持久缓存。因此复核降为部分修复；剩余工作是基于 text/seed/sequence 的持久缓存或受控 State 失效，需另行实现与验证。
 
 ### C16 暂缓
 
@@ -1705,7 +1706,7 @@
 | 测试基础设施（依赖测试 target） | 2 | D18、D19 |
 | 独立增强 / 性能优化，收益需实测 | 2 | A21、C23 |
 
-### 6.2 9 条 partially_fixed 与剩余工作
+### 6.2 10 条 partially_fixed 与剩余工作（含复核降级 C15）
 
 | ID | 已完成 | 剩余工作 |
 | --- | --- | --- |
@@ -1715,6 +1716,7 @@
 | C7 | `position()` filter+map+Set 合并为一次遍历 | 降低前缀扫描成本（可重叠行集合缓存） |
 | C12 | 文字缓存 FIFO → LRU | Key 改为 lineID + 内容修订号，避免整段音节哈希 |
 | C14 | 每次 draw 只构建一次 reveal Gradient | 发光模糊图层缓存 |
+| C15 | composition 移出子视图 GeometryReader，按 View 值 init 计算 | 按 text/seed/sequence 持久缓存，避免父级 GeometryReader/父 body 重建时重新计算 |
 | C26 | 行 `onDisappear` 停止无限位移动画 | 传入 `isPlaying/scenePhase`，在暂停/后台时也停止 |
 | C28 | 缩略图尺寸乘 `displayScale` | 去掉内层 GeometryReader，由父布局传确定尺寸 |
 | D17 | 录音器/指纹器协议注入 | Store 生命周期上移（Environment / App 级），不再随 View 重建 |
@@ -1723,9 +1725,9 @@
 
 - **没有任何编译证据**：全仓没有 Swift/Xcode 工具链；`git diff --check` 只验证空白字符，不代表编译、链接或测试通过。tree-sitter 语法扫描（62 个改动 Swift 文件：基线 33 条诊断、pipeline 35 条）只作参考——新增的 2 条是 D24 多行前导 `*` 运算符，与基线既有同类写法一致，属语法分析器限制，**不是已确认的编译错误**。
 - **没有运行证据**：未跑任何测试、未启动 App、未做真机/模拟器 UI、未做 Instruments 性能测量、未抓包、未跑 CI。
-- B12：`@unchecked Sendable` 包装 `UIImage`，并把一个非 `Sendable` 字典跨 task group 传递，并发安全需编译与线程检查器确认。
-- C1：改动依赖可选三元 `?:` 与类型推断能否通过编译。
-- A5/B4：占位实现使用 `Song(id:name:artists:)` 与 `Set.subtract([Int])`，类型是否成立未编译验证。
+- B12：`@unchecked Sendable` 包装 `UIImage`，并让包含 UIKit 图像的结果字典经过 task group 边界；其实际 Sendable/隔离诊断取决于 SDK 与 Swift 编译设置，并发安全需编译与线程检查器确认。
+- C1：可选三元表达式未发现明确语法/类型矛盾；这不代替 Swift 类型检查，不能因缺少编译器就宣称编译通过。
+- A5/B4：已核对 `MusicModels.swift:256-272`，占位构造器的其余参数有默认值，调用标签匹配；`Set.subtract` 接受同元素 Sequence。未发现明确签名错误，但仍未进行 Swift 类型检查。
 - D21：`QQMusicLyricMatchStore` 的 actor/static 隔离需编译确认。
 - F20：`#if DEBUG assertionFailure` 在任一 target/Preview 缺 lproj 时会崩溃（Release 不受影响）。
 - A16：新的 `data` 校验对心跳也生效，若服务端心跳成功时返回 `data:null`，会被误判为失败并触发重试/重连。
@@ -1823,7 +1825,7 @@
 | 55 | `6bf8431` | perf(artwork): honor URL cache for artwork downloads (C21) |
 
 - **纠错型提交**：0。本轮没有发现"明确是缺陷、又能在无编译验证下安全修复"的代码问题，因此没有新增代码提交。
-- **文档提交**：`FIXES.md` 在本文完成后做一次本地文档提交（需要显式 `git add -f FIXES.md`，因为仓库本地 `.git/info/exclude` 列出了它；同时也排除 `REVIEW.md`、`.out/`、`.agent-notes.md`）；未推送，除它之外不计划新增任何提交；本轮没有改 `.git/info/exclude`。
+- **文档提交**：`65b2336` 为首次 FIXES.md 提交，随后追加本次 C15 状态与证据归因校正；两次均仅改本文，不改源码、不推送。首次需显式 `git add -f FIXES.md`，因为本地 `.git/info/exclude` 列出了它；本轮未改 exclude。
 
 ## 10 未做与未验证事项
 
@@ -1834,7 +1836,6 @@
 - **未做签名/发布验证**：Keychain、entitlements、App Sandbox、ad-hoc 签名、公证、App Store Connect（ITMS-91053 / Invalid Bundle）均未验证。
 - **未做性能测量**：没有 Instruments/Time Profiler，C1/C2/C3/C4/C6/C7/C13/C22、B12/C20、A9 的收益全是静态推断。
 - **未同步桌面副本**：MeloXDesktop 下的 `PlayerStore`、`DownloadStore`、`ListenTogetherStore`、`ArtworkDataLoader`、`PageContentCache` 等仍是旧实现（除 F5/F6 双端同步、F3/F4/F13 相关文件）；两端行为差异未验证。
-- **未完成剩余 60 条**：51 条 deferred + 9 条 partially_fixed 的剩余工作见第 6 节。
+- **未完成剩余 61 条**：51 条 deferred + 10 条 partially_fixed 的剩余工作见第 6 节；另 8 条有意设计/确认亮点不作为已完成修复计数。
 - **未验证脚本契约**：D13/D19 依赖 `Tools/Tests/*.py` 对源码的切片（`private var sidebarPlaylists:`、`loadCurrentSong` 等），本轮只保证未改这些名字，未实际运行脚本。
 - **提交状态**：本文件在复核结束时本地提交（未推送）；REVIEW.md、`.fix/reports/*`、`.agent-notes.md`、源码、工程文件、CI 均未改动。
-
