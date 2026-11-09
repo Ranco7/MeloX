@@ -1588,10 +1588,10 @@ final class AppSettings {
         ) as? Bool ?? true
         lyricsAMLLSourceEnabled = defaults.object(
             forKey: Key.lyricsAMLLSourceEnabled
-        ) as? Bool ?? true
+        ) as? Bool ?? false
         lyricsQQMusicSourceEnabled = defaults.object(
             forKey: Key.lyricsQQMusicSourceEnabled
-        ) as? Bool ?? true
+        ) as? Bool ?? false
         lyricsSourcePreference = LyricSourcePreference(
             rawValue: defaults.string(
                 forKey: Key.lyricsSourcePreference
@@ -2094,8 +2094,8 @@ final class AppSettings {
         lyricsWordByWord = true
         lyricsPseudoWordByWord = false
         lyricsDuetLayoutEnabled = true
-        lyricsAMLLSourceEnabled = true
-        lyricsQQMusicSourceEnabled = true
+        lyricsAMLLSourceEnabled = false
+        lyricsQQMusicSourceEnabled = false
         lyricsSourcePreference = Self.defaultLyricsSourcePreference
         lyricsLiftMode = Self.defaultLyricsLiftMode
         lyricsHighlightGradientWidth =
