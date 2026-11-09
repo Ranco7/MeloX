@@ -59,6 +59,10 @@ jobs:
         shell: bash
         run: python3 Tools/Tests/test_playback_song_switch.py
 
+      - name: Run iPad sidebar startup regression
+        shell: bash
+        run: python3 Tools/Tests/test_sidebar_playlists.py
+
       - name: Build unsigned IPA / 构建未签名 IPA
         shell: bash
         run: bash build_ios_unsigned.sh
@@ -128,6 +132,8 @@ jobs:
           SHA256="$(shasum -a 256 "$IPA" | cut -d ' ' -f 1)"
           cat > "$RUNNER_TEMP/release.md" <<EOF
           iPad 侧栏可直接打开常用歌单。宽屏歌单和专辑把封面、资料与播放按钮排在页头，曲目在下方通栏显示。底部浮动播放器提供切歌、随机、循环、歌词和队列入口。
+
+          修复已登录的音乐库生成侧栏歌单时可能导致的启动闪退，沿用原有应用标识和本地数据格式。
 
           此 IPA 未签名，安装前需要自行签名。包含 iOS 主应用、歌词组件和 Apple Watch 应用。
 

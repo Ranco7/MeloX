@@ -448,9 +448,12 @@ struct ContentView: View {
         }
         // Keep the full collection in the directory instead of creating up to 2,000 tabs.
         var seen = Set(playlists.map(\.id))
-        playlists += library.favoritePlaylists.lazy
-            .filter { seen.insert($0.id).inserted }
-            .prefix(40)
+        var remaining = 40
+        for playlist in library.favoritePlaylists where seen.insert(playlist.id).inserted {
+            playlists.append(playlist)
+            remaining -= 1
+            if remaining == 0 { break }
+        }
         return playlists
     }
 
