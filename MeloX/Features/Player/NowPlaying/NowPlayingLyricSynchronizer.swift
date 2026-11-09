@@ -11,9 +11,8 @@ struct NowPlayingLyricSynchronizer: View {
         Color.clear
             .frame(width: 0, height: 0)
             .accessibilityHidden(true)
-            .onChange(of: player.progress, initial: true) {
-                synchronizeImmediately()
-            }
+            // The transition task resolves exact lyric boundaries, so watching
+            // the 10 Hz progress value only duplicated a full timeline scan.
             .task(id: synchronizationTrigger) {
                 await synchronizeAtLyricTransitions()
             }
@@ -32,17 +31,6 @@ struct NowPlayingLyricSynchronizer: View {
             firstLyricID: lyrics.first?.id,
             lastLyricID: lyrics.last?.id
         )
-    }
-
-    private func synchronizeImmediately() {
-        let advanceTime = settings.effectiveLyricsAdvanceTime(
-            for: lyrics
-        )
-        let position = LyricPlaybackTimeline.position(
-            at: player.estimatedProgress() + advanceTime,
-            in: lyrics
-        )
-        updateHighlightedLyric(to: position.highlightedLyricID)
     }
 
     private func synchronizeAtLyricTransitions() async {

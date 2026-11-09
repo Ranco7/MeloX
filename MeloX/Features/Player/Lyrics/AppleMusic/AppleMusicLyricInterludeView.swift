@@ -46,10 +46,9 @@ struct AppleMusicLyricsFocusCoordinator: View {
         Color.clear
             .frame(width: 0, height: 0)
             .accessibilityHidden(true)
-            .onChange(of: player.progress, initial: true) {
-                guard isActive else { return }
-                synchronizeImmediately()
-            }
+            // The task below re-runs whenever the seek revision, play state or
+            // activity changes, so watching the 10 Hz progress value only
+            // repeated a full lyric scan on every clock tick.
             .onChange(of: isActive) { _, isActive in
                 guard isActive else { return }
                 synchronizeImmediately()
