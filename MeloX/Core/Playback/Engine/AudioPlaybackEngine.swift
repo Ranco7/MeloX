@@ -143,6 +143,7 @@ final class AudioPlaybackEngine {
         do {
             try AudioPlaybackSessionConfigurator.activate()
         } catch {
+            fail(with: AudioPlaybackError.audioSession(error))
             return
         }
         activeDeck.resumeInPlace()
