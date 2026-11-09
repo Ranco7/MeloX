@@ -19,6 +19,10 @@ actor PlaybackTrackCache {
         512 * 1_024 * 1_024
     nonisolated static let maximumTrackBytes: Int64 =
         128 * 1_024 * 1_024
+    /// Free space left untouched after a transfer. The cache is disposable,
+    /// so it must never be the reason the device runs out of storage.
+    nonisolated static let minimumFreeDiskBytes: Int64 =
+        128 * 1_024 * 1_024
     nonisolated static let maximumAge: TimeInterval =
         7 * 24 * 60 * 60
 
@@ -32,6 +36,11 @@ actor PlaybackTrackCache {
 
     private let directory: URL
     private let fileManager: FileManager
+
+    /// Only one whole-track transfer may run at a time. Two competing
+    /// downloads for a seek handoff and a song change would otherwise double
+    /// the temporary disk usage.
+    private var activeSongID: Int?
 
     init(
         directory: URL = AppStorageLocations.playbackCacheDirectory(),
@@ -83,27 +92,40 @@ actor PlaybackTrackCache {
               let scheme = source.url.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
               !isStreamingPlaylistURL(source.url),
+              activeSongID == nil,
               cachedFileURL(for: songID, quality: source.quality) == nil else {
             return
         }
 
-        do {
-            let (temporaryURL, response) = try await URLSession.shared.download(
-                from: source.url
+        // The directory has to exist before its volume can report free space.
+        try? fileManager.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        guard hasDiskHeadroom() else {
+            Self.logger.debug(
+                "Skipping track cache for \(songID, privacy: .public): low disk space"
             )
-            defer { try? fileManager.removeItem(at: temporaryURL) }
+            return
+        }
+
+        activeSongID = songID
+        defer { activeSongID = nil }
+
+        let temporaryURL = fileManager.temporaryDirectory.appending(
+            path: "MeloXPlaybackCache-\(UUID().uuidString).part",
+            directoryHint: .notDirectory
+        )
+        defer { try? fileManager.removeItem(at: temporaryURL) }
+
+        do {
+            let response = try await Self.download(
+                from: source.url,
+                to: temporaryURL,
+                maximumBytes: Self.maximumTrackBytes
+            )
             guard !Task.isCancelled else { return }
-            guard let httpResponse = response as? HTTPURLResponse,
-                  httpResponse.statusCode == 200 else {
-                return
-            }
-            if httpResponse.expectedContentLength > Self.maximumTrackBytes {
-                return
-            }
-            if let mimeType = httpResponse.mimeType?.lowercased(),
-               Self.isRejectedMIMEType(mimeType) {
-                return
-            }
+            guard response.statusCode == 200 else { return }
             let values = try temporaryURL.resourceValues(
                 forKeys: [.fileSizeKey]
             )
@@ -118,10 +140,6 @@ actor PlaybackTrackCache {
                 return
             }
 
-            try fileManager.createDirectory(
-                at: directory,
-                withIntermediateDirectories: true
-            )
             // A previous quality may still be on disk; it must not be served
             // through this metadata.
             for oldURL in cachedFiles(for: songID) {
@@ -156,6 +174,19 @@ actor PlaybackTrackCache {
         for url in cachedFiles(for: songID) {
             try? fileManager.removeItem(at: url)
         }
+    }
+
+    private func hasDiskHeadroom() -> Bool {
+        let values = try? directory.resourceValues(
+            forKeys: [.volumeAvailableCapacityForImportantUsageKey]
+        )
+        guard let available =
+            values?.volumeAvailableCapacityForImportantUsage else {
+            // If the volume cannot report free space, rely on write errors.
+            return true
+        }
+        return available
+            >= Self.maximumTrackBytes + Self.minimumFreeDiskBytes
     }
 
     private func cachedFileURL(
@@ -252,13 +283,31 @@ actor PlaybackTrackCache {
         }
     }
 
+    private nonisolated static func download(
+        from url: URL,
+        to destinationURL: URL,
+        maximumBytes: Int64
+    ) async throws -> HTTPURLResponse {
+        let transfer = BoundedTrackTransfer(
+            destinationURL: destinationURL,
+            maximumBytes: maximumBytes
+        )
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                transfer.start(url: url, continuation: continuation)
+            }
+        } onCancel: {
+            transfer.cancel()
+        }
+    }
+
     private nonisolated static func qualityKey(
         _ quality: MusicQuality?
     ) -> String {
         quality?.rawValue ?? "unknown"
     }
 
-    private nonisolated static func isRejectedMIMEType(
+    fileprivate nonisolated static func isRejectedMIMEType(
         _ mimeType: String
     ) -> Bool {
         mimeType.hasPrefix("text/")
@@ -332,5 +381,214 @@ actor PlaybackTrackCache {
         return supportedExtensions.contains(formatExtension)
             ? formatExtension
             : nil
+    }
+}
+
+/// Streams a response into a file and stops the task as soon as the running
+/// byte count or the declared Content-Length exceeds the cache limit. The
+/// system `download` convenience API has no per-chunk hook, so an oversized
+/// response would already be on disk before the caller could validate it.
+private final class BoundedTrackTransfer: NSObject, URLSessionDataDelegate,
+    @unchecked Sendable {
+    private enum TransferError: LocalizedError {
+        case invalidResponse
+        case rejectedResponse
+        case tooLarge
+        case writeFailed
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidResponse:
+                "The server returned an unusable response."
+            case .rejectedResponse:
+                "The response is not cacheable audio."
+            case .tooLarge:
+                "The track exceeds the cache size limit."
+            case .writeFailed:
+                "The temporary file could not be written."
+            }
+        }
+    }
+
+    private let destinationURL: URL
+    private let maximumBytes: Int64
+    private let lock = NSLock()
+
+    private var continuation:
+        CheckedContinuation<HTTPURLResponse, Error>?
+    private var session: URLSession?
+    private var task: URLSessionDataTask?
+    private var fileHandle: FileHandle?
+    private var response: HTTPURLResponse?
+    private var receivedBytes: Int64 = 0
+    private var finished = false
+    private var cancelled = false
+
+    init(destinationURL: URL, maximumBytes: Int64) {
+        self.destinationURL = destinationURL
+        self.maximumBytes = maximumBytes
+    }
+
+    func start(
+        url: URL,
+        continuation: CheckedContinuation<HTTPURLResponse, Error>
+    ) {
+        lock.lock()
+        self.continuation = continuation
+        let wasCancelled = cancelled
+        lock.unlock()
+        if wasCancelled {
+            finish(.failure(URLError(.cancelled)))
+            return
+        }
+
+        let configuration = URLSessionConfiguration.ephemeral
+        // The whole file is written by this delegate; letting URLCache keep a
+        // second copy would double disk usage.
+        configuration.urlCache = nil
+        let session = URLSession(
+            configuration: configuration,
+            delegate: self,
+            delegateQueue: nil
+        )
+        let task = session.dataTask(with: URLRequest(url: url))
+
+        lock.lock()
+        self.session = session
+        self.task = task
+        let cancelledBeforeResume = cancelled
+        lock.unlock()
+        if cancelledBeforeResume {
+            task.cancel()
+        }
+        task.resume()
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        let task = self.task
+        lock.unlock()
+        task?.cancel()
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive response: URLResponse,
+        completionHandler:
+            @escaping (URLSession.ResponseDisposition) -> Void
+    ) {
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            completionHandler(.cancel)
+            finish(.failure(TransferError.invalidResponse))
+            return
+        }
+        if let mimeType = httpResponse.mimeType?.lowercased(),
+           PlaybackTrackCache.isRejectedMIMEType(mimeType) {
+            completionHandler(.cancel)
+            finish(.failure(TransferError.rejectedResponse))
+            return
+        }
+        if httpResponse.expectedContentLength > maximumBytes {
+            completionHandler(.cancel)
+            finish(.failure(TransferError.tooLarge))
+            return
+        }
+
+        try? FileManager.default.removeItem(at: destinationURL)
+        guard FileManager.default.createFile(
+            atPath: destinationURL.path,
+            contents: nil
+        ) else {
+            completionHandler(.cancel)
+            finish(.failure(TransferError.writeFailed))
+            return
+        }
+        do {
+            let handle = try FileHandle(forWritingTo: destinationURL)
+            lock.lock()
+            fileHandle = handle
+            self.response = httpResponse
+            lock.unlock()
+        } catch {
+            completionHandler(.cancel)
+            finish(.failure(TransferError.writeFailed))
+            return
+        }
+        completionHandler(.allow)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        dataTask: URLSessionDataTask,
+        didReceive data: Data
+    ) {
+        lock.lock()
+        let handle = fileHandle
+        let overflow =
+            receivedBytes + Int64(data.count) > maximumBytes
+        lock.unlock()
+        guard !overflow else {
+            dataTask.cancel()
+            finish(.failure(TransferError.tooLarge))
+            return
+        }
+        guard let handle else {
+            dataTask.cancel()
+            finish(.failure(TransferError.writeFailed))
+            return
+        }
+        do {
+            try handle.write(contentsOf: data)
+            lock.lock()
+            receivedBytes += Int64(data.count)
+            lock.unlock()
+        } catch {
+            dataTask.cancel()
+            finish(.failure(TransferError.writeFailed))
+        }
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        didCompleteWithError error: Error?
+    ) {
+        if let error {
+            finish(.failure(error))
+            return
+        }
+        lock.lock()
+        let response = self.response
+        let byteCount = receivedBytes
+        lock.unlock()
+        guard let response, byteCount > 0 else {
+            finish(.failure(TransferError.invalidResponse))
+            return
+        }
+        finish(.success(response))
+    }
+
+    private func finish(_ result: Result<HTTPURLResponse, Error>) {
+        lock.lock()
+        guard !finished else {
+            lock.unlock()
+            return
+        }
+        finished = true
+        let continuation = self.continuation
+        self.continuation = nil
+        let handle = fileHandle
+        fileHandle = nil
+        let session = self.session
+        self.session = nil
+        self.task = nil
+        lock.unlock()
+
+        try? handle?.close()
+        continuation?.resume(with: result)
+        session?.finishTasksAndInvalidate()
     }
 }
