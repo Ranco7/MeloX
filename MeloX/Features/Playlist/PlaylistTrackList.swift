@@ -40,7 +40,7 @@ struct PlaylistTrackList: View {
                                 (usesWideRows ? (showsArtwork ? 96 : 86) : (showsArtwork ? 80 : 66))
                                     + (isSelectingDownloads ? 36 : 0)
                             )
-                            .padding(.trailing, usesWideRows ? musicCollectionWideInset : 20)
+                            .padding(.trailing, usesWideRows ? 26 : 20)
                     }
                 }
             }
@@ -113,8 +113,8 @@ private struct PlaylistTrackRow: View {
                     }
 
                     if usesWideRows && showsArtwork && !isSelectingDownloads {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 9))
+                        Image(systemName: "heart.fill")
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                             .opacity(library.contains(song: song) ? 1 : 0)
                             .frame(width: 12)
@@ -140,11 +140,13 @@ private struct PlaylistTrackRow: View {
 
                     if let wideArtistColumnWidth {
                         Text(song.artistText)
+                            .font(.subheadline)
                             .lineLimit(1)
                             .foregroundStyle(.secondary)
                             .frame(width: wideArtistColumnWidth, alignment: .leading)
                     }
                 }
+                .frame(minHeight: usesWideRows ? 44 : 0)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -159,8 +161,8 @@ private struct PlaylistTrackRow: View {
 
             if usesWideRows {
                 Text(song.durationText)
+                    .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .monospacedDigit()
                     .frame(width: 54, alignment: .trailing)
             }
 
@@ -353,7 +355,14 @@ private struct PlaylistTrackRow: View {
 
     private var primaryActionAccessibilityValue: String {
         guard isSelectingDownloads else {
-            return isCurrentSong ? L10n.string("ui.player.now_playing") : ""
+            var values: [String] = []
+            if isCurrentSong {
+                values.append(L10n.string("ui.player.now_playing"))
+            }
+            if library.contains(song: song) {
+                values.append(L10n.string("ui.common.favorited"))
+            }
+            return L10n.list(values)
         }
         if !canSelectForDownload {
             return downloads.contains(songID: song.id)

@@ -28,8 +28,15 @@ struct PlaylistDetailContent: View {
     var canDownloadAll = false
 
     @Environment(LibraryStore.self) private var library
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     private var usesToplistLayout: Bool {
         toplistSummary != nil || playlist.isOfficialToplist
+    }
+
+    private var usesWideToplistLayout: Bool {
+        usesToplistLayout
+            && UIDevice.current.userInterfaceIdiom == .pad
+            && horizontalSizeClass == .regular
     }
 
     private var artworkURL: URL? {
@@ -53,6 +60,7 @@ struct PlaylistDetailContent: View {
                             artworkURL: artworkURL,
                             palette: palette,
                             isPreparingPlayback: isPreparingPlayback,
+                            usesWideLayout: usesWideToplistLayout,
                             onPlayAll: onPlayAll
                         )
                         trackContent(wideArtistColumnWidth: nil)
@@ -89,7 +97,7 @@ struct PlaylistDetailContent: View {
             }
             .ignoresSafeArea(
                 .container,
-                edges: usesToplistLayout ? .top : []
+                edges: usesToplistLayout && !usesWideToplistLayout ? .top : []
             )
         }
         .foregroundStyle(.primary)
@@ -147,7 +155,7 @@ struct MusicCollectionDetailLayout<Hero: View, Tracks: View>: View {
                 Divider()
                     .padding(.horizontal, musicCollectionWideInset)
             }
-            tracks(wideWidth.map { ($0 - 2 * musicCollectionWideInset) * 0.39 })
+            tracks(wideWidth.map { min(($0 - 2 * musicCollectionWideInset) * 0.24, 220) })
         }
         .padding(.bottom, 32)
         .frame(maxWidth: .infinity)
@@ -248,7 +256,7 @@ struct StandardMusicCollectionDetailHero: View {
                     actions
                 }
                 .multilineTextAlignment(.leading)
-                .frame(height: wideArtworkSize)
+                .frame(minHeight: wideArtworkSize, alignment: .bottom)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, musicCollectionWideInset)
@@ -328,26 +336,14 @@ private struct ToplistDetailHero: View {
     let artworkURL: URL?
     let palette: ArtworkDetailPalette
     let isPreparingPlayback: Bool
+    let usesWideLayout: Bool
     let onPlayAll: (Bool) async -> Void
 
     @Environment(LibraryStore.self) private var library
 
     var body: some View {
         VStack(spacing: 0) {
-            ArtworkImage(url: artworkURL, cornerRadius: 0)
-                .containerRelativeFrame(.horizontal)
-                .overlay(alignment: .bottom) {
-                    LinearGradient(
-                        colors: [
-                            .clear,
-                            palette.backgroundColor.opacity(0.34),
-                            palette.backgroundColor,
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 126)
-                }
+            artwork
 
             Text(playlist.name)
                 .font(.title2.weight(.bold))
@@ -387,6 +383,32 @@ private struct ToplistDetailHero: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 20)
+    }
+
+    @ViewBuilder
+    private var artwork: some View {
+        if usesWideLayout {
+            ArtworkImage(url: artworkURL, cornerRadius: 12, aspectRatio: 1.55)
+                .frame(maxWidth: 420)
+                .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+                .padding(.horizontal, musicCollectionWideInset)
+                .padding(.top, 28)
+        } else {
+            ArtworkImage(url: artworkURL, cornerRadius: 0)
+                .containerRelativeFrame(.horizontal)
+                .overlay(alignment: .bottom) {
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            palette.backgroundColor.opacity(0.34),
+                            palette.backgroundColor,
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 126)
+                }
+        }
     }
 
     private var creatorName: String {
@@ -444,6 +466,17 @@ struct MusicCollectionPrimaryActions: View {
                 styledPlayButton
                     .disabled(tracks.isEmpty || isPreparingPlayback)
 
+                roundControl(
+                    Button(action: onToggleSaved) {
+                        actionIcon(isSaved ? "checkmark" : "plus")
+                    }
+                )
+                .accessibilityLabel(
+                    isSaved
+                        ? L10n.string("ui.common.unfavorite")
+                        : L10n.string("ui.common.favorite")
+                )
+
                 if let onDownloadAll {
                     roundControl(
                         Menu {
@@ -456,17 +489,6 @@ struct MusicCollectionPrimaryActions: View {
                     )
                     .disabled(!canDownloadAll)
                     .accessibilityLabel("ui.common.download")
-                } else {
-                    roundControl(
-                        Button(action: onToggleSaved) {
-                            actionIcon(isSaved ? "checkmark" : "plus")
-                        }
-                    )
-                    .accessibilityLabel(
-                        isSaved
-                            ? L10n.string("ui.common.unfavorite")
-                            : L10n.string("ui.common.favorite")
-                    )
                 }
             }
         }
@@ -508,11 +530,11 @@ struct MusicCollectionPrimaryActions: View {
                     Label("ui.common.play", systemImage: "play.fill")
                 }
             }
-            .font(usesWideControls ? .system(size: 15, weight: .semibold) : .title3.weight(.bold))
+            .font(usesWideControls ? .subheadline.weight(.semibold) : .title3.weight(.bold))
             .lineLimit(usesWideControls ? 1 : nil)
             .minimumScaleFactor(usesWideControls ? 0.75 : 1)
-            .frame(minWidth: usesWideControls ? nil : 116)
-            .frame(width: usesWideControls ? 160 : nil, height: usesWideControls ? 48 : nil)
+            .frame(minWidth: usesWideControls ? 160 : 116)
+            .frame(minHeight: usesWideControls ? 48 : 0)
             .contentShape(.capsule)
         }
         .foregroundStyle(primaryActionForeground)
@@ -534,7 +556,7 @@ struct MusicCollectionPrimaryActions: View {
 
     private func actionIcon(_ icon: String) -> some View {
         Image(systemName: icon)
-            .font(usesWideControls ? .system(size: 17, weight: .semibold) : .title2.weight(.semibold))
+            .font(usesWideControls ? .body.weight(.semibold) : .title2.weight(.semibold))
             .frame(width: usesWideControls ? 48 : 30, height: usesWideControls ? 48 : 30)
             .contentShape(.circle)
     }
