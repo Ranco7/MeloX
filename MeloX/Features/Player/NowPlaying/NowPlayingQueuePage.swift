@@ -298,6 +298,7 @@ private struct NowPlayingQueueModeControls: View {
                 .contentShape(.rect(cornerRadius: 22))
         }
         .buttonStyle(.plain)
+        .opacity(isEnabled ? 1 : 0.4)
         .disabled(!isEnabled)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityHint(
