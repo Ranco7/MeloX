@@ -149,6 +149,17 @@ final class LibraryStore {
         playlist.creator?.userID != profile?.id
     }
 
+    /// The server rejects subscribing to one's own playlist, and the liked
+    /// songs playlist is owned implicitly. When the account identity is not
+    /// available yet, keep the action visible instead of guessing.
+    func canToggleSaved(_ playlist: Playlist) -> Bool {
+        if playlist.id == likedPlaylistID {
+            return false
+        }
+        guard let userID = profile?.id else { return true }
+        return playlist.creator?.userID != userID
+    }
+
     func refresh(force: Bool = false) async {
         let cookie = settings.cookie.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cookie.isEmpty else {

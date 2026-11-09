@@ -406,15 +406,17 @@ struct PlaylistDetailView: View {
                     Divider()
                 }
 
-                Button {
-                    library.toggle(playlist: playlist)
-                } label: {
-                    Label(
-                        library.contains(playlist: playlist)
-                            ? L10n.string("ui.common.unfavorite")
-                            : L10n.string("ui.playlists.favorite"),
-                        systemImage: library.contains(playlist: playlist) ? "checkmark" : "plus"
-                    )
+                if library.canToggleSaved(playlist) {
+                    Button {
+                        library.toggle(playlist: playlist)
+                    } label: {
+                        Label(
+                            library.contains(playlist: playlist)
+                                ? L10n.string("ui.common.unfavorite")
+                                : L10n.string("ui.playlists.favorite"),
+                            systemImage: library.contains(playlist: playlist) ? "checkmark" : "plus"
+                        )
+                    }
                 }
 
                 Button {

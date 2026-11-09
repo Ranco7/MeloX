@@ -75,6 +75,8 @@ struct PlaylistDetailContent: View {
                             tracks: playlist.tracks,
                             sourceID: playlist.id,
                             isSaved: library.contains(playlist: playlist),
+                            showsSavedAction:
+                                library.canToggleSaved(playlist),
                             isPreparingPlayback: isPreparingPlayback,
                             onToggleSaved: {
                                 library.toggle(playlist: playlist)
@@ -247,6 +249,7 @@ struct StandardMusicCollectionDetailHero: View {
     let tracks: [Song]
     let sourceID: Int
     let isSaved: Bool
+    var showsSavedAction = true
     var isPreparingPlayback = false
     let onToggleSaved: () -> Void
     var onPlayAll: ((Bool) async -> Void)? = nil
@@ -333,6 +336,7 @@ struct StandardMusicCollectionDetailHero: View {
             tracks: tracks,
             sourceID: sourceID,
             isSaved: isSaved,
+            showsSavedAction: showsSavedAction,
             isPreparingPlayback: isPreparingPlayback,
             onToggleSaved: onToggleSaved,
             onPlayAll: onPlayAll,
@@ -381,6 +385,7 @@ private struct ToplistDetailHero: View {
                 tracks: playlist.tracks,
                 sourceID: playlist.id,
                 isSaved: library.contains(playlist: playlist),
+                showsSavedAction: library.canToggleSaved(playlist),
                 isPreparingPlayback: isPreparingPlayback,
                 onToggleSaved: {
                     library.toggle(playlist: playlist)
@@ -447,6 +452,7 @@ struct MusicCollectionPrimaryActions: View {
     let tracks: [Song]
     let sourceID: Int
     let isSaved: Bool
+    var showsSavedAction = true
     let isPreparingPlayback: Bool
     let onToggleSaved: () -> Void
     let onPlayAll: ((Bool) async -> Void)?
@@ -479,16 +485,18 @@ struct MusicCollectionPrimaryActions: View {
                 styledPlayButton
                     .disabled(tracks.isEmpty || isPreparingPlayback)
 
-                roundControl(
-                    Button(action: onToggleSaved) {
-                        actionIcon(isSaved ? "checkmark" : "plus")
-                    }
-                )
-                .accessibilityLabel(
-                    isSaved
-                        ? L10n.string("ui.common.unfavorite")
-                        : L10n.string("ui.common.favorite")
-                )
+                if showsSavedAction {
+                    roundControl(
+                        Button(action: onToggleSaved) {
+                            actionIcon(isSaved ? "checkmark" : "plus")
+                        }
+                    )
+                    .accessibilityLabel(
+                        isSaved
+                            ? L10n.string("ui.common.unfavorite")
+                            : L10n.string("ui.common.favorite")
+                    )
+                }
 
                 if let onDownloadAll {
                     roundControl(
