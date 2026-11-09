@@ -100,7 +100,7 @@ final class AudioPlaybackDeck: NSObject, @preconcurrency AudioPlayerDelegate {
 
     func play() {
         wantsPlayback = true
-        if player?.state == .stopped { seek(to: 0) }
+        if player?.state == .stopped { seek(to: initialSeek ?? 0) }
         player?.resume()
         if isReady { transition(to: .playing) }
     }
@@ -124,6 +124,17 @@ final class AudioPlaybackDeck: NSObject, @preconcurrency AudioPlayerDelegate {
 
     func seek(to seconds: TimeInterval) {
         guard let player else { initialSeek = max(seconds, 0); return }
+        if player.state == .stopped, !wantsPlayback {
+            // A stopped stream cannot seek; restarting it here would
+            // re-download the track while playback is paused. Remember the
+            // position so the next play() starts there.
+            initialSeek = max(seconds, 0)
+            finishedPosition = nil
+            currentEntryID = nil
+            isSeeking = false
+            transition(to: .paused)
+            return
+        }
         isSeeking = true
         finishedPosition = nil
         player.volume = 0

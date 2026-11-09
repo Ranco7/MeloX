@@ -59,7 +59,7 @@ struct Downloads {
     var playbackQueue = Queue()
     var loadGeneration = 0
     var playbackRecoveryAttempts = 0
-    enum TransportCommand { case goTo }
+    enum TransportCommand { case goTo, pause }
     var onListenTogetherTransport: ((TransportCommand, Int?) -> Void)?
     var onListenTogetherQueueEdit: (() -> Void)?
     var currentSong: Song?

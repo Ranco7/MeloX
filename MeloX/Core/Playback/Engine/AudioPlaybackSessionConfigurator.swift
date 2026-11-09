@@ -1,4 +1,5 @@
 import AVFoundation
+import Foundation
 
 enum AudioPlaybackMixMode: Equatable {
     case exclusive
@@ -11,6 +12,17 @@ enum AudioPlaybackSessionConfigurator {
     static var preferredMixMode: AudioPlaybackMixMode = .exclusive
 
     private(set) static var isApplyingConfiguration = false
+    private static var lastConfigurationDate: Date?
+
+    /// Interruption notifications arrive asynchronously on the main queue, so
+    /// `isApplyingConfiguration` has already been cleared when the handler
+    /// runs. A short recency window keeps our own category change from being
+    /// mistaken for an external interruption.
+    static func shouldIgnoreInterruption() -> Bool {
+        if isApplyingConfiguration { return true }
+        guard let lastConfigurationDate else { return false }
+        return Date().timeIntervalSince(lastConfigurationDate) < 0.5
+    }
 
     static func activate() throws {
         let session = AVAudioSession.sharedInstance()
@@ -34,6 +46,7 @@ enum AudioPlaybackSessionConfigurator {
                 mode: .default,
                 options: options
             )
+            lastConfigurationDate = Date()
         }
         if !session.supportsMultichannelContent {
             try? session.setSupportsMultichannelContent(true)

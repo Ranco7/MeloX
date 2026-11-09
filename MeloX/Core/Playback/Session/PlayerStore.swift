@@ -1147,9 +1147,6 @@ final class PlayerStore {
         )
         updateNowPlayingState()
         persistSnapshot()
-        if reportsToRoom {
-            onListenTogetherTransport?(.goTo, formerSongID)
-        }
         if queueChanged {
             onListenTogetherQueueEdit?()
         }
@@ -1166,6 +1163,11 @@ final class PlayerStore {
             effectivePlaybackQuality = source.quality
             let shouldAutoplay = currentLoadShouldAutoplay
             let resolvedStartPosition = estimatedProgress()
+            if reportsToRoom {
+                // Report the track only after its source resolves; a failed
+                // resolution must not leave the room on this song.
+                onListenTogetherTransport?(.goTo, formerSongID)
+            }
             await engine.load(
                 source,
                 startAt: resolvedStartPosition,
@@ -1179,6 +1181,11 @@ final class PlayerStore {
             isLoading = false
             isPlaying = false
             playbackIssue = PlaybackIssue(song: song, error: error)
+            if reportsToRoom {
+                // The room was told this device is playing; report that
+                // playback did not start.
+                onListenTogetherTransport?(.pause, song.id)
+            }
             updateNowPlayingState()
             persistSnapshot()
         }
@@ -1286,6 +1293,7 @@ final class PlayerStore {
         }
         isLoading = false
         isPlaying = false
+        onListenTogetherTransport?(.pause, currentSong?.id)
         updateNowPlayingState()
 
         if let playbackError = error as? AudioPlaybackError,
@@ -1296,8 +1304,8 @@ final class PlayerStore {
     }
 
     private func stopAtQueueEnd() {
-        cancelAutoMixPreparation()
         engine.pause()
+        cancelAutoMixPreparation()
         engine.seek(to: 0)
         progress = 0
         reanchorPlaybackTimeline(to: 0, rate: 0)
@@ -1387,18 +1395,23 @@ final class PlayerStore {
     private func handleAudioInterruptionBegan(
         _ event: AudioSessionInterruptionBegan
     ) {
-        if AudioPlaybackSessionConfigurator.isApplyingConfiguration,
-           !event.routeDisconnected, !event.wasSuspended {
+        if !event.routeDisconnected, !event.wasSuspended,
+           AudioPlaybackSessionConfigurator.shouldIgnoreInterruption() {
             return
         }
+        let wasActive = isPlaying || engine.expectsPlaybackToContinue
         shouldResumeAfterInterruption =
             !event.routeDisconnected && isPlaying
         engine.pause()
+        if wasActive {
+            onListenTogetherTransport?(.pause, currentSong?.id)
+        }
     }
 
     private func handleAudioInterruptionEnded(shouldResume: Bool) {
         if shouldResume, shouldResumeAfterInterruption {
             engine.play()
+            onListenTogetherTransport?(.play, currentSong?.id)
         }
         shouldResumeAfterInterruption = false
     }
