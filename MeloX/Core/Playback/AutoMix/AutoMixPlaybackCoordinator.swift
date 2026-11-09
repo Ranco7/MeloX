@@ -381,13 +381,15 @@ final class AutoMixPlaybackCoordinator {
         }
         preparedContext = nil
         transitionHasBegun = false
+        // Streaming preparation failures are transient; clearing the attempt
+        // lets the next clock tick plan the same pair again.
+        attempt = nil
         guard context.sourceIsDownloaded else {
             return
         }
         downloads.discardInvalidDownload(
             songID: incomingSongID
         )
-        attempt = nil
     }
 
     private static func duration(
