@@ -1,4 +1,4 @@
-name: iPad UI simulator preview
+name: Compact listening rank preview
 
 on:
   push:
@@ -9,97 +9,96 @@ permissions:
   contents: read
 
 jobs:
-  simulator:
+  preview:
     runs-on: xcode-27
-    timeout-minutes: 28
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
 
-      - name: Select Xcode and iPad simulator
+      - uses: actions/checkout@v6
+        with:
+          ref: 99403462822f55435f74d95e9d3f8ca82fcda002
+          path: source
+          persist-credentials: false
+
+      - name: Compile ranking views with preview data
         shell: bash
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           for candidate in /Applications/Xcode_27.1.app /Applications/Xcode_27.1.0.app /Applications/Xcode.app; do
             if [[ -d "$candidate" ]]; then
               sudo xcode-select -s "$candidate/Contents/Developer"
               break
             fi
           done
-          xcodebuild -version
-          xcrun simctl list runtimes available
-          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
-          python3 - "$RUNNER_TEMP/devices.json" >> "$GITHUB_ENV" <<'PY'
-          import json, re, sys
-          runtimes = json.load(open(sys.argv[1]))["devices"]
-          candidates = [key for key in runtimes if re.search(r"\.iOS-\d+-\d+(?:-\d+)?$", key)]
-          candidates.sort(key=lambda key: (key.endswith(".iOS-27-1"), tuple(map(int, key.split(".iOS-")[-1].split("-")))), reverse=True)
-          for runtime in candidates:
-              devices = [d for d in runtimes[runtime] if d["isAvailable"]]
-              pads = sorted((d for d in devices if d["name"].startswith("iPad")), key=lambda d: ("13-inch" not in d["name"], "Pro" not in d["name"], d["name"]))
-              phones = [d for d in devices if d["name"].startswith("iPhone")]
-              if pads:
-                  print("PREVIEW_IPAD=" + pads[0]["udid"])
-                  if phones:
-                      print("PREVIEW_IPHONE=" + phones[0]["udid"])
-                  break
-          else:
-              raise SystemExit("No available iPad Simulator found")
+          APP="$RUNNER_TEMP/MeloXRankPreview.app"
+          mkdir -p "$APP"
+          cp -R source/MeloXLocalization/{en,zh-Hans}.lproj "$APP/"
+          SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+          xcrun --sdk iphonesimulator swiftc -sdk "$SDK" -target "$(uname -m)-apple-ios26.0-simulator" \
+            -swift-version 5 -default-isolation MainActor -parse-as-library -module-name MeloXRankPreview \
+            Tools/Preview/CompactRankPreview.swift \
+            source/MeloX/Core/Models/Account/UserPlayRecordModels.swift \
+            source/MeloX/Shared/Components/FilterPicker.swift \
+            source/MeloX/Features/Account/UserListeningRankView.swift \
+            -o "$APP/MeloXRankPreview"
+          python3 - "$APP/Info.plist" <<'PY'
+          import plistlib, sys
+          orientations = ["UIInterfaceOrientationPortrait", "UIInterfaceOrientationLandscapeLeft", "UIInterfaceOrientationLandscapeRight"]
+          with open(sys.argv[1], "wb") as handle:
+              plistlib.dump(dict(
+                  CFBundleDevelopmentRegion="zh-Hans",
+                  CFBundleDisplayName="MeloX Rank Preview",
+                  CFBundleExecutable="MeloXRankPreview",
+                  CFBundleIdentifier="com.melox.rank.preview",
+                  CFBundleName="MeloXRankPreview",
+                  CFBundlePackageType="APPL",
+                  CFBundleSupportedPlatforms=["iPhoneSimulator"],
+                  CFBundleShortVersionString="1.0",
+                  CFBundleVersion="1",
+                  MinimumOSVersion="26.0",
+                  UIDeviceFamily=[1, 2],
+                  UIApplicationSceneManifest={"UIApplicationSupportsMultipleScenes": False},
+                  UILaunchScreen={},
+                  UISupportedInterfaceOrientations=orientations,
+                  **{"UISupportedInterfaceOrientations~ipad": orientations},
+              ), handle)
           PY
+          codesign --force --sign - "$APP"
 
-      - name: Start iPad before compiling
-        shell: bash
-        run: xcrun simctl boot "$PREVIEW_IPAD"
-
-      - name: Build with synthetic preview data
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 Tools/Preview/stage_ipad_ui_preview.py
-          xcodebuild build -quiet \
-            -project MeloX.xcodeproj -scheme MeloX -configuration Debug \
-            -destination "platform=iOS Simulator,id=$PREVIEW_IPAD" \
-            -derivedDataPath "$RUNNER_TEMP/preview-build" \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO COMPILER_INDEX_STORE_ENABLE=NO
-
-      - name: Capture iPad and compact screens
+      - name: Capture iPad layout
         shell: bash
         run: |
           set -euxo pipefail
-          APP="$RUNNER_TEMP/preview-build/Build/Products/Debug-iphonesimulator/MeloX.app"
-          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
-          # The preview only runs the iOS app in the simulator.
-          rm -rf "$APP/Watch" "$APP/PlugIns"
           mkdir -p preview
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          DEVICE="$(python3 - "$RUNNER_TEMP/devices.json" <<'PY'
+          import json, sys
+          runtimes = json.load(open(sys.argv[1]))["devices"]
+          devices = runtimes.get("com.apple.CoreSimulator.SimRuntime.iOS-27-1", [])
+          pads = sorted((d for d in devices if d["isAvailable"] and d["name"].startswith("iPad")), key=lambda d: ("13-inch" not in d["name"], "Pro" not in d["name"], d["name"]))
+          print(pads[0]["udid"])
+          PY
+          )"
           limited() {
             perl -e 'alarm shift @ARGV; exec @ARGV or die $!;' "$@"
           }
-          boot() {
-            local device="$1"
-            limited 160 xcrun simctl bootstatus "$device" -b
-            limited 60 xcrun simctl install "$device" "$APP"
-          }
-          capture() {
-            local device="$1"
-            local screenshot="$2"
-            shift 2
-            limited 45 xcrun simctl launch --terminate-running-process "$device" "$BUNDLE_ID" --melox-ui-preview "$@"
-            sleep 4
-            limited 20 xcrun simctl io "$device" screenshot "preview/$screenshot.png"
-            sips -g pixelWidth -g pixelHeight "preview/$screenshot.png"
-          }
-          boot "$PREVIEW_IPAD"
-          capture "$PREVIEW_IPAD" iPad-Listening-Rank --preview-week
-          capture "$PREVIEW_IPAD" iPad-Listening-Rank-All-Time --preview-all
-          capture "$PREVIEW_IPAD" iPad-Song-Recognition --preview-recognition
-          capture "$PREVIEW_IPAD" iPad-Search --preview-search
-          capture "$PREVIEW_IPAD" iPad-Listening-Rank-Large-Text --preview-large-text
+          limited 160 xcrun simctl bootstatus "$DEVICE" -b
+          limited 55 xcrun simctl install "$DEVICE" "$RUNNER_TEMP/MeloXRankPreview.app"
+          limited 40 xcrun simctl launch "$DEVICE" com.melox.rank.preview -AppleLanguages '(zh-Hans)'
+          sleep 5
+          limited 30 xcrun simctl io "$DEVICE" screenshot preview/MeloX-iPad-Rank.png
+          sips -g pixelWidth -g pixelHeight preview/MeloX-iPad-Rank.png
+          limited 40 xcrun simctl launch --terminate-running-process "$DEVICE" com.melox.rank.preview --large-text -AppleLanguages '(zh-Hans)'
+          sleep 4
+          limited 30 xcrun simctl io "$DEVICE" screenshot preview/MeloX-iPad-Rank-Large-Text.png
 
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: MeloX-UI-previews
+          name: MeloX-Compact-Rank-Preview
           path: preview/*.png
           if-no-files-found: error
           retention-days: 14
