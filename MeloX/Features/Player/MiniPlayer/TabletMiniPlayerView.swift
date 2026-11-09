@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct TabletMiniPlayerView: View {
+    // 240pt icon cluster + 180pt title minimum + 162pt action cluster + spacing and padding.
+    private static let minimumControlsWidth: CGFloat = 618
+
     @Environment(PlayerStore.self) private var player
     @Environment(\.colorScheme) private var colorScheme
 
@@ -13,7 +16,11 @@ struct TabletMiniPlayerView: View {
         if let song = player.currentSong {
             ViewThatFits(in: .horizontal) {
                 controls(for: song)
-                    .frame(minWidth: 530, idealWidth: 530, maxWidth: .infinity)
+                    .frame(
+                        minWidth: Self.minimumControlsWidth,
+                        idealWidth: Self.minimumControlsWidth,
+                        maxWidth: .infinity
+                    )
                     .padding(.leading, 10)
                     .padding(.trailing, 6)
                     .padding(.vertical, 10)
@@ -52,18 +59,18 @@ struct TabletMiniPlayerView: View {
             HStack(spacing: 0) {
                 control(
                     "shuffle", title: L10n.string(player.isShuffled ? "ui.player.shuffle_off" : "ui.player.shuffle_on"),
-                    size: 15, isOn: player.isShuffled, action: player.toggleShuffle
+                    font: .footnote.weight(.semibold), isOn: player.isShuffled, action: player.toggleShuffle
                 )
-                control("backward.fill", title: L10n.string("ui.player.previous"), size: 22) {
+                control("backward.fill", title: L10n.string("ui.player.previous"), font: .title3.weight(.semibold)) {
                     Task { await player.previous() }
                 }
                 playbackButton
-                control("forward.fill", title: L10n.string("ui.player.next"), size: 22) {
+                control("forward.fill", title: L10n.string("ui.player.next"), font: .title3.weight(.semibold)) {
                     Task { await player.next() }
                 }
                 control(
                     player.repeatMode.systemImage, title: player.repeatMode.accessibilityTitle,
-                    size: 15, isOn: player.repeatMode != .off, action: player.cycleRepeatMode
+                    font: .footnote.weight(.semibold), isOn: player.repeatMode != .off, action: player.cycleRepeatMode
                 )
             }
 
@@ -94,10 +101,11 @@ struct TabletMiniPlayerView: View {
             HStack(spacing: 0) {
                 NowPlayingSongActions(song: song, showsFavoriteButton: false, usesCompactMenu: true)
                     .frame(width: 54, height: 44)
-                control("quote.bubble", title: L10n.string("ui.settings.lyrics.title"), width: 54) {
-                    onOpen(.lyrics)
+                if !song.isPodcastProgram {
+                    control("quote.bubble", title: L10n.string("ui.settings.lyrics.title"), width: 54) {
+                        onOpen(.lyrics)
+                    }
                 }
-                .disabled(song.isPodcastProgram)
                 control("list.bullet", title: L10n.string("ui.player.queue"), width: 54) {
                     onOpen(.queue)
                 }
@@ -113,7 +121,7 @@ struct TabletMiniPlayerView: View {
                         .controlSize(.small)
                 } else {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 38, weight: .semibold))
+                        .font(.largeTitle.weight(.semibold))
                 }
             }
             .frame(width: 48, height: 44)
@@ -124,12 +132,12 @@ struct TabletMiniPlayerView: View {
     }
 
     private func control(
-        _ icon: String, title: String, size: CGFloat = 17, width: CGFloat = 48, isOn: Bool? = nil,
-        action: @escaping () -> Void
+        _ icon: String, title: String, font: Font = .body.weight(.semibold), width: CGFloat = 48,
+        isOn: Bool? = nil, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: icon)
-                .font(.system(size: size, weight: .semibold))
+                .font(font)
                 .foregroundStyle(isOn.map { $0 ? Color.accentColor : .secondary } ?? .primary)
                 .frame(width: width, height: 44)
                 .contentShape(.rect)
