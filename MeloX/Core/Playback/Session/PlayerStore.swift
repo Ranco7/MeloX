@@ -801,8 +801,7 @@ final class PlayerStore {
 
     func seek(
         to seconds: TimeInterval,
-        reportsToRoom: Bool = true,
-        autoplayAfterCachedHandoff: Bool? = nil
+        reportsToRoom: Bool = true
     ) {
         let clamped = clampedPlaybackPosition(seconds)
         cancelAutoMixPreparation()
@@ -814,12 +813,7 @@ final class PlayerStore {
             // once that deck is ready instead of seeking the outgoing stream.
             pendingCachedHandoffPosition = clamped
         } else if shouldUseCachedSourceForSeek() {
-            beginCachedSourceHandoff(
-                at: clamped,
-                autoplay:
-                    autoplayAfterCachedHandoff
-                    ?? (currentLoadShouldAutoplay || isPlaying)
-            )
+            beginCachedSourceHandoff(at: clamped)
         } else {
             engine.seek(to: clamped)
         }
@@ -1385,8 +1379,7 @@ final class PlayerStore {
     }
 
     private func beginCachedSourceHandoff(
-        at position: TimeInterval,
-        autoplay: Bool
+        at position: TimeInterval
     ) {
         guard let song = currentSong,
               let metadata = currentPlaybackSource else {
@@ -1401,39 +1394,44 @@ final class PlayerStore {
         let generation = loadGeneration
         Task { @MainActor [weak self] in
             guard let self else { return }
-            guard let localSource = await PlaybackTrackCache.shared
-                .cachedSource(for: song.id, metadata: metadata),
-                self.cachedHandoffToken == token,
-                generation == self.loadGeneration,
-                self.currentSong?.id == song.id else {
-                guard self.cachedHandoffToken == token,
-                      generation == self.loadGeneration,
-                      self.currentSong?.id == song.id else {
-                    return
-                }
+            let localSource = await PlaybackTrackCache.shared
+                .cachedSource(for: song.id, metadata: metadata)
+            // A stale completion must never clear a newer handoff or load.
+            guard self.cachedHandoffToken == token,
+                  generation == self.loadGeneration,
+                  self.currentSong?.id == song.id else {
+                return
+            }
+
+            guard let localSource else {
                 let latestPosition =
                     self.pendingCachedHandoffPosition ?? position
                 self.cachedPlaybackSongIDs.remove(song.id)
                 self.cachedHandoffToken = nil
                 self.isHandingOffToCachedSource = false
                 self.pendingCachedHandoffPosition = nil
-                self.engine.seek(to: latestPosition)
+                self.engine.seek(
+                    to: self.clampedPlaybackPosition(latestPosition)
+                )
                 return
             }
 
             self.currentPlaybackSource = localSource
             self.isUsingCachedPlaybackSource = true
+            // The play/pause intent may have changed while the cache lookup
+            // was suspended; the load must use the current intent.
+            let shouldAutoplay = self.currentLoadShouldAutoplay
             await self.engine.load(
                 localSource,
                 startAt: position,
-                autoplay: autoplay
+                autoplay: shouldAutoplay
             )
             guard self.cachedHandoffToken == token,
                   generation == self.loadGeneration,
                   self.currentSong?.id == song.id else {
                 return
             }
-            // A play/pause tap can arrive while the local file is opening.
+            // A play/pause tap can also arrive while the local file is opening.
             if self.currentLoadShouldAutoplay {
                 self.engine.play()
             } else {
@@ -1477,7 +1475,7 @@ final class PlayerStore {
         if repeatMode == .one {
             hasRecordedCurrentStart = false
             currentLoadShouldAutoplay = true
-            seek(to: 0, autoplayAfterCachedHandoff: true)
+            seek(to: 0)
             engine.play()
             return
         }
