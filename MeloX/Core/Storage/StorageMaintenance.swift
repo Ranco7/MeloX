@@ -38,7 +38,10 @@ enum StorageMaintenance {
         let diskUsage = await measuredDiskUsage()
         return ManagedStorageUsage(
             downloadsBytes: diskUsage.downloadsBytes,
-            networkCacheBytes: networkCacheBytes + diskUsage.pageContentCacheBytes,
+            networkCacheBytes:
+                networkCacheBytes
+                + diskUsage.pageContentCacheBytes
+                + diskUsage.playbackCacheBytes,
             temporaryFilesBytes:
                 diskUsage.temporaryFilesBytes,
             databaseBytes: diskUsage.databaseBytes,
@@ -52,6 +55,7 @@ enum StorageMaintenance {
     static func clearNetworkAndArtworkCaches() async {
         URLCache.shared.removeAllCachedResponses()
         ArtworkAccentColorProvider.clearCache()
+        PlaybackTrackCache.clearCache()
         await PageContentCache.clear()
     }
 
@@ -141,6 +145,12 @@ enum StorageMaintenance {
                 at: AppStorageLocations.pageContentCacheDirectory(fileManager: fileManager),
                 fileManager: fileManager
             )
+            let playbackCacheBytes = allocatedSize(
+                at: AppStorageLocations.playbackCacheDirectory(
+                    fileManager: fileManager
+                ),
+                fileManager: fileManager
+            )
 
             var temporaryURLs =
                 AppStorageLocations.beatAnalysisDirectories(
@@ -186,6 +196,7 @@ enum StorageMaintenance {
                 temporaryFilesBytes: temporaryFilesBytes,
                 databaseBytes: databaseBytes,
                 pageContentCacheBytes: pageContentCacheBytes,
+                playbackCacheBytes: playbackCacheBytes,
                 deviceTotalBytes:
                     capacityValues?.volumeTotalCapacity
                         .map(Int64.init),
@@ -272,6 +283,7 @@ private nonisolated struct MeasuredDiskUsage: Sendable {
     let temporaryFilesBytes: Int64
     let databaseBytes: Int64
     let pageContentCacheBytes: Int64
+    let playbackCacheBytes: Int64
     let deviceTotalBytes: Int64?
     let deviceAvailableBytes: Int64?
 }

@@ -199,6 +199,27 @@ final class PlayerStore {
     private var loadGeneration = 0
 
     @ObservationIgnored
+    private var trackCacheTask: Task<Void, Never>?
+
+    @ObservationIgnored
+    private var trackCacheSongID: Int?
+
+    @ObservationIgnored
+    private var cachedPlaybackSongIDs: Set<Int> = []
+
+    @ObservationIgnored
+    private var isUsingCachedPlaybackSource = false
+
+    @ObservationIgnored
+    private var isHandingOffToCachedSource = false
+
+    @ObservationIgnored
+    private var pendingCachedHandoffPosition: TimeInterval?
+
+    @ObservationIgnored
+    private var cachedHandoffToken: UUID?
+
+    @ObservationIgnored
     private var beatAnalysisGeneration = 0
 
     @ObservationIgnored
@@ -630,6 +651,7 @@ final class PlayerStore {
         if shouldPlay {
             playbackIssue = nil
             engine.play()
+            startTrackCachePreparationIfNeeded()
         } else {
             engine.pause()
             persistSnapshot()
@@ -777,13 +799,30 @@ final class PlayerStore {
         prepareAutoMixIfNeeded()
     }
 
-    func seek(to seconds: TimeInterval, reportsToRoom: Bool = true) {
+    func seek(
+        to seconds: TimeInterval,
+        reportsToRoom: Bool = true,
+        autoplayAfterCachedHandoff: Bool? = nil
+    ) {
         let clamped = clampedPlaybackPosition(seconds)
         cancelAutoMixPreparation()
         progress = clamped
         reanchorPlaybackTimeline(to: clamped, rate: 0)
         seekRevision += 1
-        engine.seek(to: clamped)
+        if isHandingOffToCachedSource {
+            // The local file is being opened; apply the newest drag position
+            // once that deck is ready instead of seeking the outgoing stream.
+            pendingCachedHandoffPosition = clamped
+        } else if shouldUseCachedSourceForSeek() {
+            beginCachedSourceHandoff(
+                at: clamped,
+                autoplay:
+                    autoplayAfterCachedHandoff
+                    ?? (currentLoadShouldAutoplay || isPlaying)
+            )
+        } else {
+            engine.seek(to: clamped)
+        }
         if reportsToRoom {
             onListenTogetherTransport?(.progress, currentSong?.id)
         }
@@ -1135,6 +1174,10 @@ final class PlayerStore {
             playbackRecoveryAttempts = 0
         }
         cancelAutoMixPreparation()
+        cancelTrackCachePreparation()
+        isHandingOffToCachedSource = false
+        pendingCachedHandoffPosition = nil
+        cachedHandoffToken = nil
         loadGeneration += 1
         let generation = loadGeneration
         // Publish play intent before unload and before `currentSong` changes.
@@ -1161,6 +1204,7 @@ final class PlayerStore {
         )
         isPlaying = false
         isUsingDownloadedSource = false
+        isUsingCachedPlaybackSource = false
         currentPlaybackSource = nil
         effectivePlaybackQuality = nil
         playbackIssue = nil
@@ -1204,6 +1248,12 @@ final class PlayerStore {
                 startAt: resolvedStartPosition,
                 autoplay: shouldAutoplay
             )
+            guard generation == loadGeneration,
+                  currentSong?.id == song.id else { return }
+            // Non-blocking: the audible stream is already running.
+            if shouldAutoplay {
+                startTrackCachePreparationIfNeeded()
+            }
         } catch is CancellationError {
             return
         } catch {
@@ -1242,13 +1292,26 @@ final class PlayerStore {
             do {
                 if let downloadedSource = downloads.localPlaybackSource(songID: song.id) {
                     isUsingDownloadedSource = true
+                    isUsingCachedPlaybackSource = false
                     return downloadedSource
                 }
                 isUsingDownloadedSource = false
+                let resolvedSource: PlaybackSource
                 if let cachedDetailedSong {
-                    return try await api.playbackSource(for: cachedDetailedSong)
+                    resolvedSource = try await api.playbackSource(
+                        for: cachedDetailedSong
+                    )
+                } else {
+                    resolvedSource = try await api.playbackSource(id: song.id)
                 }
-                return try await api.playbackSource(id: song.id)
+                if let cachedSource = await PlaybackTrackCache.shared
+                    .cachedSource(for: song.id, metadata: resolvedSource) {
+                    isUsingCachedPlaybackSource = true
+                    cachedPlaybackSongIDs.insert(song.id)
+                    return cachedSource
+                }
+                isUsingCachedPlaybackSource = false
+                return resolvedSource
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
@@ -1259,6 +1322,140 @@ final class PlayerStore {
             }
         }
         throw lastError ?? APIError.noPlayableSource
+    }
+
+    private func startTrackCachePreparationIfNeeded() {
+        guard let song = currentSong,
+              let source = currentPlaybackSource,
+              !source.url.isFileURL,
+              !isUsingDownloadedSource,
+              !isUsingCachedPlaybackSource,
+              !cachedPlaybackSongIDs.contains(song.id),
+              !isHandingOffToCachedSource else {
+            return
+        }
+        if trackCacheSongID == song.id, trackCacheTask != nil {
+            return
+        }
+
+        trackCacheTask?.cancel()
+        trackCacheSongID = song.id
+        let generation = loadGeneration
+        trackCacheTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await PlaybackTrackCache.shared.prepare(
+                songID: song.id,
+                source: source
+            )
+            guard !Task.isCancelled,
+                  generation == self.loadGeneration,
+                  self.currentSong?.id == song.id else {
+                return
+            }
+            self.trackCacheTask = nil
+            self.trackCacheSongID = nil
+            if await PlaybackTrackCache.shared.cachedSource(
+                for: song.id,
+                metadata: source
+            ) != nil {
+                self.cachedPlaybackSongIDs.insert(song.id)
+            }
+        }
+    }
+
+    private func cancelTrackCachePreparation() {
+        trackCacheTask?.cancel()
+        trackCacheTask = nil
+        trackCacheSongID = nil
+    }
+
+    private func shouldUseCachedSourceForSeek() -> Bool {
+        guard let song = currentSong,
+              cachedPlaybackSongIDs.contains(song.id),
+              !isUsingDownloadedSource,
+              !isUsingCachedPlaybackSource,
+              !isHandingOffToCachedSource,
+              !isAutoMixTransitioning,
+              engine.hasCurrentItem,
+              let source = currentPlaybackSource,
+              !source.url.isFileURL else {
+            return false
+        }
+        return true
+    }
+
+    private func beginCachedSourceHandoff(
+        at position: TimeInterval,
+        autoplay: Bool
+    ) {
+        guard let song = currentSong,
+              let metadata = currentPlaybackSource else {
+            engine.seek(to: position)
+            return
+        }
+
+        isHandingOffToCachedSource = true
+        pendingCachedHandoffPosition = nil
+        let token = UUID()
+        cachedHandoffToken = token
+        let generation = loadGeneration
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            guard let localSource = await PlaybackTrackCache.shared
+                .cachedSource(for: song.id, metadata: metadata),
+                self.cachedHandoffToken == token,
+                generation == self.loadGeneration,
+                self.currentSong?.id == song.id else {
+                guard self.cachedHandoffToken == token,
+                      generation == self.loadGeneration,
+                      self.currentSong?.id == song.id else {
+                    return
+                }
+                let latestPosition =
+                    self.pendingCachedHandoffPosition ?? position
+                self.cachedPlaybackSongIDs.remove(song.id)
+                self.cachedHandoffToken = nil
+                self.isHandingOffToCachedSource = false
+                self.pendingCachedHandoffPosition = nil
+                self.engine.seek(to: latestPosition)
+                return
+            }
+
+            self.currentPlaybackSource = localSource
+            self.isUsingCachedPlaybackSource = true
+            await self.engine.load(
+                localSource,
+                startAt: position,
+                autoplay: autoplay
+            )
+            guard self.cachedHandoffToken == token,
+                  generation == self.loadGeneration,
+                  self.currentSong?.id == song.id else {
+                return
+            }
+            // A play/pause tap can arrive while the local file is opening.
+            if self.currentLoadShouldAutoplay {
+                self.engine.play()
+            } else {
+                self.engine.pause()
+            }
+            let pendingPosition = self.pendingCachedHandoffPosition
+            self.cachedHandoffToken = nil
+            self.pendingCachedHandoffPosition = nil
+            self.isHandingOffToCachedSource = false
+            if let pendingPosition {
+                self.engine.seek(
+                    to: self.clampedPlaybackPosition(pendingPosition)
+                )
+            }
+        }
+    }
+
+    private func discardCachedPlaybackSource(for songID: Int) {
+        cachedPlaybackSongIDs.remove(songID)
+        Task {
+            await PlaybackTrackCache.shared.remove(songID: songID)
+        }
     }
 
     private static func isRetryablePlaybackSourceError(_ error: Error) -> Bool {
@@ -1279,7 +1476,8 @@ final class PlayerStore {
         recordCurrentPlayback(completed: true)
         if repeatMode == .one {
             hasRecordedCurrentStart = false
-            seek(to: 0)
+            currentLoadShouldAutoplay = true
+            seek(to: 0, autoplayAfterCachedHandoff: true)
             engine.play()
             return
         }
@@ -1288,6 +1486,23 @@ final class PlayerStore {
 
     private func handleEngineFailure(_ error: Error) async {
         if isResolvingSource {
+            return
+        }
+        if let playbackError = error as? AudioPlaybackError,
+           case .itemFailed = playbackError,
+           isUsingCachedPlaybackSource,
+           let song = currentSong {
+            let resumePosition = estimatedProgress()
+            let shouldAutoplay = currentLoadShouldAutoplay
+            isUsingCachedPlaybackSource = false
+            isHandingOffToCachedSource = false
+            pendingCachedHandoffPosition = nil
+            cachedHandoffToken = nil
+            discardCachedPlaybackSource(for: song.id)
+            await loadCurrentSong(
+                autoplay: shouldAutoplay,
+                startAt: resumePosition
+            )
             return
         }
         if let playbackError = error as? AudioPlaybackError,
@@ -1322,6 +1537,10 @@ final class PlayerStore {
         if let song = currentSong {
             playbackIssue = PlaybackIssue(song: song, error: error)
         }
+        cancelTrackCachePreparation()
+        isHandingOffToCachedSource = false
+        pendingCachedHandoffPosition = nil
+        cachedHandoffToken = nil
         isLoading = false
         isPlaying = false
         onListenTogetherTransport?(.pause, currentSong?.id)
@@ -1337,6 +1556,10 @@ final class PlayerStore {
     private func stopAtQueueEnd() {
         engine.pause()
         cancelAutoMixPreparation()
+        cancelTrackCachePreparation()
+        isHandingOffToCachedSource = false
+        pendingCachedHandoffPosition = nil
+        cachedHandoffToken = nil
         engine.seek(to: 0)
         progress = 0
         reanchorPlaybackTimeline(to: 0, rate: 0)

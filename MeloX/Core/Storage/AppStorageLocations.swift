@@ -47,10 +47,26 @@ enum AppStorageLocations {
     nonisolated static func pageContentCacheDirectory(
         fileManager: FileManager = .default
     ) -> URL {
+        cachesRoot(fileManager: fileManager)
+            .appending(path: "PageContent", directoryHint: .isDirectory)
+    }
+
+    nonisolated static func playbackCacheDirectory(
+        fileManager: FileManager = .default
+    ) -> URL {
+        cachesRoot(fileManager: fileManager)
+            .appending(path: "PlaybackCache", directoryHint: .isDirectory)
+    }
+
+    private nonisolated static func cachesRoot(
+        fileManager: FileManager
+    ) -> URL {
         let baseURL = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)
             .first ?? fileManager.temporaryDirectory
-        return baseURL.appending(path: rootDirectoryName, directoryHint: .isDirectory)
-            .appending(path: "PageContent", directoryHint: .isDirectory)
+        return baseURL.appending(
+            path: rootDirectoryName,
+            directoryHint: .isDirectory
+        )
     }
 
     nonisolated static func downloadDatabaseURL(
