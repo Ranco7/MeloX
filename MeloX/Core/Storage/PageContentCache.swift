@@ -1,6 +1,7 @@
 import CryptoKit
 import Foundation
 import GRDB
+import OSLog
 
 @MainActor
 final class PageContentCache {
@@ -46,7 +47,13 @@ final class PageContentCache {
 
 private actor PageContentCacheStorage {
     static let shared = PageContentCacheStorage()
+    nonisolated private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "MeloX",
+        category: "PageContentCache"
+    )
+
     private let database: DatabaseQueue?
+    private var hasReportedFailure = false
 
     init(directory: URL = AppStorageLocations.pageContentCacheDirectory()) {
         do {
@@ -70,49 +77,85 @@ private actor PageContentCacheStorage {
             }
             self.database = database
         } catch {
+            Self.logger.error(
+                "Failed to open page content cache: \(error.localizedDescription, privacy: .public)"
+            )
             database = nil
         }
     }
 
     func data(scope: String, key: String) -> Data? {
-        try? database?.read { db in
-            try Data.fetchOne(
-                db,
-                sql: "SELECT payload FROM pageContent WHERE scope = ? AND cacheKey = ?",
-                arguments: [scope, key]
-            )
+        guard let database else { return nil }
+        do {
+            return try database.read { db in
+                try Data.fetchOne(
+                    db,
+                    sql: "SELECT payload FROM pageContent WHERE scope = ? AND cacheKey = ?",
+                    arguments: [scope, key]
+                )
+            }
+        } catch {
+            report(error, operation: "read")
+            return nil
         }
     }
 
     func store(_ data: Data, scope: String, key: String) {
-        try? database?.write { db in
-            try db.execute(
-                sql: """
-                    INSERT INTO pageContent (scope, cacheKey, payload, updatedAt)
-                    VALUES (?, ?, ?, ?)
-                    ON CONFLICT(scope, cacheKey) DO UPDATE SET
-                        payload = excluded.payload, updatedAt = excluded.updatedAt
-                    """,
-                arguments: [scope, key, data, Date().timeIntervalSince1970]
-            )
-            try db.execute(sql: """
-                DELETE FROM pageContent WHERE rowid NOT IN (
-                    SELECT rowid FROM pageContent ORDER BY updatedAt DESC LIMIT 256
+        guard let database else { return }
+        do {
+            try database.write { db in
+                try db.execute(
+                    sql: """
+                        INSERT INTO pageContent (scope, cacheKey, payload, updatedAt)
+                        VALUES (?, ?, ?, ?)
+                        ON CONFLICT(scope, cacheKey) DO UPDATE SET
+                            payload = excluded.payload, updatedAt = excluded.updatedAt
+                        """,
+                    arguments: [scope, key, data, Date().timeIntervalSince1970]
                 )
-                """)
+                try db.execute(sql: """
+                    DELETE FROM pageContent WHERE rowid NOT IN (
+                        SELECT rowid FROM pageContent ORDER BY updatedAt DESC LIMIT 256
+                    )
+                    """)
+            }
+        } catch {
+            report(error, operation: "write")
         }
     }
 
     func remove(scope: String) {
-        try? database?.write { db in
-            try db.execute(sql: "DELETE FROM pageContent WHERE scope = ?", arguments: [scope])
+        guard let database else { return }
+        do {
+            try database.write { db in
+                try db.execute(sql: "DELETE FROM pageContent WHERE scope = ?", arguments: [scope])
+            }
+        } catch {
+            report(error, operation: "remove")
         }
     }
 
     func removeAll() {
-        try? database?.write { db in
-            try db.execute(sql: "DELETE FROM pageContent")
+        guard let database else { return }
+        do {
+            try database.write { db in
+                try db.execute(sql: "DELETE FROM pageContent")
+            }
+        } catch {
+            report(error, operation: "removeAll")
         }
-        try? database?.vacuum()
+        do {
+            try database.vacuum()
+        } catch {
+            report(error, operation: "vacuum")
+        }
+    }
+
+    private func report(_ error: Error, operation: String) {
+        guard !hasReportedFailure else { return }
+        hasReportedFailure = true
+        Self.logger.error(
+            "Page content cache \(operation, privacy: .public) failed: \(error.localizedDescription, privacy: .public)"
+        )
     }
 }
