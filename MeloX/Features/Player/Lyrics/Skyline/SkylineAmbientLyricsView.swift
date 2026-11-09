@@ -232,6 +232,11 @@ private struct SkylineAmbientLyricText: View {
                     isDrifting = false
                 }
             }
+            .onDisappear {
+                withAnimation(nil) {
+                    isDrifting = false
+                }
+            }
     }
 
     private var driftDirection: CGFloat {
