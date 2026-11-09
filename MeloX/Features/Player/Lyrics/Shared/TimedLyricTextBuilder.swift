@@ -527,24 +527,33 @@ private final class LyricTextCache {
     }
 
     private static let maximumEntryCount = 256
-    private var storage: [Key: Text] = [:]
-    private var insertionOrder: [Key] = []
+    private var storage: [Key: Entry] = [:]
+    private var accessTick: UInt64 = 0
+
+    private struct Entry {
+        let text: Text
+        var lastAccess: UInt64
+    }
 
     func text(for key: Key) -> Text? {
-        storage[key]
+        guard var entry = storage[key] else { return nil }
+        accessTick &+= 1
+        entry.lastAccess = accessTick
+        storage[key] = entry
+        return entry.text
     }
 
     func insert(_ text: Text, for key: Key) {
         guard storage[key] == nil else { return }
-        storage[key] = text
-        insertionOrder.append(key)
-
-        let overflow = insertionOrder.count - Self.maximumEntryCount
-        guard overflow > 0 else { return }
-        for expiredKey in insertionOrder.prefix(overflow) {
-            storage.removeValue(forKey: expiredKey)
+        accessTick &+= 1
+        storage[key] = Entry(text: text, lastAccess: accessTick)
+        guard storage.count > Self.maximumEntryCount,
+              let expiredKey = storage.min(by: {
+                  $0.value.lastAccess < $1.value.lastAccess
+              })?.key else {
+            return
         }
-        insertionOrder.removeFirst(overflow)
+        storage.removeValue(forKey: expiredKey)
     }
 }
 
