@@ -71,6 +71,12 @@ struct Downloads {
     var isLoading = false
     var isPlaying = true
     var isUsingDownloadedSource = false
+    var isUsingCachedPlaybackSource = false
+    var isHandingOffToCachedSource = false
+    var pendingCachedHandoffPosition: TimeInterval?
+    var cachedHandoffToken: UUID?
+    var cancelTrackCachePreparationCount = 0
+    var startTrackCachePreparationCount = 0
     var currentPlaybackSource: PlaybackSource?
     var effectivePlaybackQuality: Int?
     var currentLoadShouldAutoplay = false
@@ -86,6 +92,12 @@ struct Downloads {
     let downloads = Downloads()
     let nowPlayingSession = Session()
     func cancelAutoMixPreparation() {}
+    func cancelTrackCachePreparation() {
+        cancelTrackCachePreparationCount += 1
+    }
+    func startTrackCachePreparationIfNeeded() {
+        startTrackCachePreparationCount += 1
+    }
     func resolveCurrentSongAudioAvailability(for song: Song, generation: Int) {}
     func resetBeatAnalysis() {}
     func updateNowPlayingState() {}
@@ -125,12 +137,19 @@ struct Downloads {
 
 @main struct Regression {
     @MainActor static func main() async {
+        let hasTrackCacheHooks = // HAS_TRACK_CACHE_HOOKS
         var failures = 0
         for playing in [true, false] {
             for start in [0.0, 42.0] {
                 for seekDuringResolution in [false, true] {
                     for autoplay in [true, false] {
                         let store = Store()
+                        if hasTrackCacheHooks {
+                            store.isUsingCachedPlaybackSource = true
+                            store.isHandingOffToCachedSource = true
+                            store.pendingCachedHandoffPosition = 99
+                            store.cachedHandoffToken = UUID()
+                        }
                         if playing {
                             store.engine.onOutgoingClock = {
                                 store.seekWhileResolving(to: 73)
@@ -146,6 +165,19 @@ struct Downloads {
                         if store.engine.loadedPosition != expected ||
                            store.engine.loadedAutoplay != autoplay {
                             print("FAIL playing=\(playing) startAt=\(start) seek=\(seekDuringResolution) autoplay=\(autoplay): expected \(expected), got \(store.engine.loadedPosition ?? -1)")
+                            failures += 1
+                        }
+                        let handoffReset =
+                            !store.isUsingCachedPlaybackSource &&
+                            !store.isHandingOffToCachedSource &&
+                            store.pendingCachedHandoffPosition == nil &&
+                            store.cachedHandoffToken == nil
+                        let cacheLifecycle =
+                            store.cancelTrackCachePreparationCount == 1 &&
+                            store.startTrackCachePreparationCount ==
+                                (autoplay ? 1 : 0)
+                        if hasTrackCacheHooks && (!handoffReset || !cacheLifecycle) {
+                            print("FAIL cache lifecycle playing=\(playing) startAt=\(start) seek=\(seekDuringResolution) autoplay=\(autoplay): reset=\(handoffReset) cancel=\(store.cancelTrackCachePreparationCount) start=\(store.startTrackCachePreparationCount)")
                             failures += 1
                         }
                     }
@@ -177,10 +209,16 @@ class SongSwitchTests(unittest.TestCase):
                     "private func reanchorPlaybackTimeline(",
                 )
                 methods = "\n".join(method(source, sig) for sig in signatures)
+                has_cache_hooks = "cancelTrackCachePreparation()" in methods
                 swift = Path(directory) / "main.swift"
                 swift.write_text(
                     (session / "PlaybackTimelineClock.swift").read_text()
-                    + STUBS.replace("// SOURCE_METHODS", methods)
+                    + STUBS
+                    .replace("// SOURCE_METHODS", methods)
+                    .replace(
+                        "// HAS_TRACK_CACHE_HOOKS",
+                        "true" if has_cache_hooks else "false",
+                    )
                 )
                 executable = Path(directory) / "regression"
                 flags = ["-D", "IOS_LISTEN_TOGETHER"] if app == "MeloX" else []
