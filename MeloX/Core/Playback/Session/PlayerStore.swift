@@ -21,6 +21,13 @@ private struct LyricsLiveActivityPublicationSignature: Equatable {
     let durationMilliseconds: Int
 }
 
+private struct PlaybackDerivedStateSignature: Equatable {
+    let songID: Int?
+    let highlightedLyricID: LyricLine.ID?
+    let isPlaying: Bool
+    let seekRevision: Int
+}
+
 private struct ListenTogetherSavedPlaybackOptions {
     let repeatMode: RepeatMode
     let wasShuffled: Bool
@@ -37,6 +44,12 @@ final class PlayerStore {
                 ?? "MeloX",
         category: "BeatNet"
     )
+
+    private static let playbackProgressPersistInterval:
+        TimeInterval = 5
+
+    private static let lyricsLiveActivityRefreshInterval:
+        TimeInterval = 0.25
 
     private(set) var currentSong: Song?
     private(set) var isPlaying = false
@@ -204,6 +217,16 @@ final class PlayerStore {
 
     @ObservationIgnored
     private var lastPersistedSecond = -1
+
+    @ObservationIgnored
+    private var lastPlaybackPositionPersistDate: Date?
+
+    @ObservationIgnored
+    private var lastPlaybackDerivedSignature:
+        PlaybackDerivedStateSignature?
+
+    @ObservationIgnored
+    private var lastLyricsLiveActivityRefreshDate: Date?
 
     @ObservationIgnored
     private var playbackTimelineClock = PlaybackTimelineClock()
@@ -1363,7 +1386,9 @@ final class PlayerStore {
             self?.handlePlaybackClockSample(sample)
         }
         engine.onDurationChanged = { [weak self] value in
-            guard let self else { return }
+            guard let self, self.duration != value else {
+                return
+            }
             self.duration = value
             self.updateNowPlayingState()
         }
@@ -1437,15 +1462,87 @@ final class PlayerStore {
             rate: sample.rate,
             at: sample.sampledAt
         )
-        updateNowPlayingLyricMetadata()
-        updateLyricsLiveActivity()
-        updateLyricsNotification()
+        updatePlaybackDerivedStateIfNeeded()
         let second = Int(measuredProgress)
-        if second != lastPersistedSecond {
+        if second != lastPersistedSecond,
+           shouldPersistPlaybackProgress(
+               at: sample.sampledAt
+           ) {
             lastPersistedSecond = second
-            persistSnapshot()
+            persistPlaybackProgress(measuredProgress)
         }
         prepareAutoMixIfNeeded()
+    }
+
+    /// Now Playing metadata and the lyrics notification only change on a
+    /// lyric transition, a play-state change or a seek, and the Live Activity
+    /// only needs a coarse cadence for its scrolling compact lyric. The clock
+    /// ticks ten times a second, so keep the formatters and full timeline
+    /// scans off ticks that cannot change their output.
+    private func updatePlaybackDerivedStateIfNeeded() {
+        let lyrics = currentSongLyrics
+        let position = lyrics.isEmpty
+            ? nil
+            : LyricPlaybackTimeline.position(
+                at: estimatedProgress()
+                    + settings.effectiveLyricsAdvanceTime(
+                        for: lyrics
+                    ),
+                in: lyrics
+            )
+        let signature = PlaybackDerivedStateSignature(
+            songID: currentSong?.id,
+            highlightedLyricID: position?.highlightedLyricID,
+            isPlaying: isPlaying,
+            seekRevision: seekRevision
+        )
+        let now = Date()
+        let signatureChanged =
+            signature != lastPlaybackDerivedSignature
+        let refreshLiveActivity =
+            signatureChanged
+            || shouldRefreshLyricsLiveActivity(at: now)
+        if signatureChanged {
+            lastPlaybackDerivedSignature = signature
+            updateNowPlayingLyricMetadata()
+            updateLyricsNotification()
+        }
+        guard refreshLiveActivity else { return }
+        lastLyricsLiveActivityRefreshDate = now
+        updateLyricsLiveActivity()
+    }
+
+    private func shouldRefreshLyricsLiveActivity(
+        at date: Date
+    ) -> Bool {
+        guard settings.lyricsLiveActivityEnabled,
+              shouldPresentLyricsLiveActivity else {
+            return false
+        }
+        guard let lastLyricsLiveActivityRefreshDate else {
+            return true
+        }
+        return date.timeIntervalSince(
+            lastLyricsLiveActivityRefreshDate
+        ) >= Self.lyricsLiveActivityRefreshInterval
+    }
+
+    private func shouldPersistPlaybackProgress(
+        at date: Date
+    ) -> Bool {
+        guard let lastPlaybackPositionPersistDate else {
+            return true
+        }
+        return date.timeIntervalSince(
+            lastPlaybackPositionPersistDate
+        ) >= Self.playbackProgressPersistInterval
+    }
+
+    private func persistPlaybackProgress(
+        _ progress: TimeInterval
+    ) {
+        lastPlaybackPositionPersistDate = Date()
+        persistence.saveProgress(progress)
     }
 
     private func bindAutoMixCoordinator() {
@@ -1615,8 +1712,10 @@ final class PlayerStore {
             title: displayText.title,
             subtitle: displayText.subtitle,
             compactText: displayText.compact,
+            // ActivityKit rate-limits updates, so snap the scroll offset to
+            // 8-point steps instead of publishing on every clock tick.
             compactScrollDistancePoints:
-                Int(compactScrollDistance.rounded()),
+                Int((compactScrollDistance / 8).rounded()) * 8,
             artworkURL: artworkURL,
             preferences: preferences,
             durationMilliseconds: Int((duration * 1_000).rounded())
@@ -1821,6 +1920,7 @@ final class PlayerStore {
                 queueModeIndicator: queueModeIndicator?.rawValue
             )
         )
+        lastPlaybackPositionPersistDate = Date()
     }
 
     private func updateQueueModeIndicator(
@@ -1896,6 +1996,13 @@ final class PlayerStore {
     }
 
     private func prepareAutoMixIfNeeded() {
+        // The coordinator is inert unless AutoMix can run; skip the queue
+        // lookup on every clock tick when it cannot.
+        guard isAutoMixEnabled,
+              isPlaying,
+              repeatMode != .one else {
+            return
+        }
         let nextSong = upcomingQueueIndices.first.flatMap {
             queue.indices.contains($0)
                 ? queue[$0]

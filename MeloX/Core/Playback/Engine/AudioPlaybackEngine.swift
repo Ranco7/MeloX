@@ -54,6 +54,7 @@ final class AudioPlaybackEngine {
     private var wantsPlayback = false
     private var pendingSeekTime: TimeInterval?
     private var didReportCurrentItemFailure = false
+    private var publishedDuration: TimeInterval?
     private var loadGeneration = 0
     #if os(macOS)
     private var spatialAudioMode: SpatialAudioMode
@@ -104,6 +105,7 @@ final class AudioPlaybackEngine {
         autoMixController.cancel(wantsPlayback: false)
         wantsPlayback = autoplay
         didReportCurrentItemFailure = false
+        publishedDuration = nil
         let target = pendingSeekTime ?? max(startAt, 0)
         pendingSeekTime = nil
         transition(to: .loading)
@@ -120,6 +122,7 @@ final class AudioPlaybackEngine {
         wantsPlayback = false
         pendingSeekTime = nil
         didReportCurrentItemFailure = false
+        publishedDuration = nil
         autoMixController.reset()
         transition(to: .idle)
     }
@@ -215,6 +218,7 @@ final class AudioPlaybackEngine {
         autoMixController.onTransitionCompleted = { [weak self] identifier in
             guard let self else { return }
             self.onAutoMixTransitionCompleted?(identifier)
+            self.publishedDuration = nil
             self.publishDurationIfAvailable()
             self.updateStateFromPlayer(clockOrigin: .activeItemChanged)
         }
@@ -228,7 +232,15 @@ final class AudioPlaybackEngine {
         publishPlaybackClockSample(origin: clockOrigin)
     }
     private func publishDurationIfAvailable() {
-        if let duration = activeDeck.playbackDuration { onDurationChanged?(duration) }
+        guard let duration = activeDeck.playbackDuration else { return }
+        // The clock samples duration ten times a second; only forward real
+        // changes so Now Playing does not rewrite its metadata every tick.
+        if let lastPublished = publishedDuration,
+           abs(duration - lastPublished) < 0.1 {
+            return
+        }
+        publishedDuration = duration
+        onDurationChanged?(duration)
     }
     private func publishPlaybackClockSample(origin: AudioPlaybackClockSample.Origin) {
         guard let seconds = currentPlaybackTime else { return }
