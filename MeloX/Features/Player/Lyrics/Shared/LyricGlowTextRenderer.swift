@@ -144,6 +144,7 @@ struct LyricGlowTextRenderer: TextRenderer {
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
         let effectsStrength = effectiveTimingEffectsStrength
+        let revealGradients = makeRevealGradients()
         if layoutConfiguration.centersLines {
             // TextRenderer offsets drawing by its leading display padding.
             // Left-aligned lyrics have their own inset, but centered Skyline
@@ -184,6 +185,7 @@ struct LyricGlowTextRenderer: TextRenderer {
                     draw(
                         run,
                         effectsStrength: effectsStrength,
+                        gradients: revealGradients,
                         in: &runContext
                     )
                 } else {
@@ -195,7 +197,8 @@ struct LyricGlowTextRenderer: TextRenderer {
 
     private func revealMask(
         for run: Text.Layout.Run,
-        timing: LyricTimingTextAttribute
+        timing: LyricTimingTextAttribute,
+        gradients: RevealGradients
     ) -> RevealMask? {
         guard !timing.isWhitespace,
               playbackTime >= timing.startTime else {
@@ -219,9 +222,6 @@ struct LyricGlowTextRenderer: TextRenderer {
         let gradientWidth = style.highlightGradientWidth.isFinite
             ? max(style.highlightGradientWidth, 0.1)
             : Metrics.defaultHighlightGradientWidth
-        let gradientReduction = style.highlightGradientReduction.isFinite
-            ? min(max(style.highlightGradientReduction, 0), 1)
-            : Metrics.defaultHighlightGradientReduction
         let featherWidth: CGFloat
         if let profileFeather = style.lineProgressionGradientFeather,
            profileFeather.isFinite,
@@ -249,11 +249,24 @@ struct LyricGlowTextRenderer: TextRenderer {
         return RevealMask(
             frontX: frontX,
             featherWidth: featherWidth,
-            gradient: highlightGradient(
-                reduction: Double(gradientReduction),
-                layoutDirection: direction
-            ),
+            gradient: gradients.gradient(for: direction),
             layoutDirection: direction
+        )
+    }
+
+    private func makeRevealGradients() -> RevealGradients {
+        let reduction = style.highlightGradientReduction.isFinite
+            ? min(max(style.highlightGradientReduction, 0), 1)
+            : Metrics.defaultHighlightGradientReduction
+        return RevealGradients(
+            leftToRight: highlightGradient(
+                reduction: Double(reduction),
+                layoutDirection: .leftToRight
+            ),
+            rightToLeft: highlightGradient(
+                reduction: Double(reduction),
+                layoutDirection: .rightToLeft
+            )
         )
     }
 
@@ -283,6 +296,7 @@ struct LyricGlowTextRenderer: TextRenderer {
     private func draw(
         _ run: Text.Layout.Run,
         effectsStrength: Double,
+        gradients: RevealGradients,
         in context: inout GraphicsContext
     ) {
         guard let timing = run[LyricTimingTextAttribute.self] else {
@@ -332,7 +346,11 @@ struct LyricGlowTextRenderer: TextRenderer {
             effectsStrength: effectsStrength,
             in: &runContext
         )
-        let revealMask = revealMask(for: run, timing: timing)
+        let revealMask = revealMask(
+            for: run,
+            timing: timing,
+            gradients: gradients
+        )
         guard let revealMask else { return }
 
         drawPlayed(
@@ -678,6 +696,15 @@ struct LyricGlowTextRenderer: TextRenderer {
 }
 
 private extension LyricGlowTextRenderer {
+    struct RevealGradients {
+        let leftToRight: Gradient
+        let rightToLeft: Gradient
+
+        func gradient(for direction: LayoutDirection) -> Gradient {
+            direction == .rightToLeft ? rightToLeft : leftToRight
+        }
+    }
+
     struct RevealMask {
         let frontX: CGFloat
         let featherWidth: CGFloat
