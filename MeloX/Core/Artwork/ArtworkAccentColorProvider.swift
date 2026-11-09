@@ -79,6 +79,8 @@ actor ArtworkAccentColorProvider {
 
     private let context = CIContext(options: [.cacheIntermediates: false])
     private let colorSpace = CGColorSpace(name: CGColorSpace.sRGB)!
+    private var inFlightLoads:
+        [URL: Task<ArtworkDetailAssets, Never>] = [:]
 
     nonisolated static func cachedDetailAssets(
         for artworkURL: URL?
@@ -119,6 +121,39 @@ actor ArtworkAccentColorProvider {
                 prefersDarkAppearance: fallbackPrefersDarkAppearance
             )
         }
+        if let cachedAssets = Self.assetsCache.assets(for: artworkURL) {
+            return cachedAssets
+        }
+        if let inFlightLoad = inFlightLoads[artworkURL] {
+            return await inFlightLoad.value
+        }
+
+        // Concurrent detail/background requests for the same artwork share a
+        // single download and image-processing pass instead of each starting
+        // their own work before the cache is populated.
+        let load = Task { [weak self] in
+            guard let self else {
+                return ArtworkDetailAssets.fallback(
+                    prefersDarkAppearance:
+                        fallbackPrefersDarkAppearance
+                )
+            }
+            return await self.loadDetailAssets(
+                for: artworkURL,
+                fallbackPrefersDarkAppearance:
+                    fallbackPrefersDarkAppearance
+            )
+        }
+        inFlightLoads[artworkURL] = load
+        let assets = await load.value
+        inFlightLoads[artworkURL] = nil
+        return assets
+    }
+
+    private func loadDetailAssets(
+        for artworkURL: URL,
+        fallbackPrefersDarkAppearance: Bool
+    ) async -> ArtworkDetailAssets {
         if let cachedAssets = Self.assetsCache.assets(for: artworkURL) {
             return cachedAssets
         }
