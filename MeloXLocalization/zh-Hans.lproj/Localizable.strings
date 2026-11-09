@@ -378,7 +378,7 @@
 "ui.settings.general.library.restore.footer" = "重新启动后，音乐库会恢复到最后浏览的内置页面。";
 "ui.settings.general.library.default.footer" = "每次启动 MeloX 后首次打开音乐库时，会显示所选页面。";
 
-"ui.settings.account.cookie.footer" = "登录 Cookie 仅保存在本机，用于同步收藏、云盘和账号内容。";
+"ui.settings.account.cookie.footer" = "登录 Cookie 用于同步收藏、云盘和账号内容，也会共享给已配对的 Apple Watch，以便在手表上使用账号。";
 "ui.settings.account.logout.confirmation" = "退出当前网易云账号？";
 "ui.settings.account.logout" = "退出登录";
 "ui.settings.account.logout.message.downloads" = "本机保存的网易云登录 Cookie 和已加载的账号数据将被清除，已下载歌曲不会被删除。";
@@ -961,7 +961,7 @@
 "ui.onboarding.account.connect_message" = "登录后可以同步个人音乐库并使用账号相关功能。登录并不是开始使用 MeloX 的必要条件。";
 "ui.onboarding.benefit.sync_library" = "同步收藏歌曲、歌单和播放历史";
 "ui.onboarding.benefit.personalized_content" = "访问每日推荐等账号专属内容";
-"ui.onboarding.benefit.local_cookie" = "登录 Cookie 仅保存在本机";
+"ui.onboarding.benefit.local_cookie" = "登录 Cookie 仅保存在你的设备上";
 "ui.settings.about.shareholders" = "股东";
 
 "ui.release_notes.title" = "更新日志";

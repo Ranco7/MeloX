@@ -378,7 +378,7 @@
 "ui.settings.general.library.restore.footer" = "Library returns to the last built-in page you viewed after relaunching.";
 "ui.settings.general.library.default.footer" = "The selected page appears the first time you open Library after each launch.";
 
-"ui.settings.account.cookie.footer" = "Your sign-in cookie is stored only on this device and is used to sync favorites, Cloud Music, and account content.";
+"ui.settings.account.cookie.footer" = "Your sign-in cookie is used to sync favorites, Cloud Music, and account content. It is also shared with your paired Apple Watch so you can use your account there.";
 "ui.settings.account.logout.confirmation" = "Sign Out of This NetEase Account?";
 "ui.settings.account.logout" = "Sign Out";
 "ui.settings.account.logout.message.downloads" = "The saved NetEase sign-in cookie and loaded account data will be removed from this device. Downloaded songs will not be deleted.";
@@ -961,7 +961,7 @@
 "ui.onboarding.account.connect_message" = "Sign in to sync your personal music library and use account features. Signing in is not required to start using MeloX.";
 "ui.onboarding.benefit.sync_library" = "Sync favorite songs, playlists, and listening history";
 "ui.onboarding.benefit.personalized_content" = "Access Daily Recommendations and other personalized content";
-"ui.onboarding.benefit.local_cookie" = "Your sign-in cookie is stored only on this device";
+"ui.onboarding.benefit.local_cookie" = "Your sign-in cookie is stored only on your devices";
 "ui.settings.about.shareholders" = "Shareholders";
 
 "ui.release_notes.title" = "Release Notes";
