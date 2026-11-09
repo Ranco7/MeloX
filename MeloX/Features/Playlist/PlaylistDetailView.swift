@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 struct PlaylistDetailView: View {
     let id: Int
@@ -12,7 +11,6 @@ struct PlaylistDetailView: View {
     @Environment(DownloadStore.self) private var downloads
     @Environment(AppSettings.self) private var settings
     @Environment(\.colorScheme) private var systemColorScheme
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.setTabViewBottomAccessorySuppressed)
     private var setTabViewBottomAccessorySuppressed
@@ -144,8 +142,7 @@ struct PlaylistDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .searchable(
             text: $searchQuery,
-            placement: UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
-                ? .automatic : .navigationBarDrawer(displayMode: .always),
+            placement: .navigationBarDrawer(displayMode: .always),
             prompt: Text(
                 prefersToplistLayout
                     ? L10n.string("ui.toplists.search_prompt")

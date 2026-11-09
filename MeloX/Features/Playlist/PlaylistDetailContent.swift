@@ -1,6 +1,8 @@
 import SwiftUI
 import UIKit
 
+let musicCollectionWideInset: CGFloat = 34
+
 struct PlaylistDetailContent: View {
     let playlist: Playlist
     let toplistSummary: Playlist?
@@ -51,7 +53,7 @@ struct PlaylistDetailContent: View {
                             isPreparingPlayback: isPreparingPlayback,
                             onPlayAll: onPlayAll
                         )
-                        trackContent(wide: false)
+                        trackContent(wideArtistColumnWidth: nil)
                     }
                     .padding(.bottom, 32)
                 } else {
@@ -74,8 +76,8 @@ struct PlaylistDetailContent: View {
                             onDownloadAll: onDownloadAll,
                             canDownloadAll: canDownloadAll
                         )
-                    } tracks: { wide in
-                        trackContent(wide: wide)
+                    } tracks: { wideArtistColumnWidth in
+                        trackContent(wideArtistColumnWidth: wideArtistColumnWidth)
                     }
                 }
             }
@@ -91,11 +93,11 @@ struct PlaylistDetailContent: View {
         .foregroundStyle(.primary)
     }
 
-    private func trackContent(wide: Bool) -> some View {
+    private func trackContent(wideArtistColumnWidth: CGFloat?) -> some View {
         MusicCollectionTrackContent(
             tracks: filterMusicCollectionTracks(playlist.tracks, query: searchQuery),
             sourceID: playlist.id,
-            showsArtwork: wide || usesToplistLayout,
+            showsArtwork: wideArtistColumnWidth != nil || usesToplistLayout,
             loadingTitle: usesToplistLayout
                 ? L10n.string("ui.toplists.loading")
                 : L10n.string("ui.playlists.loading"),
@@ -110,7 +112,7 @@ struct PlaylistDetailContent: View {
             onLoadMore: onLoadMore,
             onRemoveSong: onRemoveSong,
             highlightedSongID: highlightedSongID,
-            usesWideRows: wide
+            wideArtistColumnWidth: wideArtistColumnWidth
         )
     }
 
@@ -128,29 +130,29 @@ struct PlaylistDetailContent: View {
 
 struct MusicCollectionDetailLayout<Hero: View, Tracks: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var wideArtworkSize: CGFloat?
+    @State private var measuredWideWidth: CGFloat?
 
     @ViewBuilder let hero: (CGFloat?) -> Hero
-    @ViewBuilder let tracks: (Bool) -> Tracks
+    @ViewBuilder let tracks: (CGFloat?) -> Tracks
 
     var body: some View {
-        let artworkSize = UIDevice.current.userInterfaceIdiom == .pad
-            && !dynamicTypeSize.isAccessibilitySize ? wideArtworkSize : nil
+        let wideWidth = UIDevice.current.userInterfaceIdiom == .pad
+            && !dynamicTypeSize.isAccessibilitySize ? measuredWideWidth : nil
 
         LazyVStack(spacing: 0) {
-            hero(artworkSize)
-            if artworkSize != nil {
+            hero(wideWidth.map { min($0 * 0.28, 300) })
+            if wideWidth != nil {
                 Divider()
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, musicCollectionWideInset)
             }
-            tracks(artworkSize != nil)
+            tracks(wideWidth.map { ($0 - 2 * musicCollectionWideInset) * 0.39 })
         }
         .padding(.bottom, 32)
         .frame(maxWidth: .infinity)
         .onGeometryChange(for: CGFloat?.self) { geometry in
             let width = geometry.size.width
-            return width >= 710 ? min(width * 0.28, 300) : nil
-        } action: { wideArtworkSize = $0 }
+            return width >= 710 ? width : nil
+        } action: { measuredWideWidth = $0 }
     }
 }
 
@@ -170,7 +172,7 @@ struct MusicCollectionTrackContent: View {
     var onLoadMore: () async -> Void = {}
     var onRemoveSong: ((Song) -> Void)?
     var highlightedSongID: Int?
-    var usesWideRows = false
+    var wideArtistColumnWidth: CGFloat?
 
     var body: some View {
         Group {
@@ -194,7 +196,7 @@ struct MusicCollectionTrackContent: View {
                         onRemoveSong: onRemoveSong,
                         downloadSelection: downloadSelection,
                         highlightedSongID: highlightedSongID,
-                        usesWideRows: usesWideRows
+                        wideArtistColumnWidth: wideArtistColumnWidth
                     )
 
                     if hasMoreTracks {
@@ -233,7 +235,7 @@ struct StandardMusicCollectionDetailHero: View {
 
     var body: some View {
         if let wideArtworkSize {
-            HStack(alignment: .bottom, spacing: 32) {
+            HStack(alignment: .bottom, spacing: 34) {
                 artwork
                     .frame(width: wideArtworkSize, height: wideArtworkSize)
                 VStack(alignment: .leading, spacing: 16) {
@@ -245,7 +247,7 @@ struct StandardMusicCollectionDetailHero: View {
                 .frame(height: wideArtworkSize)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 24)
+            .padding(.horizontal, musicCollectionWideInset)
             .padding(.top, 28)
             .padding(.bottom, 36)
         } else {
@@ -300,7 +302,8 @@ struct StandardMusicCollectionDetailHero: View {
             onToggleSaved: onToggleSaved,
             onPlayAll: onPlayAll,
             onDownloadAll: isWide ? onDownloadAll : nil,
-            canDownloadAll: canDownloadAll
+            canDownloadAll: canDownloadAll,
+            usesWideControls: isWide
         )
     }
 }
@@ -400,6 +403,7 @@ struct MusicCollectionPrimaryActions: View {
     let onPlayAll: ((Bool) async -> Void)?
     var onDownloadAll: ((MusicQuality) -> Void)?
     var canDownloadAll = false
+    var usesWideControls = false
 
     @Environment(PlayerStore.self) private var player
     @Environment(\.colorScheme) private var colorScheme
@@ -407,80 +411,43 @@ struct MusicCollectionPrimaryActions: View {
     var body: some View {
         GlassEffectContainer(spacing: 14) {
             HStack(spacing: 14) {
-                Button {
-                    Task {
-                        if let onPlayAll {
-                            await onPlayAll(true)
-                        } else {
-                            await player.playAll(
-                                tracks.shuffled(),
-                                sourceID: sourceID
-                            )
+                roundControl(
+                    Button {
+                        Task {
+                            if let onPlayAll {
+                                await onPlayAll(true)
+                            } else {
+                                await player.playAll(tracks.shuffled(), sourceID: sourceID)
+                            }
                         }
+                    } label: {
+                        actionIcon("shuffle")
                     }
-                } label: {
-                    Image(systemName: "shuffle")
-                        .font(.title2.weight(.semibold))
-                        .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .controlSize(.large)
+                )
                 .disabled(tracks.isEmpty || isPreparingPlayback)
                 .accessibilityLabel("ui.player.shuffle")
 
-                Button {
-                    Task {
-                        if let onPlayAll {
-                            await onPlayAll(false)
-                        } else {
-                            await player.playAll(
-                                tracks,
-                                sourceID: sourceID
-                            )
-                        }
-                    }
-                } label: {
-                    Group {
-                        if isPreparingPlayback {
-                            HStack(spacing: 8) {
-                                ProgressView()
-                                Text("ui.downloads.preparing")
-                            }
-                        } else {
-                            Label("ui.common.play", systemImage: "play.fill")
-                        }
-                    }
-                    .font(.title3.weight(.bold))
-                    .frame(minWidth: 116)
-                }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.capsule)
-                .controlSize(.large)
-                .tint(primaryActionBackground)
-                .foregroundStyle(primaryActionForeground)
-                .disabled(tracks.isEmpty || isPreparingPlayback)
+                styledPlayButton
+                    .disabled(tracks.isEmpty || isPreparingPlayback)
 
                 if let onDownloadAll {
-                    Menu {
-                        ForEach(MusicQuality.allCases) { quality in
-                            Button(quality.title) { onDownloadAll(quality) }
+                    roundControl(
+                        Menu {
+                            ForEach(MusicQuality.allCases) { quality in
+                                Button(quality.title) { onDownloadAll(quality) }
+                            }
+                        } label: {
+                            actionIcon("arrow.down")
                         }
-                    } label: {
-                        actionIcon("arrow.down")
-                    }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.large)
+                    )
                     .disabled(!canDownloadAll)
                     .accessibilityLabel("ui.common.download")
                 } else {
-                    Button(action: onToggleSaved) {
-                        actionIcon(isSaved ? "checkmark" : "plus")
-                    }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.large)
+                    roundControl(
+                        Button(action: onToggleSaved) {
+                            actionIcon(isSaved ? "checkmark" : "plus")
+                        }
+                    )
                     .accessibilityLabel(
                         isSaved
                             ? L10n.string("ui.common.unfavorite")
@@ -491,10 +458,71 @@ struct MusicCollectionPrimaryActions: View {
         }
     }
 
+    @ViewBuilder
+    private var styledPlayButton: some View {
+        if usesWideControls {
+            playButton
+                .buttonStyle(.plain)
+                .background(primaryActionBackground, in: .capsule)
+                .opacity(tracks.isEmpty || isPreparingPlayback ? 0.55 : 1)
+        } else {
+            playButton
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.capsule)
+                .controlSize(.large)
+                .tint(primaryActionBackground)
+        }
+    }
+
+    private var playButton: some View {
+        Button {
+            Task {
+                if let onPlayAll {
+                    await onPlayAll(false)
+                } else {
+                    await player.playAll(tracks, sourceID: sourceID)
+                }
+            }
+        } label: {
+            Group {
+                if isPreparingPlayback {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text("ui.downloads.preparing")
+                    }
+                } else {
+                    Label("ui.common.play", systemImage: "play.fill")
+                }
+            }
+            .font(usesWideControls ? .system(size: 15, weight: .semibold) : .title3.weight(.bold))
+            .lineLimit(usesWideControls ? 1 : nil)
+            .minimumScaleFactor(usesWideControls ? 0.75 : 1)
+            .frame(minWidth: usesWideControls ? nil : 116)
+            .frame(width: usesWideControls ? 160 : nil, height: usesWideControls ? 48 : nil)
+            .contentShape(.capsule)
+        }
+        .foregroundStyle(primaryActionForeground)
+    }
+
+    @ViewBuilder
+    private func roundControl<Control: View>(_ control: Control) -> some View {
+        if usesWideControls {
+            control
+                .buttonStyle(.plain)
+                .glassEffect(.regular.interactive(), in: .circle)
+        } else {
+            control
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .controlSize(.large)
+        }
+    }
+
     private func actionIcon(_ icon: String) -> some View {
         Image(systemName: icon)
-            .font(.title2.weight(.semibold))
-            .frame(width: 30, height: 30)
+            .font(usesWideControls ? .system(size: 17, weight: .semibold) : .title2.weight(.semibold))
+            .frame(width: usesWideControls ? 48 : 30, height: usesWideControls ? 48 : 30)
+            .contentShape(.circle)
     }
 
     private var primaryActionBackground: Color {

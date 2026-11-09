@@ -7,7 +7,9 @@ struct PlaylistTrackList: View {
     var onRemoveSong: ((Song) -> Void)?
     var downloadSelection: MusicCollectionDownloadCoordinator?
     var highlightedSongID: Int?
-    var usesWideRows = false
+    var wideArtistColumnWidth: CGFloat?
+
+    private var usesWideRows: Bool { wideArtistColumnWidth != nil }
 
     var body: some View {
         if tracks.isEmpty {
@@ -26,7 +28,7 @@ struct PlaylistTrackList: View {
                         downloadSelection: downloadSelection,
                         onRemoveSong: onRemoveSong,
                         isHighlighted: highlightedSongID == song.id,
-                        usesWideRows: usesWideRows
+                        wideArtistColumnWidth: wideArtistColumnWidth
                     )
                     .id(song.id)
 
@@ -35,10 +37,10 @@ struct PlaylistTrackList: View {
                             .overlay(Color.primary.opacity(0.12))
                             .padding(
                                 .leading,
-                                (usesWideRows ? (showsArtwork ? 96 : 76) : (showsArtwork ? 80 : 66))
+                                (usesWideRows ? (showsArtwork ? 96 : 86) : (showsArtwork ? 80 : 66))
                                     + (isSelectingDownloads ? 36 : 0)
                             )
-                            .padding(.trailing, 20)
+                            .padding(.trailing, usesWideRows ? musicCollectionWideInset : 20)
                     }
                 }
             }
@@ -59,7 +61,9 @@ private struct PlaylistTrackRow: View {
     let downloadSelection: MusicCollectionDownloadCoordinator?
     let onRemoveSong: ((Song) -> Void)?
     let isHighlighted: Bool
-    let usesWideRows: Bool
+    let wideArtistColumnWidth: CGFloat?
+
+    private var usesWideRows: Bool { wideArtistColumnWidth != nil }
 
     @Environment(\.openMusicRoute) private var openMusicRoute
     @Environment(PlayerStore.self) private var player
@@ -85,6 +89,8 @@ private struct PlaylistTrackRow: View {
         !downloads.contains(songID: song.id)
             && !downloads.isDownloading(songID: song.id)
     }
+
+    private var downloadsEnabled: Bool { settings.isContentFeatureEnabled(.downloads) }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -132,18 +138,11 @@ private struct PlaylistTrackRow: View {
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    if usesWideRows {
+                    if let wideArtistColumnWidth {
                         Text(song.artistText)
                             .lineLimit(1)
                             .foregroundStyle(.secondary)
-                            .containerRelativeFrame(.horizontal, alignment: .leading) { width, _ in
-                                width * 0.38
-                            }
-
-                        Text(song.durationText)
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                            .frame(width: 54, alignment: .trailing)
+                            .frame(width: wideArtistColumnWidth, alignment: .leading)
                     }
                 }
                 .contentShape(.rect)
@@ -153,9 +152,16 @@ private struct PlaylistTrackRow: View {
             .accessibilityLabel(primaryActionAccessibilityLabel)
             .accessibilityValue(primaryActionAccessibilityValue)
 
-            if settings.isContentFeatureEnabled(.downloads) {
+            if downloadsEnabled || usesWideRows {
                 downloadStatus
                     .frame(width: usesWideRows ? 18 : nil)
+            }
+
+            if usesWideRows {
+                Text(song.durationText)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(width: 54, alignment: .trailing)
             }
 
             if !isSelectingDownloads {
@@ -170,7 +176,7 @@ private struct PlaylistTrackRow: View {
                         )
                     }
 
-                    if settings.isContentFeatureEnabled(.downloads) {
+                    if downloadsEnabled {
                         if downloads.isDownloading(songID: song.id) {
                             Button {
                                 downloads.cancel(songID: song.id)
@@ -246,8 +252,8 @@ private struct PlaylistTrackRow: View {
                 .accessibilityLabel(L10n.format("ui.song.more_actions", song.name))
             }
         }
-        .padding(.leading, usesWideRows ? 12 : 20)
-        .padding(.trailing, usesWideRows ? 20 : 8)
+        .padding(.leading, usesWideRows ? (showsArtwork ? 18 : musicCollectionWideInset) : 20)
+        .padding(.trailing, usesWideRows ? 26 : 8)
         .padding(.vertical, usesWideRows ? 4 : (showsArtwork ? 8 : 11))
         .background(
             isHighlighted ? Color.accentColor.opacity(0.16)
@@ -269,11 +275,11 @@ private struct PlaylistTrackRow: View {
 
     @ViewBuilder
     private var downloadStatus: some View {
-        if downloads.isDownloading(songID: song.id) {
+        if downloadsEnabled, downloads.isDownloading(songID: song.id) {
             ProgressView()
                 .controlSize(.mini)
                 .accessibilityLabel("ui.downloads.downloading")
-        } else if downloads.contains(songID: song.id) {
+        } else if downloadsEnabled, downloads.contains(songID: song.id) {
             Image(systemName: "arrow.down.circle.fill")
                 .font(.caption)
                 .foregroundStyle(.secondary)

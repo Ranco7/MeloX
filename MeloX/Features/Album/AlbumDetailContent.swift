@@ -35,7 +35,7 @@ struct AlbumDetailContent: View {
                         onToggleSaved: onToggleSubscription,
                         wideArtworkSize: artworkSize
                     )
-                } tracks: { wide in
+                } tracks: { wideArtistColumnWidth in
                     MusicCollectionTrackContent(
                         tracks: filteredTracks,
                         sourceID: album.id,
@@ -46,7 +46,7 @@ struct AlbumDetailContent: View {
                         downloadSelection: downloadCoordinator,
                         onRetry: onRetry,
                         highlightedSongID: highlightedSongID,
-                        usesWideRows: wide
+                        wideArtistColumnWidth: wideArtistColumnWidth
                     )
                 }
             }

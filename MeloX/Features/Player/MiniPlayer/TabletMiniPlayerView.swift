@@ -11,7 +11,10 @@ struct TabletMiniPlayerView: View {
         if let song = player.currentSong {
             ViewThatFits(in: .horizontal) {
                 controls(for: song)
-                    .frame(minWidth: 510, idealWidth: 510, maxWidth: .infinity)
+                    .frame(minWidth: 530, idealWidth: 530, maxWidth: .infinity)
+                    .padding(.leading, 10)
+                    .padding(.trailing, 6)
+                    .padding(.vertical, 10)
 
                 MiniPlayerView(
                     artworkTransitionID: artworkTransitionID,
@@ -19,9 +22,9 @@ struct TabletMiniPlayerView: View {
                 ) {
                     onOpen(nil)
                 }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
             .frame(maxWidth: 690)
             .glassEffect(.regular.interactive(), in: .capsule)
         }
@@ -52,7 +55,7 @@ struct TabletMiniPlayerView: View {
             } label: {
                 HStack(spacing: 9) {
                     ArtworkImage(url: song.album?.artworkURL, cornerRadius: 7)
-                        .frame(width: 38, height: 38)
+                        .frame(width: 40, height: 40)
                         .matchedTransitionSource(id: artworkTransitionID, in: artworkTransitionNamespace)
 
                     VStack(alignment: .leading, spacing: 2) {
@@ -73,11 +76,12 @@ struct TabletMiniPlayerView: View {
 
             HStack(spacing: 0) {
                 NowPlayingSongActions(song: song, showsFavoriteButton: false, usesCompactMenu: true)
-                control("quote.bubble", title: L10n.string("ui.settings.lyrics.title")) {
+                    .frame(width: 54, height: 44)
+                control("quote.bubble", title: L10n.string("ui.settings.lyrics.title"), width: 54) {
                     onOpen(.lyrics)
                 }
                 .disabled(song.isPodcastProgram)
-                control("list.bullet", title: L10n.string("ui.player.queue")) {
+                control("list.bullet", title: L10n.string("ui.player.queue"), width: 54) {
                     onOpen(.queue)
                 }
             }
@@ -92,10 +96,10 @@ struct TabletMiniPlayerView: View {
                         .controlSize(.small)
                 } else {
                     Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.system(size: 27, weight: .semibold))
+                        .font(.system(size: 38, weight: .semibold))
                 }
             }
-            .frame(width: 44, height: 44)
+            .frame(width: 48, height: 44)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -103,18 +107,18 @@ struct TabletMiniPlayerView: View {
     }
 
     private func control(
-        _ icon: String, title: String, size: CGFloat = 17, isOn: Bool = false,
+        _ icon: String, title: String, size: CGFloat = 17, width: CGFloat = 48, isOn: Bool? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(isOn ? Color.accentColor : .primary)
-                .frame(width: 44, height: 44)
+                .foregroundStyle(isOn.map { $0 ? Color.accentColor : .secondary } ?? .primary)
+                .frame(width: width, height: 44)
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(title)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
+        .accessibilityAddTraits(isOn == true ? .isSelected : [])
     }
 }

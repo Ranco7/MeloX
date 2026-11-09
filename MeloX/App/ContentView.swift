@@ -30,6 +30,8 @@ private struct HeartModeLaunchReadiness: Equatable {
 }
 
 struct ContentView: View {
+    private static let sidebarArtworkSize = CGSize(width: 24, height: 24)
+
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -474,15 +476,24 @@ struct ContentView: View {
     private func loadSidebarArtwork(_ requests: [SidebarArtworkRequest]) async {
         let activeRequests = Set(requests)
         sidebarArtwork = sidebarArtwork.filter { activeRequests.contains($0.key) }
+        let renderer = UIGraphicsImageRenderer(size: Self.sidebarArtworkSize)
+        let bounds = CGRect(origin: .zero, size: Self.sidebarArtworkSize)
         for request in requests where sidebarArtwork[request] == nil {
             guard !Task.isCancelled else { return }
             var imageRequest = ImageRequest(url: request.url)
             imageRequest.thumbnail = ImageRequest.ThumbnailOptions(
-                size: CGSize(width: 24, height: 24),
+                size: Self.sidebarArtworkSize,
                 contentMode: .aspectFill
             )
-            if let image = try? await ImagePipeline.shared.image(for: imageRequest), !Task.isCancelled {
-                sidebarArtwork[request] = image
+            guard let image = try? await ImagePipeline.shared.image(for: imageRequest),
+                  !Task.isCancelled, image.size.width > 0, image.size.height > 0 else { continue }
+            let scale = max(bounds.width / image.size.width, bounds.height / image.size.height)
+            let width = image.size.width * scale
+            let height = image.size.height * scale
+            sidebarArtwork[request] = renderer.image { _ in
+                UIBezierPath(roundedRect: bounds, cornerRadius: 4).addClip()
+                image.draw(in: CGRect(x: bounds.midX - width / 2, y: bounds.midY - height / 2,
+                                      width: width, height: height))
             }
         }
     }
@@ -576,7 +587,6 @@ struct ContentView: View {
                     onOpen: openPlayer
                 )
                 .padding(.horizontal, 14)
-                .padding(.bottom, 6)
                 .frame(maxWidth: .infinity)
             }
         }
