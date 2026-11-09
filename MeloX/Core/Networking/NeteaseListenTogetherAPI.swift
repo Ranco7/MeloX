@@ -222,8 +222,15 @@ extension NeteaseAPI {
             responseCode: response.code,
             message: response.message
         )
-        if response.data?.result == false
-            || response.data?.success == false {
+        // `{"code": 200, "data": null}` means the room did not confirm the
+        // action; treating it as success leaves both sides silently out of sync.
+        guard let data = response.data else {
+            throw APIError.server(
+                statusCode: response.code,
+                message: response.message ?? L10n.string("ui.error.listen_together.operation_incomplete")
+            )
+        }
+        if data.result == false || data.success == false {
             throw APIError.server(
                 statusCode: response.code,
                 message: response.message ?? L10n.string("ui.error.listen_together.operation_incomplete")
