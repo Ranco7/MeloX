@@ -53,28 +53,36 @@ enum LyricPlaybackTimeline {
             }
         }
 
-        let latestStartedLyricID = lowerBound > lyrics.startIndex
-            ? lyrics[lyrics.index(before: lowerBound)].id
+        let latestStartedLine = lowerBound > lyrics.startIndex
+            ? lyrics[lyrics.index(before: lowerBound)]
             : nil
-        var activeLyrics = lyrics[..<lowerBound].filter { line in
-            guard line.time <= playbackTime else { return false }
+        let latestStartedLyricID = latestStartedLine?.id
+        // Build the active list and its ID set in one pass so the common
+        // case does not allocate an intermediate filtered array plus a
+        // mapped Set on every display-clock tick.
+        var activeLyrics: [LyricLine] = []
+        var activeLyricIDs: Set<LyricLine.ID> = []
+        for line in lyrics[..<lowerBound] {
+            guard line.time <= playbackTime else { continue }
+            let isActive: Bool
             switch line.timingKind {
             case .precise:
-                guard let duration = line.duration,
-                      duration > 0 else {
-                    return line.id == latestStartedLyricID
+                if let duration = line.duration, duration > 0 {
+                    isActive = playbackTime < line.time + duration
+                } else {
+                    isActive = line.id == latestStartedLyricID
                 }
-                return playbackTime < line.time + duration
             case .lineSynchronized:
-                return line.id == latestStartedLyricID
+                isActive = line.id == latestStartedLyricID
             }
+            guard isActive else { continue }
+            activeLyrics.append(line)
+            activeLyricIDs.insert(line.id)
         }
         if activeLyrics.isEmpty,
-           let latestStartedLyricID,
-           let highlightedLine = lyrics[..<lowerBound].last(where: {
-               $0.id == latestStartedLyricID
-           }) {
-            activeLyrics = [highlightedLine]
+           let latestStartedLine {
+            activeLyrics = [latestStartedLine]
+            activeLyricIDs.insert(latestStartedLine.id)
         }
         let highlightedLyricID = activeLyrics.last(where: {
             $0.agent?.alignment != .flipped
@@ -84,7 +92,6 @@ enum LyricPlaybackTimeline {
                 in: lyrics[..<lowerBound]
             )
         } ?? latestStartedLyricID
-        let activeLyricIDs = Set(activeLyrics.map(\.id))
         let nextStartTime = lowerBound < lyrics.endIndex
             ? lyrics[lowerBound].time
             : nil
