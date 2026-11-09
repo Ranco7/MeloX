@@ -24,10 +24,22 @@ class PlaybackTrackCacheChecks(unittest.TestCase):
         self.assertIn("512 * 1_024 * 1_024", source)
         self.assertIn("maximumTrackBytes", source)
         self.assertIn("128 * 1_024 * 1_024", source)
+        self.assertIn("minimumFreeDiskBytes", source)
+        self.assertIn("volumeAvailableCapacityForImportantUsage", source)
         self.assertIn("maximumAge", source)
-        self.assertIn("URLSession.shared.download", source)
         self.assertIn("catch is CancellationError", source)
+        self.assertNotIn("URLSession.shared.download", source)
         self.assertNotIn("reloadIgnoringLocalCacheData", source)
+
+    def test_transfer_is_capped_during_streaming(self):
+        source = read("MeloX/Core/Playback/Cache/PlaybackTrackCache.swift")
+        self.assertIn("URLSessionDataDelegate", source)
+        self.assertIn("didReceive data: Data", source)
+        self.assertIn("httpResponse.expectedContentLength > maximumBytes", source)
+        self.assertIn("receivedBytes + Int64(data.count) > maximumBytes", source)
+        self.assertIn("dataTask.cancel()", source)
+        self.assertIn("activeSongID == nil", source)
+        self.assertIn("configuration.urlCache = nil", source)
 
     def test_cache_is_wired_and_cancelled(self):
         source = read("MeloX/Core/Playback/Session/PlayerStore.swift")
@@ -35,9 +47,26 @@ class PlaybackTrackCacheChecks(unittest.TestCase):
         self.assertIn("startTrackCachePreparationIfNeeded", source)
         self.assertIn("cancelTrackCachePreparation", source)
         self.assertIn("shouldUseCachedSourceForSeek", source)
-        self.assertIn("autoplayAfterCachedHandoff", source)
+        self.assertIn("beginCachedSourceHandoff", source)
+        self.assertNotIn("autoplayAfterCachedHandoff", source)
         self.assertIn("discardCachedPlaybackSource", source)
         self.assertIn("isUsingCachedPlaybackSource", source)
+
+    def test_cached_handoff_uses_current_intent_and_token_guard(self):
+        source = read("MeloX/Core/Playback/Session/PlayerStore.swift")
+        handoff = source.split(
+            "private func beginCachedSourceHandoff", 1
+        )[1].split("private func discardCachedPlaybackSource", 1)[0]
+        guard_index = handoff.index("guard self.cachedHandoffToken == token")
+        intent_index = handoff.index(
+            "let shouldAutoplay = self.currentLoadShouldAutoplay"
+        )
+        clear_index = handoff.index(
+            "self.isHandingOffToCachedSource = false"
+        )
+        self.assertLess(guard_index, intent_index)
+        self.assertLess(guard_index, clear_index)
+        self.assertIn("autoplay: shouldAutoplay", handoff)
 
     def test_cache_storage_is_visible_and_clearable(self):
         locations = read("MeloX/Core/Storage/AppStorageLocations.swift")
@@ -85,16 +114,40 @@ class CollectionActionChecks(unittest.TestCase):
 
 
 class FloatingMiniPlayerChecks(unittest.TestCase):
-    def test_bar_is_an_overlay_with_fixed_clearance(self):
+    def test_bar_is_a_root_overlay_with_fixed_clearance(self):
         source = read("MeloX/App/ContentView.swift")
+        player_aware = source.split(
+            "private var playerAwareTabView", 1
+        )[1].split("private var showsMiniPlayer", 1)[0]
         self.assertIn("floatingMiniPlayerClearance", source)
-        self.assertIn(".overlay(alignment: .bottom)", source)
-        self.assertIn(".ignoresSafeArea(.keyboard, edges: .bottom)", source)
+        self.assertIn(".overlay(alignment: .bottom)", player_aware)
+        self.assertIn(".ignoresSafeArea(.keyboard, edges: .bottom)", player_aware)
+        self.assertIn("TabletMiniPlayerView(", player_aware)
         self.assertEqual(source.count("TabletMiniPlayerView("), 1)
-        inset = source.split(".safeAreaInset(edge: .bottom, spacing: 0)", 1)[1]
-        inset = inset.split(".overlay(alignment: .bottom)", 1)[0]
-        self.assertNotIn("TabletMiniPlayerView", inset)
-        self.assertIn("Color.clear", inset)
+
+    def test_clearance_inset_stays_inside_the_tab(self):
+        source = read("MeloX/App/ContentView.swift")
+        navigation = source.split(
+            "private func tabNavigation", 1
+        )[1].split("private func tabRoot", 1)[0]
+        self.assertIn(".safeAreaInset(edge: .bottom, spacing: 0)", navigation)
+        self.assertIn("Color.clear", navigation)
+        self.assertNotIn("TabletMiniPlayerView", navigation)
+        self.assertNotIn(".overlay(alignment: .bottom)", navigation)
+
+    def test_wide_layout_budget_includes_inner_padding(self):
+        source = read("MeloX/App/ContentView.swift")
+        player_aware = source.split(
+            "private var playerAwareTabView", 1
+        )[1].split("private var showsMiniPlayer", 1)[0]
+        self.assertIn("floatingMiniPlayerOuterPadding * 2", player_aware)
+        self.assertIn(
+            "floatingMiniPlayerWideContentPadding", player_aware
+        )
+        self.assertIn(
+            ">= TabletMiniPlayerView\n                                .minimumControlsWidth",
+            player_aware,
+        )
 
     def test_single_mini_player_layout_branch(self):
         source = read(
@@ -121,7 +174,10 @@ class ArtworkChecks(unittest.TestCase):
         app = read("MeloX/App/MeloXApp.swift")
         self.assertIn("quantizedPixelLength", source)
         self.assertIn("ArtworkImageMemoryCache", source)
-        self.assertIn("onChange(of: state.image != nil, initial: true)", source)
+        self.assertIn("state.response", source)
+        self.assertIn("byteCost: ArtworkImageMemoryCache.byteCost(", source)
+        self.assertIn("cgImage.bytesPerRow * cgImage.height", source)
+        self.assertNotIn("cost: 512 * 1_024", source)
         self.assertIn("configureArtworkNetworkCache", app)
         self.assertIn("URLCache.shared = URLCache(", app)
 
