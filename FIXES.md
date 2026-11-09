@@ -1847,8 +1847,11 @@
 
 ### 11.1 范围、基线与硬限制
 
-- **基线**：`59cb8ec`（`docs(C15): correct review status and evidence attribution`），分支 `fix/device-round-2`；本轮 10 个代码/测试提交，另有 1 个文档提交，均未推送。
+- **基线**：`59cb8ec`（`docs(C15): correct review status and evidence attribution`），分支 `fix/device-round-2`；首轮 10 个代码/测试提交，follow-up 另有 5 个代码/测试提交和 1 个文档提交，均未推送。
 - **症状来源**：用户提供的 iPad16,3、iPadOS 27 窗口化 / Stage Manager 实机反馈。**没有 crash log**；提示中的 ca7f/c439/469d 截图在本机附件目录中不存在，本轮只能按文字描述定位，不能声称看过截图。
+- **Owner analytics（2026-11-09 补充，来自较旧版本，非本轮构建）**：`moye.MeloX` telemetry 有 Non-Responsive Task Runloop Hang 22–44s 分桶，以及 Extended Launch Runloop Hang 3s、26s 分桶；**没有实际 crash stack**。这加强“主线程阻塞 / 系统 watchdog”假设，但不能证明 resize 崩溃的根因，也不能归因到本分支。
+  - 按此线索复核到的现有主线程 I/O：`DownloadStore.init`（`@MainActor`）同步打开/迁移 GRDB、fetch/解码全部下载记录、逐个检查文件并删除缺失记录；`LibraryStore` 启动持久化在 MainActor 取快照，`PageContentCache.store` 也在 MainActor 执行 `JSONEncoder().encode` 后才把 Data 交给 actor。两者都可能是启动/恢复 hang 的来源，但本轮**未改**：缺少编译/真机环境，且改动会触及启动顺序与持久化契约，先记录为后续 focused follow-up。
+  - `ArtworkAccentColorProvider` 在本轮之前就是独立 actor + per-URL `assetsCache`；本轮只修查询 key 的 URL 规范化，**没有“首次把取色移出主线程”**。
 - **环境**：没有 Xcode、iOS SDK、模拟器或 iPad；只有 Swift 6.3 的 `swift-frontend -parse`（只做语法解析，不导入 SDK、不做类型检查）。因此**本轮所有结论仍是静态核对**。
 - **未改动**：`.fix/`、REVIEW.md、工程文件、CI/workflows、签名、版本号与构建号；未推送、未安装依赖、未访问网络。
 - **崩溃结论的写法**：凡是无法用 crash log 证明的，一律写“假设/风险”，不写“已确认根因”。
@@ -1864,6 +1867,7 @@
 - **改动**：
   - `0149d95`：浮动播放器改为内容底部 overlay，显式 `.ignoresSafeArea(.keyboard, edges: .bottom)`；用固定 76pt 透明 `safeAreaInset` 保留滚动 clearance；移除 `ViewThatFits`，由容器宽度只选择一个分支；`tabViewBottomAccessory` 只在真正启用时构建内容。这样同一时刻只有一个 `matchedTransitionSource`。
   - `9d36b04`：把透明 clearance inset 放在 bar overlay 之前，确保 overlay 贴的是外层内容/窗口底边，而不是 spacer 的顶边；避免固定 76pt 又把胶囊顶上去。
+  - `b3908f2`（follow-up）：浮动播放器从“每个 Tab 的 NavigationStack overlay”进一步移到 `TabView` 根级 overlay。键盘/Stage Manager 改变的是 Tab 内容安全区，根级 overlay 不再受其 frame 缩短影响；同时宽布局阈值改为 `可用宽度 - 28pt 外 padding - 16pt 内 padding >= 618pt`。这仍是**代码层修正，未真机验证**。
   - `3b3c82c`：`playerWidth` / `panelWidth` 下限钳到 1pt；`PlaylistTrackList` 改为按 `Song.id` 稳定身份 + 索引字典；`MusicCollectionDetailLayout` 的宽度回调按 8pt 量化，降低连续拖窗时的整页重建频率。
 - **重测**：仅 `swift-frontend -parse`（通过）和新增静态检查（通过）。**未做真机**：需要在 iPad Stage Manager 中连续拖拽窗口跨越 558/618/710pt、退后台再打开、反复点迷你播放器，并用 Console 检查 AttributeGraph 循环、重复 transition source、负 frame/无效尺寸日志。**不能宣称崩溃已修复**。
 
@@ -1877,10 +1881,14 @@
   - 下次播放同一首歌且质量匹配时，先解析远端 URL（确认可播放/账号状态），再用本地文件替代流；缓存文件失效时自动删除并回退流式。
   - 拖动 seek 时如果整曲文件已完成、当前仍是流式、且不在 AutoMix 转场中，则异步切换到本地文件并定位到目标位置；切换期间的后继拖动只记录最新位置，加载完成后补一次 seek。失败自动回退流式；再次失败会删除缓存并重载。
   - 换歌、队列结束、最终播放失败会取消缓存任务；缓存随“清除网络/封面缓存”一起清理，并计入存储用量。
+  - `b5a3779`（follow-up）：不再用 `URLSession.shared.download` 先落盘再检查上限，而是用 `URLSessionDataDelegate` 逐块写入临时文件。Content-Length 已声明时在收到首包后立即拒绝（`expectedContentLength > 128MB`）；chunked/未知长度时按累计字节在超过 128MB 时 `cancel()`，因此传输过程中就有硬上限。启动前要求磁盘至少保留“128MB 单曲上限 + 128MB headroom”，同一时刻只允许一个整曲传输；任务取消与 delegate 启动之间做了竞态保护。
+  - `9121275`（follow-up）：cached seek 交接在 `cachedSource` 返回后先校验 token/generation/song，再决定清理或加载；旧完成的回调不会清掉新交接的 flag/待定位位置。打开本地文件前重新读取 `currentLoadShouldAutoplay`（而不是沿用 seek 时的旧 bool），等待期间用户按下的暂停/播放会在加载后保持一致；重复播放（repeat one）不再依赖单独的 autoplay 参数。
 - **明确限制**：
-  - **下载完成前的 seek 仍可能缓冲**；不能承诺“永远秒开”。
+  - **下载完成前的 seek 仍可能缓冲**；不能承诺“永远秒开”，也不能在文件未完成时声称已切到本地。
   - 文件刚完成后的**第一次** seek 需要打开本地 deck，可能有短暂 loading/断点；之后才受益。
   - 当前实现先解析远端 URL 再查本地缓存，因此**离线启动不能直接播缓存文件**。
+  - **不是 AVAssetResourceLoader，也不是与播放器共享的 progressive downloader**。内置引擎是 vendor `AudioStreaming`，它不接受 resource loader；在现有约束下，后台整曲文件缓存是“最近的”安全方案，但不能说成共享同一个流式下载。
+  - 低磁盘时直接跳过缓存（播放不受影响）；128MB 单曲上限和 128MB headroom 是写死策略，未做成设置项。
   - 不带自定义 Cookie/请求头（与现有流式播放一致）；依赖 CDN 签名 URL。DRM/FairPlay 没有专门检测，只靠 MIME 与音频头拒绝明显不可缓存内容。
   - 质量变化会生成新的缓存键；旧质量文件在下一次同曲下载时删除。
 - **重测**：未编译、未运行。真机需验证：起播是否仍立即开始；缓存目录是否只出现一个文件；完成后首次 seek 的停顿；连续拖动；切歌取消；磁盘上限；清除缓存；离线/弱网；不同音质；下载库歌曲不走缓存。
@@ -1903,14 +1911,16 @@
 
 - **问题**：Stage Manager 分屏缩窗或搜索键盘出现/消失后，迷你播放器胶囊停在屏幕中部，不贴底，并伴随跳动。
 - **原因**：浮动播放器挂在每个 Tab 的 `NavigationStack.safeAreaInset` 上；键盘和窗口尺寸变化会改变安全区，inset 可能保留旧高度。宽/紧凑两种播放器高度不同，切换时 inset 高度也会跳变。以上是**代码层假设**，没有布局调试日志。
-- **改动**（`0149d95`、`9d36b04`）：改为 `Tab` 内容底部的 `.overlay(alignment: .bottom)`，bar 显式忽略键盘安全区，按 `proxy.safeAreaInsets.bottom + 8` 贴在实际窗口底部安全区上方；滚动内容用固定 76pt 的透明 `safeAreaInset` 保留底部 clearance，该 inset 不含播放器，不再随播放器高度/键盘变化。透明 inset 在 overlay 之前应用，确保 bar 贴外层底边而不是 spacer 顶边。这样不会保存几何状态，也不存在旧安全区回写。
+- **改动**（`0149d95`、`9d36b04`、`b3908f2`）：先改为 `Tab` 内容底部的 `.overlay(alignment: .bottom)`，再在 follow-up 中把 overlay 提升到 `TabView` 根级（`playerAwareTabView`），bar 显式忽略键盘安全区，按 `proxy.safeAreaInsets.bottom + 8` 贴在实际窗口底部安全区上方；滚动内容仍用固定 76pt 的透明 `safeAreaInset` 保留底部 clearance，该 inset 只存在于当前 Tab，不包含播放器，不再随播放器高度/键盘变化。根级 host 不会因键盘出现而被缩短，因此不存在“旧安全区高度写回”的路径。宽/紧凑分支由根级 `GeometryReader` 的实际可用宽度决定：先扣 28pt 外 padding 和 16pt 内 padding，再与 618pt 最小控件宽度比较，避免 618pt 可用宽度里塞入 618+16pt 内容。
+- **HIG**：对应 Layout 的“respect system-defined safe areas”和“design based on actual available space, not device type or orientation”；用几何实际宽度而不是设备/方向判断。仍**未真机验证**，不能宣称贴底问题已解决。
 - **重测**：静态检查通过。真机需验证：分屏拖动窗口、旋转、键盘弹出/收起、切换 Tab、播放器宽/紧凑切换后胶囊始终贴底；列表最后一行不被遮挡；76pt 是否过多/过少需目测。
 
 ### 11.7 #6 流畅度：转场、取色、缩略图、歌词刷新
 
-- **歌单封面取色卡顿**（`ec366dd`）：确认了一个真实缓存 bug——详情页 init 用原始 `coverURLString` 查 `ArtworkAccentColorProvider` 缓存，而加载任务用 `Playlist.artworkURL` / `Album.artworkURL`（会补 https、清空 CDN 的 imageView 参数并追加 `param=1024y1024`）。键永远不一致，所以每次重进都重新下载并提取。现在 init 与导航转场 prefetch 都使用规范化后的 summary URL，命中已有 actor 缓存。取色本身在 actor 中执行（不在主线程），页面本来就用 `withAnimation` 应用调色板；本轮没有改算法。
-- **缩略图重载/spinner**（`8bb2008`）：Nuke 的 request 以 thumbnail 像素尺寸为键，布局轻微变化就会换 key。现在把像素尺寸量化到 16pt 步长；增加按 URL 的 SwiftUI.Image 内存桥接层（128 条/64MB），新 request 未完成时先显示同一封面的上一张图；启动时把 `URLCache.shared` 设为 64MB 内存 + 512MB 磁盘，供 Nuke 与取色下载复用。未添加无界 prefetch；现有侧栏 40 张与导航转场 prefetch 保持有界。**Nuke 自身是否使用 `URLCache.shared` 取决于其 DataLoader 配置，本轮没有改 Nuke pipeline，需真机/网络面板确认。**
-- **迷你播放器到全屏转场**（`0149d95`）：同一时刻只构建一个迷你播放器分支、只注册一个 matched transition source，去掉 `ViewThatFits` 对两个分支的测量。这是对转场抖动的结构性改善，**没有帧率/耗时测量**。
+- **歌单封面取色卡顿**（`ec366dd`）：确认了一个真实缓存 bug——详情页 init 用原始 `coverURLString` 查 `ArtworkAccentColorProvider` 缓存，而加载任务用 `Playlist.artworkURL` / `Album.artworkURL`（会补 https、清空 CDN 的 imageView 参数并追加 `param=1024y1024`）。键永远不一致，所以每次重进都重新下载并提取。现在 init 与导航转场 prefetch 都使用规范化后的 summary URL，命中已有 actor 缓存。**该 actor 与 per-URL `assetsCache` 是本轮之前就存在的实现**；取色本来就不在主线程，本轮只修 key 规范化，没有改算法，也没有“新增 actor”。
+- **缩略图重载/spinner**（`8bb2008`、`5fe6e87`）：Nuke 的 request 以 thumbnail 像素尺寸为键，布局轻微变化就会换 key。现在把像素尺寸量化到 16pt 步长；增加按 URL 的 SwiftUI.Image 内存桥接层（128 条/64MB），新 request 未完成时先显示同一封面的上一张图。follow-up 中桥接层改为由 Nuke 成功响应的 `state.response` 写入（不再依赖 `onChange`/onAppear 生命周期），并按 `CGImage.bytesPerRow * height` 的真实解码字节数计费，而不是固定 512KB；桥接层与 Nuke memory cache 共享同一批解码 buffer，不产生第二次 decode。Nuke 自身的 memory cache + DataCache 仍是主路径，桥接层只覆盖“同一 URL、不同量化尺寸”的窄缺口，没有新增 prefetch，也没有复制 Nuke 缓存。
+- **启动时 URLCache 预算**（`8bb2008`）：启动时把 `URLCache.shared` 设为 64MB 内存 + 512MB 磁盘，供 Nuke 与取色下载复用。**Nuke 自身是否使用 `URLCache.shared` 取决于其 DataLoader 配置，本轮没有改 Nuke pipeline，需真机/网络面板确认。**
+- **迷你播放器到全屏转场**（`0149d95`、`b3908f2`）：同一时刻只构建一个迷你播放器分支、只注册一个 matched transition source，去掉 `ViewThatFits` 对两个分支的测量；follow-up 把该 source 放到根级 overlay。**没有替换 iPad 上的系统 native zoom**：仍是 `.navigationTransition(.zoom(sourceID:in:))` + `matchedTransitionSource`，连续性由系统 zoom 从同一 artwork source 展开保证；本轮只是消除重复 source 的崩溃/抖动风险。没有帧率/耗时测量。
 - **歌词 60fps C3 / ProMotion**（`fbc7fb5`）：C3 的 60fps 硬编码只保留在歌词页背后（模糊且大部分被歌词遮挡）；其它页面按 `effectiveLyricsRefreshRate` 使用用户设置（含 Low Power Mode→30、ProMotion 选项）。歌词文字本身的 TimelineView 原本就使用该环境值，本轮未改。Reduce Motion 仍通过 `pausesAnimation` 暂停，未绕过。是否真正省电/更顺需真机与 Instruments。
 - **重测**：静态检查通过。真机需对比首次/重复进入歌单的取色时间、图片请求数、缩略图 spinner、转场帧率、歌词页与非歌词页的帧率/发热，并检查 Reduce Motion 与低电量模式。
 
@@ -1928,22 +1938,27 @@
 | 8 | `fbc7fb5` | perf(lyrics) | 非歌词页恢复自适应刷新率（#6） |
 | 9 | `e01fa9c` | test | 13 项静态回归检查 |
 | 10 | `9d36b04` | fix(mini-player) | clearance inset 置于 overlay 之前（#5） |
+| 11 | `b5a3779` | fix(playback) | 传输中字节上限、磁盘 headroom、单传输（#2，follow-up） |
+| 12 | `9121275` | fix(playback) | 交接 token 校验与当前暂停意图（#2，follow-up） |
+| 13 | `5fe6e87` | perf(artwork) | 缩略图桥接按真实解码成本计费（#6，follow-up） |
+| 14 | `b3908f2` | fix(mini-player) | 根级 overlay 与含内 padding 的宽度预算（#5，follow-up） |
+| 15 | `1db132d` | test | follow-up 静态检查（共 17 项） |
 
-- 另有 1 个文档提交记录本节与 `.agent-notes.md`；未改版本号、构建号、签名、workflows、pbxproj；未推送。
-- `.fix/` 与 `.permission-probe-agent` 保持未跟踪原状，未写入。
+- 首轮另有 1 个文档提交，follow-up 另有 1 个文档提交记录本节；未改版本号、构建号、签名、workflows、pbxproj；未推送。
+- `.fix/` 与 `.permission-probe-agent` 保持未跟踪原状，未写入。follow-up 未改 `.agent-notes.md`。
 
 ### 11.9 静态验证结果（全部可复现）
 
-- **语法解析**：对 `59cb8ec..HEAD` 全部 17 个改动/新增 Swift 文件运行
-  `~/opt/swift-6.3-RELEASE-debian12/usr/bin/swift-frontend -parse <file>`，全部 `rc=0`。**这只证明语法可解析，不证明类型检查、链接或运行通过。**
-- **新增静态回归**：`cd Tools/Tests && python3 test_device_round2.py -v` → 13 项全部 OK。覆盖：缓存上限/取消/存储位置、PlayerStore 接线、稳定行身份、负尺寸钳制、宽度量化、收藏动作可见性、尾部 inset、浮动条 overlay/keyboard、单一迷你播放器分支、调色板 URL、缩略图缓存、自适应背景刷新。
+- **语法解析**：首轮对 `59cb8ec..HEAD` 全部 17 个改动/新增 Swift 文件运行
+  `~/opt/swift-6.3-RELEASE-debian12/usr/bin/swift-frontend -parse <file>`，全部 `rc=0`；follow-up 又对 `PlaybackTrackCache.swift`、`PlayerStore.swift`、`ArtworkImage.swift`、`ContentView.swift` 运行，全部 `rc=0`。**这只证明语法可解析，不证明类型检查、链接或运行通过。**
+- **新增静态回归**：`cd Tools/Tests && python3 test_device_round2.py -v` → **17 项全部 OK**（首轮 13 项 + follow-up 4 项）。覆盖：缓存上限/磁盘 headroom/流式传输中截断/单传输、取消与存储位置、PlayerStore 接线与交接 token/意图顺序、稳定行身份、负尺寸钳制、宽度量化、收藏动作可见性、尾部 inset、根级浮动条 overlay/keyboard、含内 padding 的宽度预算、单一迷你播放器分支、调色板 URL、缩略图真实解码成本、自适应背景刷新。
 - **空白检查**：`git diff --check 59cb8ec..HEAD` → 通过。
 - **未运行**：没有 `xcodebuild`、没有 App/模拟器、没有 Instruments、没有网络抓包、没有真机 UI/Stage Manager/键盘/无障碍验证。
 - **旧的 `Tools/Tests/*.py`**：依赖 macOS/Swift 与 GRDB 等环境，本轮未运行；不能把它们的旧结果当作本轮证据。
 
 ### 11.10 仍需编译 / 真机验证的事项
 
-1. **编译**：新增 `PlaybackTrackCache.swift`、`StorageMaintenance` 的存储用量字段、`ArtworkImage` 的 `onChange(initial:)`、`ContentView` 的 overlay/GeometryReader、`TabletMiniPlayerView` 的初始化参数、`PlayerStore` 的 async 缓存调用，均未做 Swift 类型检查。
+1. **编译**：新增的 `BoundedTrackTransfer`（`URLSessionDataDelegate`、`@unchecked Sendable`、continuation/URLSession 生命周期）、`PlaybackTrackCache` 的磁盘 headroom API、`ArtworkImage` 的 `state.response`/`CGImage` 成本计算、`ContentView` 的 `Group` + 根级 overlay/`GeometryReader`、`PlayerStore` 去掉 `autoplayAfterCachedHandoff` 后的调用点，均**未做 Swift 类型检查**。尤其需要确认所使用的 Nuke 13 `LazyImageState.response` / `ImageResponse.image` 与 Swift 6 严格并发下的 delegate 写法。
 2. **崩溃复现**：按 11.2 的拖窗/重开/点击路径重复测试；重点看 Console 是否有 AttributeGraph 循环、重复 matched transition source、负 frame/无效尺寸。
 3. **缓存**：真实 CDN 的 200/MIME/头校验、带签名的重定向、不同音质、下载库共存、切歌取消、缓存清理、离线、磁盘上限。
 4. **UI**：11.4 的六种账号状态、11.5 的尾部对齐、11.6 的贴底与 76pt clearance、11.7 的 spinner/转场/刷新率。
@@ -1955,4 +1970,27 @@
 - 未编译、未运行 App、未真机验证、未看截图、未取得 crash log。
 - 未改 `MeloXDesktop`、Watch、Widget 的同名实现；本轮只修 iOS target。
 - 未新增本地化 key，未改 `project.pbxproj`（新 Swift 文件由文件系统同步组自动加入 MeloX target；这一点也未在 Xcode 中验证）。
-- 未把全曲缓存做成用户可配置项；512MB/128MB/7 天是写死策略，后续可按存储设置调整。
+- 未把全曲缓存做成用户可配置项；512MB/128MB/7 天/128MB headroom 是写死策略，后续可按存储设置调整。
+- 未改 `DownloadStore.init` 的同步 GRDB/文件检查，也未改 `PageContentCache.store` 的 MainActor JSON 编码；owner analytics 只作为后续 focused follow-up 的依据。
+- 未改 `.agent-notes.md`（follow-up 指令要求不动；此前误加入的 session ID 由协调者从未发布文档提交中移除）。
+
+### 11.12 Apple HIG 对照（Motion / Layout，逐项 UI 映射）
+
+依据官方 HIG 页面（本地快照 `.out/round2/hig-motion.txt`、`hig-layout.txt`；Motion 快照标注 2025-09-09 更新，Layout 快照标注 2026-09-09 更新）。原则：动作要有目的且短暂精确、可被用户取消、尊重 Reduce Motion；布局按实际可用空间/尺寸类适配、对齐并用一致边距、尊重安全区、尺寸变化时保持功能一致。
+
+| 本轮 UI 改动 | 对应 HIG 指引 | 实现与边界 |
+| --- | --- | --- |
+| #1 连续缩窗：负尺寸钳制、稳定行身份、宽度回调量化 | Layout: “Design a layout that adapts gracefully and consistently”; “Keep functionality the same as size classes change” | 只把几何钳到安全值、稳定 `Song.id` 身份、按 8pt 量化重建，不改功能；未真机验证 |
+| #4 喜欢歌曲行尾部 20pt inset | Layout: “Align elements…”; “Use consistent spacing” | 与歌单/专辑详情统一 trailing，替换默认 inset 而非叠加，避免双重间距 |
+| #5 浮动播放器贴底/键盘/分屏 | Layout: “respect system-defined safe areas”; “design based on actual available space, not device type or orientation” | 根级 overlay + `.ignoresSafeArea(.keyboard)` + `safeAreaInsets.bottom`；宽布局按几何宽度扣 28pt 外 padding + 16pt 内 padding，而不是按设备/方向判断 |
+| #5/#6 迷你播放器 → 全屏转场 | Motion: “Add motion purposefully”; “Aim for brevity and precision in feedback animations”; “Let people cancel motion”; “Make motion optional” | **保留 iPad 系统 native zoom**（`.navigationTransition(.zoom)` + 单一 `matchedTransitionSource`），不从 mini 视图自建替代动画；连续性来自同一 artwork source；未新增全局动画，Reduce Motion 仍由系统与现有 `pausesAnimation` 生效 |
+| #6 缩略图淡入、背景刷新 | Motion: 避免无意义/过度动画；系统组件已提供反馈 | 缩略图 0.18s easeOut 仅在 Reduce Motion 关闭时；歌词页背后保留 60fps，其它页面按环境刷新率降频；没有为“看起来更精致”增加装饰性动画 |
+| 整体内容优先/克制 | Layout: “Order content by relative importance”; “Differentiate controls from content” | 未新增无意义控件；浮动条只保留播放/上一首/下一首/打开播放器；透明 clearance inset 不参与视觉层级 |
+
+### 11.13 现有实现 vs 本轮新增（诚实归属）
+
+- **取色**：`ArtworkAccentColorProvider` 及其 per-URL `assetsCache` 是**既有** actor 实现；本轮只修复查询 key 的 URL 规范化（`ec366dd`），没有把取色首次移出主线程，也没有新增取色缓存。
+- **Nuke 缓存**：Nuke 的 memory cache + DataCache 与 `URLCache.shared` 预算（`8bb2008`）是缩略图的主路径；`ArtworkImageMemoryCache` 是首轮新增的窄用途桥接层，follow-up（`5fe6e87`）只改写入时机与成本计算，并让它共享 Nuke 的解码 buffer，没有另建一套图片下载/解码缓存。
+- **Prefetch**：没有新增 prefetch；侧栏 40 张与导航转场 prefetch 保持首轮的有界实现。
+- **整曲缓存**：`PlaybackTrackCache` 是首轮 `c90f62d` 新增；follow-up（`b5a3779`）只加固传输上限/磁盘 headroom/单传输，没有新增第二个缓存或把播放器改成共享 progressive downloader。
+- **主线程 I/O**：`DownloadStore.init` 的同步 GRDB/文件检查与 `PageContentCache.store` 的 MainActor JSON 编码是**既有**实现，本轮未改；owner analytics 只用于提出后续 focused follow-up，不作为本轮已修复项。
