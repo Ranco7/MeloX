@@ -72,12 +72,8 @@ enum StorageMaintenance {
             var candidates = beatDirectories.filter {
                 $0 != preservedBeatDirectory
             }
-            candidates.append(
-                AppStorageLocations
-                    .lyricsNotificationAttachmentDirectory(
-                        fileManager: fileManager
-                    )
-            )
+            // Lyrics notification attachments are owned by the stager,
+            // which expires them after one hour and caps the count at 8.
             if !preservingDownloadTransfers {
                 candidates.append(
                     AppStorageLocations
