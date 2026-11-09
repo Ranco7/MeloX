@@ -8,46 +8,24 @@ struct NowPlayingProgressControl: View {
 
     var body: some View {
         VStack(spacing: 2) {
-            Slider(
-                value: Binding(
-                    get: { min(player.progress, progressMaximum) },
-                    set: { player.seek(to: $0) }
-                ),
-                in: 0...progressMaximum
-            )
-            .sliderThumbVisibility(.hidden)
-            .tint(.white)
-            .accessibilityLabel("ui.player.progress")
-            .accessibilityValue(
-                L10n.format(
-                    "ui.player.progress_accessibility",
-                    formatTime(player.progress),
-                    formatTime(progressMaximum)
-                )
-            )
+            NowPlayingProgressSlider(maximum: progressMaximum)
 
-            HStack {
-                Text(formatTime(player.progress))
-
-                Spacer()
-
-                Text("−\(formatTime(max(player.duration - player.progress, 0)))")
-            }
-            .overlay {
-                Group {
-                    if player.isAutoMixTransitioning {
-                        NowPlayingAutoMixStatus()
-                    } else {
-                        NowPlayingQualityMenu()
+            NowPlayingProgressTimeRow()
+                .overlay {
+                    Group {
+                        if player.isAutoMixTransitioning {
+                            NowPlayingAutoMixStatus()
+                        } else {
+                            NowPlayingQualityMenu()
+                        }
                     }
+                    .animation(
+                        .smooth(duration: 0.25),
+                        value: player.isAutoMixTransitioning
+                    )
                 }
-                .animation(
-                    .smooth(duration: 0.25),
-                    value: player.isAutoMixTransitioning
-                )
-            }
-            .font(.caption2.monospacedDigit())
-            .foregroundStyle(.white.opacity(0.5))
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.white.opacity(0.5))
         }
         .frame(height: 52)
     }
@@ -55,12 +33,54 @@ struct NowPlayingProgressControl: View {
     private var progressMaximum: TimeInterval {
         max(player.duration, TimeInterval(song.durationMS) / 1_000, 1)
     }
+}
 
-    private func formatTime(_ value: TimeInterval) -> String {
-        guard value.isFinite else { return "0:00" }
-        let seconds = max(0, Int(value))
-        return String(format: "%d:%02d", seconds / 60, seconds % 60)
+/// Keeps the ten-times-per-second progress reads in leaf views so the AutoMix
+/// status and quality menu do not rebuild on every clock tick.
+private struct NowPlayingProgressSlider: View {
+    @Environment(PlayerStore.self) private var player
+
+    let maximum: TimeInterval
+
+    var body: some View {
+        Slider(
+            value: Binding(
+                get: { min(player.progress, maximum) },
+                set: { player.seek(to: $0) }
+            ),
+            in: 0...maximum
+        )
+        .sliderThumbVisibility(.hidden)
+        .tint(.white)
+        .accessibilityLabel("ui.player.progress")
+        .accessibilityValue(
+            L10n.format(
+                "ui.player.progress_accessibility",
+                formatPlaybackTime(player.progress),
+                formatPlaybackTime(maximum)
+            )
+        )
     }
+}
+
+private struct NowPlayingProgressTimeRow: View {
+    @Environment(PlayerStore.self) private var player
+
+    var body: some View {
+        HStack {
+            Text(formatPlaybackTime(player.progress))
+
+            Spacer()
+
+            Text("−\(formatPlaybackTime(max(player.duration - player.progress, 0)))")
+        }
+    }
+}
+
+private func formatPlaybackTime(_ value: TimeInterval) -> String {
+    guard value.isFinite else { return "0:00" }
+    let seconds = max(0, Int(value))
+    return String(format: "%d:%02d", seconds / 60, seconds % 60)
 }
 
 private struct NowPlayingAutoMixStatus: View {
