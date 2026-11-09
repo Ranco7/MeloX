@@ -38,10 +38,10 @@ struct NowPlayingAppleMusicBackground: View {
         GeometryReader { proxy in
             TimelineView(
                 .animation(
-                    minimumInterval:
-                        isBehindLyrics
-                        ? 1.0 / 120.0
-                        : 1.0 / 60.0,
+                    // 60 fps is enough for a slowly rotating, heavily blurred
+                    // backdrop; the lyrics page used to ask for 120 fps and
+                    // doubled the full-screen shader cost on ProMotion.
+                    minimumInterval: 1.0 / 60.0,
                     paused: pausesAnimation
                 )
             ) { context in
