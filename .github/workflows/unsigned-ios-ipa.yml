@@ -19,12 +19,15 @@ jobs:
     name: Build unsigned iOS IPA / 构建未签名 iOS IPA
     runs-on: xcode-27
     timeout-minutes: 90
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout / 检出代码
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Select Xcode 27.1 / 选择 Xcode 27.1
         shell: bash
@@ -105,6 +108,7 @@ jobs:
           fi
 
       - name: Upload IPA artifact / 上传 IPA
+        if: github.ref != 'refs/heads/codex/ipad-adaptive-layout'
         uses: actions/upload-artifact@v7
         with:
           name: MeloX-iOS-unsigned
@@ -112,30 +116,16 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  publish-ipad:
-    name: Publish iPad layout prerelease / 发布 iPad 布局预发行版
-    if: github.repository == 'Ranco7/MeloX' && github.ref == 'refs/heads/codex/ipad-adaptive-layout'
-    needs: ipa
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - name: Download verified IPA
-        uses: actions/download-artifact@v8
-        with:
-          name: MeloX-iOS-unsigned
-
-      - name: Publish unsigned IPA
+      - name: Publish verified IPA / 发布已校验的 IPA
+        if: github.repository == 'Ranco7/MeloX' && github.ref == 'refs/heads/codex/ipad-adaptive-layout'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          IPA=MeloX-iOS-unsigned.ipa
+          IPA=build/MeloX-iOS-unsigned.ipa
           TAG="unsigned-ipad-layout-${GITHUB_SHA:0:7}"
-          unzip -tq "$IPA"
-          SHA256="$(sha256sum "$IPA" | cut -d ' ' -f 1)"
+          SHA256="$(shasum -a 256 "$IPA" | cut -d ' ' -f 1)"
           cat > "$RUNNER_TEMP/release.md" <<EOF
           iPad 宽窗口采用系统侧栏，首页快捷入口、搜索分类和收藏专辑按宽度调整排版，歌单和专辑详情可并排显示封面与曲目。
 
