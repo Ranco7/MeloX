@@ -1,7 +1,13 @@
 import Foundation
+import OSLog
 
 @MainActor
 final class LyricsService {
+    nonisolated private static let logger = Logger(
+        subsystem: Bundle.main.bundleIdentifier ?? "MeloX",
+        category: "LyricsService"
+    )
+
     private enum FetchEvent: Sendable {
         case amll(String)
         case netease(NeteaseLyricPayload)
@@ -66,12 +72,18 @@ final class LyricsService {
         if preference == .automatic {
             // Load NetEase first so lyrics appear immediately instead of
             // waiting for the slower third-party lookups.
-            if let payload = try? await api.neteaseLyrics(id: song.id) {
-                sources.netease = payload
+            do {
+                sources.netease = try await api.neteaseLyrics(id: song.id)
                 publish(
                     LyricSourceMerger.resolve(sources, preference: .netease),
                     into: &latest,
                     onUpdate: onUpdate
+                )
+            } catch is CancellationError {
+                // The explicit cancellation check below rethrows.
+            } catch {
+                Self.logger.error(
+                    "NetEase lyrics failed for song \(song.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
                 )
             }
             try Task.checkCancellation()
@@ -82,18 +94,38 @@ final class LyricsService {
                 await withTaskGroup(of: FetchEvent?.self) { group in
                     if usesAMLL {
                         group.addTask {
-                            guard let ttml = try? await amllClient.lyrics(songID: song.id) else {
+                            do {
+                                return .amll(
+                                    try await amllClient.lyrics(
+                                        songID: song.id
+                                    )
+                                )
+                            } catch is CancellationError {
+                                return nil
+                            } catch {
+                                Self.logger.error(
+                                    "AMLL lyrics failed for song \(song.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                                )
                                 return nil
                             }
-                            return .amll(ttml)
                         }
                     }
                     if usesQQMusic {
                         group.addTask {
-                            guard let payload = try? await qqMusicClient.lyrics(for: song) else {
+                            do {
+                                return .qqMusic(
+                                    try await qqMusicClient.lyrics(
+                                        for: song
+                                    )
+                                )
+                            } catch is CancellationError {
+                                return nil
+                            } catch {
+                                Self.logger.error(
+                                    "QQ Music lyrics failed for song \(song.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                                )
                                 return nil
                             }
-                            return .qqMusic(payload)
                         }
                     }
 
@@ -113,25 +145,51 @@ final class LyricsService {
         } else {
             await withTaskGroup(of: FetchEvent?.self) { group in
                 group.addTask {
-                    guard let payload = try? await api.neteaseLyrics(id: song.id) else {
+                    do {
+                        return .netease(
+                            try await api.neteaseLyrics(id: song.id)
+                        )
+                    } catch is CancellationError {
+                        return nil
+                    } catch {
+                        Self.logger.error(
+                            "NetEase lyrics failed for song \(song.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                        )
                         return nil
                     }
-                    return .netease(payload)
                 }
                 if usesAMLL {
                     group.addTask {
-                        guard let ttml = try? await amllClient.lyrics(songID: song.id) else {
+                        do {
+                            return .amll(
+                                try await amllClient.lyrics(
+                                    songID: song.id
+                                )
+                            )
+                        } catch is CancellationError {
+                            return nil
+                        } catch {
+                            Self.logger.error(
+                                "AMLL lyrics failed for song \(song.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                            )
                             return nil
                         }
-                        return .amll(ttml)
                     }
                 }
                 if usesQQMusic {
                     group.addTask {
-                        guard let payload = try? await qqMusicClient.lyrics(for: song) else {
+                        do {
+                            return .qqMusic(
+                                try await qqMusicClient.lyrics(for: song)
+                            )
+                        } catch is CancellationError {
+                            return nil
+                        } catch {
+                            Self.logger.error(
+                                "QQ Music lyrics failed for song \(song.id, privacy: .public): \(error.localizedDescription, privacy: .public)"
+                            )
                             return nil
                         }
-                        return .qqMusic(payload)
                     }
                 }
 
@@ -153,7 +211,12 @@ final class LyricsService {
         }
 
         try Task.checkCancellation()
-        guard let latest else { throw LyricSourceError.noLyrics }
+        guard let latest else {
+            Self.logger.error(
+                "No lyrics source produced a result for song \(song.id, privacy: .public)"
+            )
+            throw LyricSourceError.noLyrics
+        }
         store(latest, for: cacheKey)
         return latest
     }
