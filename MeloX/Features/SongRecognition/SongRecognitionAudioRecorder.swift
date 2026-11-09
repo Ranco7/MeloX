@@ -226,6 +226,20 @@ final class SongRecognitionAudioRecorder {
     private func stopAudioSession() {
         guard isSessionActive else { return }
         let session = AVAudioSession.sharedInstance()
+        if session.category == .playAndRecord {
+            // Continuous recognition leaves the shared session in
+            // .playAndRecord. The playback configurator preserves that
+            // category while capture is live, so restore playback here or
+            // playback would keep using the recording route afterwards.
+            let mixMode = AudioPlaybackSessionConfigurator.preferredMixMode
+            let options: AVAudioSession.CategoryOptions =
+                mixMode == .mixWithOthers ? [.mixWithOthers] : []
+            try? session.setCategory(
+                .playback,
+                mode: .default,
+                options: options
+            )
+        }
         if shouldPreservePlaybackSession {
             try? AudioPlaybackSessionConfigurator.activate()
         } else {
