@@ -5,15 +5,30 @@ struct EVALyricCompositionView: View {
     let fontScale: CGFloat
     let layoutSeed: UInt64
     let layoutSequence: Int
+    private let composition: EVALyricComposition
+
+    init(
+        text: String,
+        fontScale: CGFloat,
+        layoutSeed: UInt64,
+        layoutSequence: Int
+    ) {
+        self.text = text
+        self.fontScale = fontScale
+        self.layoutSeed = layoutSeed
+        self.layoutSequence = layoutSequence
+        // The composition depends only on the line text and its deterministic
+        // layout variant, so resolve it once per view instead of on every
+        // GeometryReader/body pass.
+        composition = EVALyricLayoutEngine.composition(
+            for: text,
+            sessionSeed: layoutSeed,
+            sequence: layoutSequence
+        )
+    }
 
     var body: some View {
         GeometryReader { proxy in
-            let composition = EVALyricLayoutEngine.composition(
-                for: text,
-                sessionSeed: layoutSeed,
-                sequence: layoutSequence
-            )
-
             ZStack(alignment: .topLeading) {
                 ForEach(composition.blocks) { block in
                     blockView(block, in: proxy.size)
