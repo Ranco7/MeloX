@@ -1,1 +1,2 @@
 "NSMicrophoneUsageDescription" = "MeloX uses the microphone to listen for nearby music and create an audio fingerprint on this Mac.";
+"NSAudioCaptureUsageDescription" = "MeloX captures system audio to identify music playing on this Mac, including through headphones. Only an audio fingerprint is sent for recognition.";

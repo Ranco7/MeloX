@@ -1,1 +1,2 @@
 "NSMicrophoneUsageDescription" = "MeloX 需要使用麦克风聆听环境音乐并在本机生成音频指纹。";
+"NSAudioCaptureUsageDescription" = "MeloX 需要采集系统音频，以识别这台 Mac 上（包括耳机中）正在播放的音乐。仅会发送在本机生成的音频指纹用于识别。";
