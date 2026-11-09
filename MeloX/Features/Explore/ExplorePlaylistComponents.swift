@@ -14,7 +14,7 @@ struct ExploreCategoryPicker: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .buttonBorderShape(.capsule)
-                    .controlSize(.regular)
+                    .controlSize(.large)
                     .tint(category == selection ? .accentColor : Color.secondary.opacity(0.14))
                     .foregroundStyle(category == selection ? .white : .primary)
                     .accessibilityAddTraits(category == selection ? .isSelected : [])
