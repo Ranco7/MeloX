@@ -107,11 +107,6 @@ final class NeteaseAPI {
         return response.list
     }
 
-    func topArtists() async throws -> [Artist] {
-        let response: ArtistToplistResponse = try await client.eapi("/api/toplist/artist")
-        return response.list.artists
-    }
-
     func playlists(category: String, offset: Int = 0, limit: Int = 50) async throws -> [Playlist] {
         switch category {
         case "推荐歌单":
@@ -521,10 +516,6 @@ final class NeteaseAPI {
             format: source.format,
             quality: source.level.flatMap(MusicQuality.init(apiLevel:))
         )
-    }
-
-    func songURL(id: Int) async throws -> URL {
-        try await playbackSource(id: id).url
     }
 
     func search(_ keywords: String, kind: SearchKind, limit: Int = 30) async throws -> SearchPayload {

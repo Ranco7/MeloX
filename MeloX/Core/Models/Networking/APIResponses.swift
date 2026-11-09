@@ -73,14 +73,6 @@ struct ArtistAlbumsResponse: Decodable {
     let hotAlbums: [Album]
 }
 
-struct ArtistToplistResponse: Decodable {
-    let list: ArtistToplist
-}
-
-struct ArtistToplist: Decodable {
-    let artists: [Artist]
-}
-
 struct SearchResponse: Decodable {
     let result: SearchPayload?
 }
