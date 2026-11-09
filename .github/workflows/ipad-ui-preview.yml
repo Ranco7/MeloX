@@ -1,0 +1,101 @@
+name: iPad UI simulator preview
+
+on:
+  push:
+    branches:
+      - codex/ipad-ui-preview
+
+permissions:
+  contents: read
+
+jobs:
+  simulator:
+    runs-on: xcode-27
+    timeout-minutes: 28
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Select Xcode and iPad simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          for candidate in /Applications/Xcode_27.1.app /Applications/Xcode_27.1.0.app /Applications/Xcode.app; do
+            if [[ -d "$candidate" ]]; then
+              sudo xcode-select -s "$candidate/Contents/Developer"
+              break
+            fi
+          done
+          xcodebuild -version
+          xcrun simctl list runtimes available
+          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
+          python3 - "$RUNNER_TEMP/devices.json" >> "$GITHUB_ENV" <<'PY'
+          import json, sys
+          runtimes = json.load(open(sys.argv[1]))["devices"]
+          candidates = sorted(runtimes, key=lambda key: tuple(int(n) for n in key.split(".iOS-")[-1].split("-")) if ".iOS-" in key else (), reverse=True)
+          for runtime in candidates:
+              if ".iOS-" not in runtime:
+                  continue
+              devices = [d for d in runtimes[runtime] if d["isAvailable"]]
+              pads = sorted((d for d in devices if d["name"].startswith("iPad")), key=lambda d: ("13-inch" not in d["name"], "Pro" not in d["name"], d["name"]))
+              phones = [d for d in devices if d["name"].startswith("iPhone")]
+              if pads:
+                  print("PREVIEW_IPAD=" + pads[0]["udid"])
+                  if phones:
+                      print("PREVIEW_IPHONE=" + phones[0]["udid"])
+                  break
+          else:
+              raise SystemExit("No available iPad Simulator found")
+          PY
+
+      - name: Build with synthetic preview data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 Tools/Preview/stage_ipad_ui_preview.py
+          xcodebuild build -quiet \
+            -project MeloX.xcodeproj -scheme MeloX -configuration Debug \
+            -destination "platform=iOS Simulator,id=$PREVIEW_IPAD" \
+            -derivedDataPath "$RUNNER_TEMP/preview-build" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO COMPILER_INDEX_STORE_ENABLE=NO
+
+      - name: Capture representative iPad and iPhone screens
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/preview-build/Build/Products/Debug-iphonesimulator/MeloX.app"
+          BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
+          mkdir -p preview
+          boot() {
+            local device="$1"
+            xcrun simctl bootstatus "$device" -b
+            xcrun simctl status_bar "$device" override --time "9:41" --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState unplugged --batteryLevel 100
+            xcrun simctl install "$device" "$APP"
+          }
+          capture() {
+            local device="$1"
+            local screenshot="$2"
+            shift 2
+            xcrun simctl launch --terminate-running-process "$device" "$BUNDLE_ID" --melox-ui-preview "$@"
+            sleep 4
+            xcrun simctl io "$device" screenshot "preview/$screenshot.png"
+            sips -g pixelWidth -g pixelHeight "preview/$screenshot.png"
+          }
+          boot "$PREVIEW_IPAD"
+          capture "$PREVIEW_IPAD" iPad-Listening-Rank --preview-week
+          capture "$PREVIEW_IPAD" iPad-Listening-Rank-All-Time --preview-all
+          capture "$PREVIEW_IPAD" iPad-Song-Recognition --preview-recognition
+          capture "$PREVIEW_IPAD" iPad-Search --preview-search
+          if [[ -n "${PREVIEW_IPHONE:-}" ]]; then
+            boot "$PREVIEW_IPHONE"
+            capture "$PREVIEW_IPHONE" iPhone-Listening-Rank --preview-all
+            capture "$PREVIEW_IPHONE" iPhone-Listening-Rank-Large-Text --preview-large-text
+          fi
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: MeloX-UI-previews
+          path: preview/*.png
+          if-no-files-found: error
+          retention-days: 14
