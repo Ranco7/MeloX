@@ -10,8 +10,8 @@ permissions:
 
 jobs:
   preview:
-    runs-on: xcode-27
-    timeout-minutes: 12
+    runs-on: macos-26
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
         with:
@@ -19,7 +19,7 @@ jobs:
 
       - uses: actions/checkout@v6
         with:
-          ref: 99403462822f55435f74d95e9d3f8ca82fcda002
+          ref: a5e8a5f4acd989b1934bdc9d6307ed12fb9aa546
           path: source
           persist-credentials: false
 
@@ -27,12 +27,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          for candidate in /Applications/Xcode_27.1.app /Applications/Xcode_27.1.0.app /Applications/Xcode.app; do
-            if [[ -d "$candidate" ]]; then
-              sudo xcode-select -s "$candidate/Contents/Developer"
-              break
-            fi
-          done
+          xcodebuild -version
           APP="$RUNNER_TEMP/MeloXRankPreview.app"
           mkdir -p "$APP"
           cp -R source/MeloXLocalization/{en,zh-Hans}.lproj "$APP/"
@@ -42,6 +37,7 @@ jobs:
             Tools/Preview/CompactRankPreview.swift \
             source/MeloX/Core/Models/Account/UserPlayRecordModels.swift \
             source/MeloX/Shared/Components/FilterPicker.swift \
+            source/MeloX/Shared/Media/TrackRowView.swift \
             source/MeloX/Features/Account/UserListeningRankView.swift \
             -o "$APP/MeloXRankPreview"
           python3 - "$APP/Info.plist" <<'PY'
@@ -73,31 +69,34 @@ jobs:
         run: |
           set -euxo pipefail
           mkdir -p preview
-          xcrun simctl list devices available -j > "$RUNNER_TEMP/devices.json"
-          DEVICE="$(python3 - "$RUNNER_TEMP/devices.json" <<'PY'
+          xcrun simctl list runtimes -j > "$RUNNER_TEMP/runtimes.json"
+          xcrun simctl list devicetypes -j > "$RUNNER_TEMP/device-types.json"
+          read -r RUNTIME DEVICE_TYPE < <(python3 - "$RUNNER_TEMP/runtimes.json" "$RUNNER_TEMP/device-types.json" <<'PY'
           import json, re, sys
-          runtimes = json.load(open(sys.argv[1]))["devices"]
-          candidates = [key for key in runtimes if re.search(r"\.iOS-\d+-\d+(?:-\d+)?$", key)]
-          candidates.sort(key=lambda key: (key.endswith(".iOS-27-1"), tuple(map(int, key.split(".iOS-")[-1].split("-")))), reverse=True)
-          for runtime in candidates:
-              pads = sorted((d for d in runtimes[runtime] if d["isAvailable"] and d["name"].startswith("iPad")), key=lambda d: ("13-inch" not in d["name"], "Pro" not in d["name"], d["name"]))
-              if pads:
-                  print(pads[0]["udid"])
-                  break
-          else:
-              raise SystemExit("No available iPad simulator")
+          runtimes = json.load(open(sys.argv[1]))["runtimes"]
+          runtimes = [runtime for runtime in runtimes if runtime["isAvailable"] and re.search(r"\.iOS-26-\d+(?:-\d+)?$", runtime["identifier"])]
+          runtime = max(runtimes, key=lambda item: tuple(map(int, item["version"].split("."))))
+          types = {item["name"]: item["identifier"] for item in json.load(open(sys.argv[2]))["devicetypes"]}
+          device = next(types[name] for name in ["iPad Pro 11-inch (M4)", "iPad Pro 11-inch (M5)", "iPad (A16)"] if name in types)
+          print(runtime["identifier"], device)
           PY
-          )"
+          )
           limited() {
             perl -e 'alarm shift @ARGV; exec @ARGV or die $!;' "$@"
           }
-          limited 160 xcrun simctl bootstatus "$DEVICE" -b
-          limited 55 xcrun simctl install "$DEVICE" "$RUNNER_TEMP/MeloXRankPreview.app"
+          DEVICE="$(xcrun simctl create 'MeloX Preview iPad' "$DEVICE_TYPE" "$RUNTIME")"
+          limited 25 xcrun simctl boot "$DEVICE"
+          open -a "$(xcode-select -p)/Applications/Simulator.app" --args -CurrentDeviceUDID "$DEVICE" ||
+            echo "Simulator window unavailable; continuing with simctl"
+          limited 160 xcrun simctl bootstatus "$DEVICE"
+          sleep 8
+          limited 85 xcrun simctl install "$DEVICE" "$RUNNER_TEMP/MeloXRankPreview.app" ||
+            limited 65 xcrun simctl install "$DEVICE" "$RUNNER_TEMP/MeloXRankPreview.app"
           limited 40 xcrun simctl launch "$DEVICE" com.melox.rank.preview -AppleLanguages '(zh-Hans)'
           sleep 5
           limited 30 xcrun simctl io "$DEVICE" screenshot preview/MeloX-iPad-Rank.png
           sips -g pixelWidth -g pixelHeight preview/MeloX-iPad-Rank.png
-          limited 40 xcrun simctl launch --terminate-running-process "$DEVICE" com.melox.rank.preview --large-text -AppleLanguages '(zh-Hans)'
+          limited 40 xcrun simctl launch --terminate-running-process "$DEVICE" com.melox.rank.preview --compact --large-text -AppleLanguages '(zh-Hans)'
           sleep 4
           limited 30 xcrun simctl io "$DEVICE" screenshot preview/MeloX-iPad-Rank-Large-Text.png
 
