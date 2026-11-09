@@ -303,6 +303,9 @@ final class PlayerStore {
     func restore() async {
         guard !hasRestoredPlayback else { return }
         hasRestoredPlayback = true
+        // A listen-together room owns the queue and play-mode state; a late
+        // launch restore must not overwrite the room snapshot.
+        guard !isListenTogetherSessionActive else { return }
         guard let snapshot = persistence.load(), !snapshot.queue.isEmpty else {
             lyricsLiveActivityController.synchronize(with: nil)
             lyricsNotificationController.clear()
@@ -455,7 +458,13 @@ final class PlayerStore {
         persistSnapshot()
     }
 
-    func synchronizeListenTogetherQueue(songs: [Song]) {
+    func synchronizeListenTogetherQueue(
+        songs: [Song],
+        playMode: String? = nil
+    ) {
+        if !listenTogetherPlayModeTouched {
+            applyListenTogetherPlayMode(playMode)
+        }
         guard let currentSong,
               let index = songs.firstIndex(where: { $0.id == currentSong.id }),
               songs.map(\.id) != queue.map(\.id) else { return }

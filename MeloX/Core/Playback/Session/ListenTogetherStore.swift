@@ -29,6 +29,15 @@ enum ListenTogetherConnectionState: Equatable {
     }
 }
 
+/// A play command remembered from the poll that first delivered it. Commands
+/// only carry the position at the moment they were issued, so applying one
+/// later must add the time spent resolving the room playlist.
+struct ListenTogetherObservedPlayCommand {
+    let signature: String
+    let isPlaying: Bool
+    let observedAt: Date
+}
+
 enum ListenTogetherOperation: Equatable {
     case creating
     case joining
@@ -123,10 +132,22 @@ final class ListenTogetherStore {
     @ObservationIgnored
     var clientSequence = 0
 
-    /// Play-command sequences this device just submitted. Echoes of those
-    /// commands must not seek backward over playback that has already moved on.
+    /// Highest client sequence this device submitted. Echoes of our own
+    /// commands must not seek backward over playback that has already moved
+    /// on; a fixed window of remembered sequences eventually forgets them.
     @ObservationIgnored
-    var locallyReportedCommandSequences: [Int] = []
+    var lastLocallyReportedCommandSequence: Int64 = 0
+
+    /// The play command this device has already observed, with the time it was
+    /// first seen, so a later application can account for the elapsed time.
+    @ObservationIgnored
+    var observedPlayCommand: ListenTogetherObservedPlayCommand?
+
+    /// Playlist IDs that songDetails could not resolve on this device. They
+    /// stay in the queue as placeholders so a local queue edit cannot publish
+    /// a truncated room playlist.
+    @ObservationIgnored
+    var unresolvedSongIDs: Set<Int> = []
 
     @ObservationIgnored
     var monitorTask: Task<Void, Never>?
@@ -297,11 +318,13 @@ final class ListenTogetherStore {
 
         operation = .leaving
         errorMessage = nil
+        monitorTask?.cancel()
         var leaveError: Error?
         do {
             try await api.endListenTogetherRoom(roomID: room.id)
         } catch is CancellationError {
             operation = nil
+            startMonitoring()
             return
         } catch {
             leaveError = error
@@ -317,17 +340,21 @@ final class ListenTogetherStore {
 
     func refresh() async {
         guard !isBusy, isInRoom else { return }
+        let session = sessionRevision
         do {
             try await refreshRoomStatus()
-            guard isInRoom else { return }
+            guard isInRoom, sessionRevision == session else { return }
             try await synchronizeFromServer(initial: false)
+            guard sessionRevision == session else { return }
             try await sendHeartbeat()
+            guard sessionRevision == session else { return }
             connectionState = .connected
             consecutiveSyncFailures = 0
             lastSyncDate = .now
         } catch is CancellationError {
             return
         } catch {
+            guard sessionRevision == session else { return }
             connectionState = .reconnecting
             errorMessage = error.localizedDescription
         }
@@ -356,7 +383,9 @@ final class ListenTogetherStore {
         self.localUserID = localUserID
         isHost = room.creatorID == String(localUserID)
         clientSequence = 0
-        locallyReportedCommandSequences = []
+        lastLocallyReportedCommandSequence = 0
+        observedPlayCommand = nil
+        unresolvedSongIDs = []
         lastPlaylistSignature = nil
         lastCommandSignature = nil
         consecutiveSyncFailures = 0
@@ -378,7 +407,9 @@ final class ListenTogetherStore {
         localUserID = nil
         isHost = false
         clientSequence = 0
-        locallyReportedCommandSequences = []
+        lastLocallyReportedCommandSequence = 0
+        observedPlayCommand = nil
+        unresolvedSongIDs = []
         lastPlaylistSignature = nil
         lastCommandSignature = nil
         consecutiveSyncFailures = 0
@@ -392,6 +423,11 @@ final class ListenTogetherStore {
 
     private func restoreSession() async {
         guard !isInRoom else { return }
+        // Playback restoration and room restoration start as independent
+        // launch tasks. Settle the local snapshot first so the room session
+        // cannot be overwritten by a late restore, and so the playback options
+        // saved when the room starts are the restored ones.
+        await player.restore()
         do {
             async let profile = api.accountProfile()
             async let roomStatus = api.listenTogetherRoomStatus()
