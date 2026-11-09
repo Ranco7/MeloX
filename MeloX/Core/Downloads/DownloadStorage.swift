@@ -25,16 +25,27 @@ final class DownloadStorage {
         let fileName = "\(songID).\(fileExtension(format: format, sourceURL: sourceURL))"
         let destinationURL = fileURL(fileName: fileName)
 
-        if fileManager.fileExists(atPath: destinationURL.path) {
-            try fileManager.removeItem(at: destinationURL)
-        }
-        try fileManager.moveItem(at: temporaryURL, to: destinationURL)
-
-        let values = try destinationURL.resourceValues(forKeys: [.fileSizeKey])
+        let values = try temporaryURL.resourceValues(
+            forKeys: [.fileSizeKey]
+        )
         let byteCount = Int64(values.fileSize ?? 0)
         guard byteCount > 0 else {
-            try? fileManager.removeItem(at: destinationURL)
+            try? fileManager.removeItem(at: temporaryURL)
             throw DownloadError.emptyFile
+        }
+
+        if fileManager.fileExists(atPath: destinationURL.path) {
+            // Replace atomically so a failed move cannot delete the
+            // previously downloaded copy.
+            _ = try fileManager.replaceItemAt(
+                destinationURL,
+                withItemAt: temporaryURL
+            )
+        } else {
+            try fileManager.moveItem(
+                at: temporaryURL,
+                to: destinationURL
+            )
         }
         return (fileName, byteCount)
     }
