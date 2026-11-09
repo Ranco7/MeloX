@@ -42,8 +42,6 @@ nonisolated struct AppleMusicLyricsMotionProfile: Equatable, Sendable {
     let syllableLift: Double
     /// Default focus and line-change solver values observed in Lyrics.Specs.
     let lineChangeSpring: LyricPhysicalSpringParameters
-    /// Solver values observed on the forced/special line catch-up path.
-    let forcedLineCatchUpSpring: LyricPhysicalSpringParameters
     /// Translation/transliteration reveal solver values.
     let supplementalTextShowSpring: LyricPhysicalSpringParameters
     /// Translation/transliteration removal solver values.
@@ -86,11 +84,6 @@ nonisolated struct AppleMusicLyricsMotionProfile: Equatable, Sendable {
             mass: 1,
             stiffness: 100,
             damping: 18
-        ),
-        forcedLineCatchUpSpring: LyricPhysicalSpringParameters(
-            mass: 2,
-            stiffness: 260,
-            damping: 50
         ),
         supplementalTextShowSpring: LyricPhysicalSpringParameters(
             mass: 1,
