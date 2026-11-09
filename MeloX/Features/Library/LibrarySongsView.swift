@@ -18,9 +18,12 @@ struct LibrarySongsView: View {
     @State private var locateErrorMessage: String?
 
     var body: some View {
+        // Several sections and the empty-state overlay read this list, so
+        // resolve it once per body pass.
+        let songs = displayedSongs
         ScrollViewReader { proxy in
             List {
-                if !displayedSongs.isEmpty {
+                if !songs.isEmpty {
                     Button(action: playDisplayedSongs) {
                         HStack {
                             Label(
@@ -43,7 +46,7 @@ struct LibrarySongsView: View {
                     }
                 }
 
-                ForEach(displayedSongs) { song in
+                ForEach(songs) { song in
                     Button {
                         Task { await player.play(song, in: displayedSongs) }
                     } label: {
@@ -108,7 +111,7 @@ struct LibrarySongsView: View {
             }
         }
         .overlay {
-            emptyState
+            emptyState(songs: songs)
         }
         .task(
             id: LibrarySongSearchRequest(
@@ -253,8 +256,8 @@ struct LibrarySongsView: View {
     }
 
     @ViewBuilder
-    private var emptyState: some View {
-        if displayedSongs.isEmpty,
+    private func emptyState(songs: [Song]) -> some View {
+        if songs.isEmpty,
            !isPreparingSearchResults,
            !hasSearchLoadFailure {
             if isSearching {
