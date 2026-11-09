@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private enum ContentSheet: String, Identifiable {
     case settings
@@ -19,6 +20,7 @@ private struct HeartModeLaunchReadiness: Equatable {
 
 struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
     @Environment(LibraryStore.self) private var library
@@ -169,9 +171,10 @@ struct ContentView: View {
                 .accessibilityHidden(true)
             }
             .onChange(of: selectedTab) { _, tab in
-                settings.lastSelectedTab = tab
+                settings.lastSelectedTab = sidebarLibraryTabs.contains(tab)
+                    ? .library : tab
             }
-            .onChange(of: settings.visibleTabs) { _, tabs in
+            .onChange(of: settings.visibleTabs + sidebarLibraryTabs) { _, tabs in
                 guard !tabs.contains(selectedTab) else { return }
                 if settings.homeTabs.contains(selectedTab),
                    tabs.contains(.home) {
@@ -364,33 +367,56 @@ struct ContentView: View {
     private var tabs: some View {
         TabView(selection: $selectedTab) {
             ForEach(settings.visibleTabs) { tab in
-                Tab(
-                    tab.title,
-                    systemImage: tab.systemImage,
-                    value: tab,
-                    role: tab == .search ? .search : nil
-                ) {
-                    NavigationStack(
-                        path: navigationPathBinding(for: tab)
-                    ) {
-                        tabRoot(for: tab)
-                            .toolbar {
-                                primaryToolbar(for: tab)
-                            }
-                            .navigationDestination(
-                                for: ContentRoute.self
-                            ) { route in
-                                contentDestination(for: route)
-                            }
-                            .musicDestinations(
-                                in: musicNavigationNamespace
-                            )
+                navigationTab(for: tab)
+
+                if tab == .library, !displayedSidebarLibraryTabs.isEmpty {
+                    TabSection(L10n.string("ui.navigation.library")) {
+                        ForEach(displayedSidebarLibraryTabs) { shortcut in
+                            navigationTab(for: shortcut)
+                                .defaultVisibility(
+                                    horizontalSizeClass == .compact ? .visible : .hidden,
+                                    for: .tabBar
+                                )
+                        }
                     }
                 }
             }
         }
+        .tabViewStyle(.sidebarAdaptable)
         .tabBarMinimizeBehavior(.onScrollDown)
         .environment(\.musicNavigationNamespace, musicNavigationNamespace)
+    }
+
+    private var sidebarLibraryTabs: [AppTab] {
+        guard UIDevice.current.userInterfaceIdiom == .pad,
+              settings.visibleTabs.contains(.library) else { return [] }
+        return settings.embeddedLibraryPages.map(AppTab.init(libraryPage:))
+    }
+
+    private var displayedSidebarLibraryTabs: [AppTab] {
+        // Keep the active shortcut and its navigation stack when a window narrows.
+        if horizontalSizeClass == .compact {
+            return sidebarLibraryTabs.filter { $0 == selectedTab }
+        }
+        return sidebarLibraryTabs
+    }
+
+    private func navigationTab(for tab: AppTab) -> some TabContent<AppTab> {
+        Tab(
+            tab.title,
+            systemImage: tab.systemImage,
+            value: tab,
+            role: tab == .search ? .search : nil
+        ) {
+            NavigationStack(path: navigationPathBinding(for: tab)) {
+                tabRoot(for: tab)
+                    .toolbar { primaryToolbar(for: tab) }
+                    .navigationDestination(for: ContentRoute.self) { route in
+                        contentDestination(for: route)
+                    }
+                    .musicDestinations(in: musicNavigationNamespace)
+            }
+        }
     }
 
     @ViewBuilder

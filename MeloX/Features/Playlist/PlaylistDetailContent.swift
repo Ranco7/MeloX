@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct PlaylistDetailContent: View {
     let playlist: Playlist
@@ -38,8 +39,8 @@ struct PlaylistDetailContent: View {
             )
 
             ScrollView {
-                LazyVStack(spacing: 0) {
-                    if usesToplistLayout {
+                if usesToplistLayout {
+                    LazyVStack(spacing: 0) {
                         ToplistDetailHero(
                             playlist: playlist,
                             summary: toplistSummary,
@@ -48,7 +49,11 @@ struct PlaylistDetailContent: View {
                             isPreparingPlayback: isPreparingPlayback,
                             onPlayAll: onPlayAll
                         )
-                    } else {
+                        trackContent
+                    }
+                    .padding(.bottom, 32)
+                } else {
+                    MusicCollectionDetailColumns { showsColumns in
                         StandardMusicCollectionDetailHero(
                             artworkURL: playlist.artworkURL,
                             title: playlist.name,
@@ -61,31 +66,13 @@ struct PlaylistDetailContent: View {
                             onToggleSaved: {
                                 library.toggle(playlist: playlist)
                             },
-                            onPlayAll: onPlayAll
+                            onPlayAll: onPlayAll,
+                            isInSideColumn: showsColumns
                         )
+                    } tracks: {
+                        trackContent
                     }
-
-                    MusicCollectionTrackContent(
-                        tracks: filteredTracks,
-                        sourceID: playlist.id,
-                        showsArtwork: usesToplistLayout,
-                        loadingTitle: usesToplistLayout
-                            ? L10n.string("ui.toplists.loading")
-                            : L10n.string("ui.playlists.loading"),
-                        isLoading: isLoading,
-                        failureMessage: failureMessage,
-                        hasMoreTracks: hasMoreTracks,
-                        loadedTrackOffset: loadedTrackOffset,
-                        isLoadingMoreTracks: isLoadingMoreTracks,
-                        loadMoreTracksError: loadMoreTracksError,
-                        downloadSelection: downloadCoordinator,
-                        onRetry: onRetry,
-                        onLoadMore: onLoadMore,
-                        onRemoveSong: onRemoveSong,
-                        highlightedSongID: highlightedSongID
-                    )
                 }
-                .padding(.bottom, 32)
             }
             .scrollIndicators(.hidden)
             .refreshable {
@@ -99,6 +86,28 @@ struct PlaylistDetailContent: View {
         .foregroundStyle(.primary)
     }
 
+    private var trackContent: some View {
+        MusicCollectionTrackContent(
+            tracks: filterMusicCollectionTracks(playlist.tracks, query: searchQuery),
+            sourceID: playlist.id,
+            showsArtwork: usesToplistLayout,
+            loadingTitle: usesToplistLayout
+                ? L10n.string("ui.toplists.loading")
+                : L10n.string("ui.playlists.loading"),
+            isLoading: isLoading,
+            failureMessage: failureMessage,
+            hasMoreTracks: hasMoreTracks,
+            loadedTrackOffset: loadedTrackOffset,
+            isLoadingMoreTracks: isLoadingMoreTracks,
+            loadMoreTracksError: loadMoreTracksError,
+            downloadSelection: downloadCoordinator,
+            onRetry: onRetry,
+            onLoadMore: onLoadMore,
+            onRemoveSong: onRemoveSong,
+            highlightedSongID: highlightedSongID
+        )
+    }
+
     private var standardMetadata: String {
         let count = playlist.trackCount > 0
             ? playlist.trackCount
@@ -109,9 +118,35 @@ struct PlaylistDetailContent: View {
             playlist.playCount.compactPlayCount
         )
     }
+}
 
-    private var filteredTracks: [Song] {
-        filterMusicCollectionTracks(playlist.tracks, query: searchQuery)
+struct MusicCollectionDetailColumns<Hero: View, Tracks: View>: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var hasRoomForColumns = false
+
+    @ViewBuilder let hero: (Bool) -> Hero
+    @ViewBuilder let tracks: () -> Tracks
+
+    var body: some View {
+        let showsColumns = UIDevice.current.userInterfaceIdiom == .pad
+            && hasRoomForColumns && !dynamicTypeSize.isAccessibilitySize
+        let layout = showsColumns
+            ? AnyLayout(HStackLayout(alignment: .top, spacing: 24))
+            : AnyLayout(VStackLayout(spacing: 0))
+
+        layout {
+            hero(showsColumns)
+                .frame(width: showsColumns ? 304 : nil)
+            tracks()
+                .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, showsColumns ? 16 : 0)
+        .padding(.top, showsColumns ? 24 : 0)
+        .padding(.bottom, 32)
+        .frame(maxWidth: .infinity)
+        .onGeometryChange(for: Bool.self) { geometry in
+            geometry.size.width >= 710
+        } action: { hasRoomForColumns = $0 }
     }
 }
 
@@ -184,12 +219,13 @@ struct StandardMusicCollectionDetailHero: View {
     var isPreparingPlayback = false
     let onToggleSaved: () -> Void
     var onPlayAll: ((Bool) async -> Void)? = nil
+    var isInSideColumn = false
 
     var body: some View {
         VStack(spacing: 0) {
             ArtworkImage(url: artworkURL, cornerRadius: 12)
                 .containerRelativeFrame(.horizontal) { width, _ in
-                    min(width * 0.68, 300)
+                    min(width * 0.68, isInSideColumn ? 236 : 300)
                 }
                 .shadow(color: .black.opacity(0.18), radius: 18, y: 10)
 

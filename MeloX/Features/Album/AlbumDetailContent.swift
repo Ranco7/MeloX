@@ -23,7 +23,7 @@ struct AlbumDetailContent: View {
             )
 
             ScrollView {
-                LazyVStack(spacing: 0) {
+                MusicCollectionDetailColumns { showsColumns in
                     StandardMusicCollectionDetailHero(
                         artworkURL: album.artworkURL,
                         title: album.name,
@@ -32,9 +32,10 @@ struct AlbumDetailContent: View {
                         tracks: songs,
                         sourceID: album.id,
                         isSaved: isSubscribed,
-                        onToggleSaved: onToggleSubscription
+                        onToggleSaved: onToggleSubscription,
+                        isInSideColumn: showsColumns
                     )
-
+                } tracks: {
                     MusicCollectionTrackContent(
                         tracks: filteredTracks,
                         sourceID: album.id,
@@ -47,7 +48,6 @@ struct AlbumDetailContent: View {
                         highlightedSongID: highlightedSongID
                     )
                 }
-                .padding(.bottom, 32)
             }
             .scrollIndicators(.hidden)
             .refreshable {
