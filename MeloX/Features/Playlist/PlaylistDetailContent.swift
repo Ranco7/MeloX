@@ -21,6 +21,8 @@ struct PlaylistDetailContent: View {
     let onPlayAll: (Bool) async -> Void
     var onRemoveSong: ((Song) -> Void)?
     var highlightedSongID: Int?
+    var onDownloadAll: ((MusicQuality) -> Void)?
+    var canDownloadAll = false
 
     @Environment(LibraryStore.self) private var library
     private var usesToplistLayout: Bool {
@@ -49,14 +51,15 @@ struct PlaylistDetailContent: View {
                             isPreparingPlayback: isPreparingPlayback,
                             onPlayAll: onPlayAll
                         )
-                        trackContent
+                        trackContent(wide: false)
                     }
                     .padding(.bottom, 32)
                 } else {
-                    MusicCollectionDetailColumns { showsColumns in
+                    MusicCollectionDetailLayout { artworkSize in
                         StandardMusicCollectionDetailHero(
                             artworkURL: playlist.artworkURL,
-                            title: playlist.name,
+                            title: playlist.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                ? L10n.string("ui.common.playlist") : playlist.name,
                             subtitle: playlist.creator?.nickname ?? L10n.string("ui.service.netease_cloud_music"),
                             metadataText: standardMetadata,
                             tracks: playlist.tracks,
@@ -67,10 +70,12 @@ struct PlaylistDetailContent: View {
                                 library.toggle(playlist: playlist)
                             },
                             onPlayAll: onPlayAll,
-                            isInSideColumn: showsColumns
+                            wideArtworkSize: artworkSize,
+                            onDownloadAll: onDownloadAll,
+                            canDownloadAll: canDownloadAll
                         )
-                    } tracks: {
-                        trackContent
+                    } tracks: { wide in
+                        trackContent(wide: wide)
                     }
                 }
             }
@@ -86,11 +91,11 @@ struct PlaylistDetailContent: View {
         .foregroundStyle(.primary)
     }
 
-    private var trackContent: some View {
+    private func trackContent(wide: Bool) -> some View {
         MusicCollectionTrackContent(
             tracks: filterMusicCollectionTracks(playlist.tracks, query: searchQuery),
             sourceID: playlist.id,
-            showsArtwork: usesToplistLayout,
+            showsArtwork: wide || usesToplistLayout,
             loadingTitle: usesToplistLayout
                 ? L10n.string("ui.toplists.loading")
                 : L10n.string("ui.playlists.loading"),
@@ -104,7 +109,8 @@ struct PlaylistDetailContent: View {
             onRetry: onRetry,
             onLoadMore: onLoadMore,
             onRemoveSong: onRemoveSong,
-            highlightedSongID: highlightedSongID
+            highlightedSongID: highlightedSongID,
+            usesWideRows: wide
         )
     }
 
@@ -120,33 +126,31 @@ struct PlaylistDetailContent: View {
     }
 }
 
-struct MusicCollectionDetailColumns<Hero: View, Tracks: View>: View {
+struct MusicCollectionDetailLayout<Hero: View, Tracks: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var hasRoomForColumns = false
+    @State private var wideArtworkSize: CGFloat?
 
-    @ViewBuilder let hero: (Bool) -> Hero
-    @ViewBuilder let tracks: () -> Tracks
+    @ViewBuilder let hero: (CGFloat?) -> Hero
+    @ViewBuilder let tracks: (Bool) -> Tracks
 
     var body: some View {
-        let showsColumns = UIDevice.current.userInterfaceIdiom == .pad
-            && hasRoomForColumns && !dynamicTypeSize.isAccessibilitySize
-        let layout = showsColumns
-            ? AnyLayout(HStackLayout(alignment: .top, spacing: 24))
-            : AnyLayout(VStackLayout(spacing: 0))
+        let artworkSize = UIDevice.current.userInterfaceIdiom == .pad
+            && !dynamicTypeSize.isAccessibilitySize ? wideArtworkSize : nil
 
-        layout {
-            hero(showsColumns)
-                .frame(width: showsColumns ? 304 : nil)
-            tracks()
-                .frame(maxWidth: .infinity)
+        LazyVStack(spacing: 0) {
+            hero(artworkSize)
+            if artworkSize != nil {
+                Divider()
+                    .padding(.horizontal, 24)
+            }
+            tracks(artworkSize != nil)
         }
-        .padding(.horizontal, showsColumns ? 16 : 0)
-        .padding(.top, showsColumns ? 24 : 0)
         .padding(.bottom, 32)
         .frame(maxWidth: .infinity)
-        .onGeometryChange(for: Bool.self) { geometry in
-            geometry.size.width >= 710
-        } action: { hasRoomForColumns = $0 }
+        .onGeometryChange(for: CGFloat?.self) { geometry in
+            let width = geometry.size.width
+            return width >= 710 ? min(width * 0.28, 300) : nil
+        } action: { wideArtworkSize = $0 }
     }
 }
 
@@ -166,6 +170,7 @@ struct MusicCollectionTrackContent: View {
     var onLoadMore: () async -> Void = {}
     var onRemoveSong: ((Song) -> Void)?
     var highlightedSongID: Int?
+    var usesWideRows = false
 
     var body: some View {
         Group {
@@ -188,7 +193,8 @@ struct MusicCollectionTrackContent: View {
                         showsArtwork: showsArtwork,
                         onRemoveSong: onRemoveSong,
                         downloadSelection: downloadSelection,
-                        highlightedSongID: highlightedSongID
+                        highlightedSongID: highlightedSongID,
+                        usesWideRows: usesWideRows
                     )
 
                     if hasMoreTracks {
@@ -219,22 +225,58 @@ struct StandardMusicCollectionDetailHero: View {
     var isPreparingPlayback = false
     let onToggleSaved: () -> Void
     var onPlayAll: ((Bool) async -> Void)? = nil
-    var isInSideColumn = false
+    var wideArtworkSize: CGFloat?
+    var onDownloadAll: ((MusicQuality) -> Void)?
+    var canDownloadAll = false
+
+    private var isWide: Bool { wideArtworkSize != nil }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ArtworkImage(url: artworkURL, cornerRadius: 12)
-                .containerRelativeFrame(.horizontal) { width, _ in
-                    min(width * 0.68, isInSideColumn ? 236 : 300)
+        if let wideArtworkSize {
+            HStack(alignment: .bottom, spacing: 32) {
+                artwork
+                    .frame(width: wideArtworkSize, height: wideArtworkSize)
+                VStack(alignment: .leading, spacing: 16) {
+                    information
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    actions
                 }
-                .shadow(color: .black.opacity(0.18), radius: 18, y: 10)
+                .multilineTextAlignment(.leading)
+                .frame(height: wideArtworkSize)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
+            .padding(.top, 28)
+            .padding(.bottom, 36)
+        } else {
+            VStack(spacing: 0) {
+                artwork
+                    .containerRelativeFrame(.horizontal) { width, _ in
+                        min(width * 0.68, 300)
+                    }
+                information
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 24)
+                actions
+                    .padding(.top, 17)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 26)
+            .padding(.bottom, 22)
+        }
+    }
 
+    private var artwork: some View {
+        ArtworkImage(url: artworkURL, cornerRadius: 12)
+            .shadow(color: .black.opacity(0.18), radius: 18, y: 10)
+    }
+
+    private var information: some View {
+        VStack(alignment: isWide ? .leading : .center, spacing: 0) {
             Text(title)
-                .font(.title2.weight(.bold))
-                .multilineTextAlignment(.center)
+                .font((isWide ? Font.title : .title2).weight(.bold))
                 .lineLimit(2)
-                .padding(.top, 24)
-                .padding(.horizontal, 24)
 
             Text(subtitle)
                 .font(.title3)
@@ -246,20 +288,20 @@ struct StandardMusicCollectionDetailHero: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .padding(.top, 7)
-
-            MusicCollectionPrimaryActions(
-                tracks: tracks,
-                sourceID: sourceID,
-                isSaved: isSaved,
-                isPreparingPlayback: isPreparingPlayback,
-                onToggleSaved: onToggleSaved,
-                onPlayAll: onPlayAll
-            )
-                .padding(.top, 17)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 26)
-        .padding(.bottom, 22)
+    }
+
+    private var actions: some View {
+        MusicCollectionPrimaryActions(
+            tracks: tracks,
+            sourceID: sourceID,
+            isSaved: isSaved,
+            isPreparingPlayback: isPreparingPlayback,
+            onToggleSaved: onToggleSaved,
+            onPlayAll: onPlayAll,
+            onDownloadAll: isWide ? onDownloadAll : nil,
+            canDownloadAll: canDownloadAll
+        )
     }
 }
 
@@ -356,6 +398,8 @@ struct MusicCollectionPrimaryActions: View {
     let isPreparingPlayback: Bool
     let onToggleSaved: () -> Void
     let onPlayAll: ((Bool) async -> Void)?
+    var onDownloadAll: ((MusicQuality) -> Void)?
+    var canDownloadAll = false
 
     @Environment(PlayerStore.self) private var player
     @Environment(\.colorScheme) private var colorScheme
@@ -417,23 +461,40 @@ struct MusicCollectionPrimaryActions: View {
                 .foregroundStyle(primaryActionForeground)
                 .disabled(tracks.isEmpty || isPreparingPlayback)
 
-                Button(action: onToggleSaved) {
-                    Image(
-                        systemName: isSaved ? "checkmark" : "plus"
+                if let onDownloadAll {
+                    Menu {
+                        ForEach(MusicQuality.allCases) { quality in
+                            Button(quality.title) { onDownloadAll(quality) }
+                        }
+                    } label: {
+                        actionIcon("arrow.down")
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                    .disabled(!canDownloadAll)
+                    .accessibilityLabel("ui.common.download")
+                } else {
+                    Button(action: onToggleSaved) {
+                        actionIcon(isSaved ? "checkmark" : "plus")
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.large)
+                    .accessibilityLabel(
+                        isSaved
+                            ? L10n.string("ui.common.unfavorite")
+                            : L10n.string("ui.common.favorite")
                     )
-                    .font(.title2.weight(.semibold))
-                    .frame(width: 30, height: 30)
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.circle)
-                .controlSize(.large)
-                .accessibilityLabel(
-                    isSaved
-                        ? L10n.string("ui.common.unfavorite")
-                        : L10n.string("ui.common.favorite")
-                )
             }
         }
+    }
+
+    private func actionIcon(_ icon: String) -> some View {
+        Image(systemName: icon)
+            .font(.title2.weight(.semibold))
+            .frame(width: 30, height: 30)
     }
 
     private var primaryActionBackground: Color {

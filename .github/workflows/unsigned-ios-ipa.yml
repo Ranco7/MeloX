@@ -127,7 +127,7 @@ jobs:
           TAG="unsigned-ipad-layout-${GITHUB_SHA:0:7}"
           SHA256="$(shasum -a 256 "$IPA" | cut -d ' ' -f 1)"
           cat > "$RUNNER_TEMP/release.md" <<EOF
-          iPad 宽窗口采用系统侧栏，首页快捷入口、搜索分类和收藏专辑按宽度调整排版，歌单和专辑详情可并排显示封面与曲目。
+          iPad 侧栏可直接打开常用歌单。宽屏歌单和专辑把封面、资料与播放按钮排在页头，曲目在下方通栏显示。底部浮动播放器提供切歌、随机、循环、歌词和队列入口。
 
           此 IPA 未签名，安装前需要自行签名。包含 iOS 主应用、歌词组件和 Apple Watch 应用。
 

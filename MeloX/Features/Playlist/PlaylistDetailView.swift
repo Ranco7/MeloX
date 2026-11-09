@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct PlaylistDetailView: View {
     let id: Int
@@ -11,6 +12,7 @@ struct PlaylistDetailView: View {
     @Environment(DownloadStore.self) private var downloads
     @Environment(AppSettings.self) private var settings
     @Environment(\.colorScheme) private var systemColorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.setTabViewBottomAccessorySuppressed)
     private var setTabViewBottomAccessorySuppressed
@@ -94,7 +96,9 @@ struct PlaylistDetailView: View {
                     && !isLoadingMoreTracks && songToLocate == nil
                     ? { pendingRemoval = $0 }
                     : nil,
-                highlightedSongID: trackLocator.highlightedSongID
+                highlightedSongID: trackLocator.highlightedSongID,
+                onDownloadAll: downloadsEnabled ? { startDownloadAll(quality: $0) } : nil,
+                canDownloadAll: !downloadableSongIDs.isEmpty && !downloadCoordinator.isPreparing
             )
             .task(id: songToLocate) {
                 if let songToLocate { await locateSong(songToLocate) }
@@ -140,7 +144,8 @@ struct PlaylistDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .searchable(
             text: $searchQuery,
-            placement: .navigationBarDrawer(displayMode: .always),
+            placement: UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
+                ? .automatic : .navigationBarDrawer(displayMode: .always),
             prompt: Text(
                 prefersToplistLayout
                     ? L10n.string("ui.toplists.search_prompt")

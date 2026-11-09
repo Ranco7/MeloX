@@ -23,7 +23,7 @@ struct AlbumDetailContent: View {
             )
 
             ScrollView {
-                MusicCollectionDetailColumns { showsColumns in
+                MusicCollectionDetailLayout { artworkSize in
                     StandardMusicCollectionDetailHero(
                         artworkURL: album.artworkURL,
                         title: album.name,
@@ -33,9 +33,9 @@ struct AlbumDetailContent: View {
                         sourceID: album.id,
                         isSaved: isSubscribed,
                         onToggleSaved: onToggleSubscription,
-                        isInSideColumn: showsColumns
+                        wideArtworkSize: artworkSize
                     )
-                } tracks: {
+                } tracks: { wide in
                     MusicCollectionTrackContent(
                         tracks: filteredTracks,
                         sourceID: album.id,
@@ -45,7 +45,8 @@ struct AlbumDetailContent: View {
                         failureMessage: failureMessage,
                         downloadSelection: downloadCoordinator,
                         onRetry: onRetry,
-                        highlightedSongID: highlightedSongID
+                        highlightedSongID: highlightedSongID,
+                        usesWideRows: wide
                     )
                 }
             }
