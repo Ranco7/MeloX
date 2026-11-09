@@ -568,7 +568,7 @@ struct AppleMusicLyricsView: View {
             focusedLyricID: visualHighlightedLyricID,
             movementPhase: movementPhase,
             focusTransition: lyricFocusColorTransition,
-            isActive: isActive
+            isActive: isActive && !isRetainedCascadeLine
         ) { movementOffset, focusProgress in
             LyricPressInteraction(
                 isSelected:
@@ -595,7 +595,7 @@ struct AppleMusicLyricsView: View {
                     line: line,
                     isPlaybackLine: isPlaybackLine,
                     isVocalActive: isActualPlaybackLine,
-                    isAnimationActive: isActive,
+                    isAnimationActive: isActive && !isRetainedCascadeLine,
                     playbackFocusProgress: focusProgress.color,
                     usesPseudoTiming: context.usesPseudoTiming,
                     fontSize: CGFloat(resolvedLyricsFontSize),
