@@ -37,6 +37,7 @@ private struct HeartModeLaunchReadiness: Equatable {
 
 struct ContentView: View {
     private static let sidebarArtworkSize = CGSize(width: 24, height: 24)
+    private static let floatingMiniPlayerClearance: CGFloat = 76
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -340,7 +341,9 @@ struct ContentView: View {
     private var playerAwareTabView: some View {
         if #available(iOS 26.1, *) {
             tabs.tabViewBottomAccessory(isEnabled: showsMiniPlayer && !usesFloatingMiniPlayer) {
-                miniPlayer
+                if showsMiniPlayer && !usesFloatingMiniPlayer {
+                    miniPlayer
+                }
             }
         } else {
             tabs.tabViewBottomAccessory {
@@ -628,16 +631,46 @@ struct ContentView: View {
                 set: { tabletCollectionChrome[tab] = $0 }
             )
         )
+        // The floating bar is an overlay instead of a safe-area inset: an
+        // inset inside a tab's navigation stack can keep a stale height after
+        // a Stage Manager resize or keyboard dismissal. The transparent inset
+        // below only reserves scroll clearance, so it never moves the bar.
+        .overlay(alignment: .bottom) {
+            if selectedTab == tab && usesFloatingMiniPlayer && showsMiniPlayer {
+                GeometryReader { proxy in
+                    TabletMiniPlayerView(
+                        artworkTransitionID: playerTransitionID,
+                        artworkTransitionNamespace:
+                            playerTransitionNamespace,
+                        collectionPalette:
+                            tabletCollectionChrome[tab]?.palette,
+                        usesWideLayout:
+                            proxy.size.width
+                            - 28
+                            >= TabletMiniPlayerView.minimumControlsWidth,
+                        onOpen: openPlayer
+                    )
+                    .padding(.horizontal, 14)
+                    .padding(
+                        .bottom,
+                        max(proxy.safeAreaInsets.bottom, 0) + 8
+                    )
+                    .frame(
+                        maxWidth: .infinity,
+                        maxHeight: .infinity,
+                        alignment: .bottom
+                    )
+                }
+                .ignoresSafeArea(.keyboard, edges: .bottom)
+            }
+        }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if selectedTab == tab && usesFloatingMiniPlayer && showsMiniPlayer {
-                TabletMiniPlayerView(
-                    artworkTransitionID: playerTransitionID,
-                    artworkTransitionNamespace: playerTransitionNamespace,
-                    collectionPalette: tabletCollectionChrome[tab]?.palette,
-                    onOpen: openPlayer
-                )
-                .padding(.horizontal, 14)
-                .frame(maxWidth: .infinity)
+                Color.clear
+                    .frame(
+                        height: Self.floatingMiniPlayerClearance
+                    )
+                    .accessibilityHidden(true)
             }
         }
     }

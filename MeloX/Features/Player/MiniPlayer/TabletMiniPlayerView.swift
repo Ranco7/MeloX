@@ -2,7 +2,7 @@ import SwiftUI
 
 struct TabletMiniPlayerView: View {
     // 240pt icon cluster + 180pt title minimum + 162pt action cluster + spacing and padding.
-    private static let minimumControlsWidth: CGFloat = 618
+    static let minimumControlsWidth: CGFloat = 618
 
     @Environment(PlayerStore.self) private var player
     @Environment(\.colorScheme) private var colorScheme
@@ -10,29 +10,32 @@ struct TabletMiniPlayerView: View {
     let artworkTransitionID: String
     let artworkTransitionNamespace: Namespace.ID
     let collectionPalette: ArtworkDetailPalette?
+    let usesWideLayout: Bool
     let onOpen: (NowPlayingPage?) -> Void
 
     var body: some View {
         if let song = player.currentSong {
-            ViewThatFits(in: .horizontal) {
-                controls(for: song)
-                    .frame(
-                        minWidth: Self.minimumControlsWidth,
-                        idealWidth: Self.minimumControlsWidth,
-                        maxWidth: .infinity
-                    )
-                    .padding(.leading, 10)
-                    .padding(.trailing, 6)
-                    .padding(.vertical, 10)
-
-                MiniPlayerView(
-                    artworkTransitionID: artworkTransitionID,
-                    artworkTransitionNamespace: artworkTransitionNamespace
-                ) {
-                    onOpen(nil)
+            Group {
+                if usesWideLayout {
+                    controls(for: song)
+                        .frame(
+                            minWidth: Self.minimumControlsWidth,
+                            maxWidth: .infinity
+                        )
+                        .padding(.leading, 10)
+                        .padding(.trailing, 6)
+                        .padding(.vertical, 10)
+                } else {
+                    MiniPlayerView(
+                        artworkTransitionID: artworkTransitionID,
+                        artworkTransitionNamespace:
+                            artworkTransitionNamespace
+                    ) {
+                        onOpen(nil)
+                    }
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 2)
                 }
-                .padding(.horizontal, 4)
-                .padding(.vertical, 2)
             }
             .frame(maxWidth: 690)
             .glassEffect(glass, in: .capsule)
