@@ -22,6 +22,7 @@ struct MeloXApp: App {
     @State private var isLowPowerModeEnabled = ProcessInfo.processInfo.isLowPowerModeEnabled
 
     init() {
+        Self.configureArtworkNetworkCache()
         let settings = AppSettings()
         let releaseNotes = AppReleaseNotesStore(
             currentVersion: Bundle.main.appReleaseVersion,
@@ -120,5 +121,16 @@ struct MeloXApp: App {
 
     private var effectiveLyricsRefreshRate: LyricsRefreshRate {
         isLowPowerModeEnabled ? .lowPowerValue : settings.lyricsRefreshRate
+    }
+
+    /// Give Nuke and the artwork palette loader a real disk cache. Without
+    /// this, the shared URLCache uses a small default budget and revisiting a
+    /// list can re-fetch the same thumbnails instead of loading them locally.
+    private static func configureArtworkNetworkCache() {
+        URLCache.shared = URLCache(
+            memoryCapacity: 64 * 1_024 * 1_024,
+            diskCapacity: 512 * 1_024 * 1_024,
+            diskPath: nil
+        )
     }
 }

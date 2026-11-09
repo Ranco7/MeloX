@@ -2,6 +2,41 @@ import Nuke
 import NukeUI
 import SwiftUI
 
+/// Bridges the moment between a new thumbnail request and Nuke's decoded-image
+/// cache. Nuke keys decoded images by request (including thumbnail pixels), so
+/// a layout change while a row is rebuilt would otherwise briefly show a
+/// spinner even though the same artwork was just on screen.
+private final class ArtworkImageMemoryCache {
+    static let shared = ArtworkImageMemoryCache()
+
+    private final class Entry {
+        let image: Image
+
+        init(_ image: Image) {
+            self.image = image
+        }
+    }
+
+    private let storage = NSCache<NSURL, Entry>()
+
+    init() {
+        storage.countLimit = 128
+        storage.totalCostLimit = 64 * 1_024 * 1_024
+    }
+
+    func image(for url: URL) -> Image? {
+        storage.object(forKey: url as NSURL)?.image
+    }
+
+    func store(_ image: Image, for url: URL) {
+        storage.setObject(
+            Entry(image),
+            forKey: url as NSURL,
+            cost: 512 * 1_024
+        )
+    }
+}
+
 struct ArtworkImage: View {
     let url: URL?
     var cornerRadius: CGFloat = 10
@@ -12,15 +47,28 @@ struct ArtworkImage: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let cachedImage = url.flatMap {
+                ArtworkImageMemoryCache.shared.image(for: $0)
+            }
             LazyImage(
                 request: imageRequest(for: proxy.size),
                 transaction: Transaction(animation: imageLoadAnimation)
             ) { state in
-                content(image: state.image, hasError: state.error != nil)
-                    .frame(
-                        width: proxy.size.width,
-                        height: proxy.size.height
-                    )
+                content(
+                    image: state.image ?? cachedImage,
+                    hasError: state.error != nil
+                )
+                .frame(
+                    width: proxy.size.width,
+                    height: proxy.size.height
+                )
+                .onChange(of: state.image != nil, initial: true) {
+                    _, hasImage in
+                    guard hasImage,
+                          let image = state.image,
+                          let url else { return }
+                    ArtworkImageMemoryCache.shared.store(image, for: url)
+                }
             }
             .onDisappear(.lowerPriority)
         }
@@ -34,16 +82,28 @@ struct ArtworkImage: View {
 
         var request = ImageRequest(url: url)
         // Nuke's thumbnail size is expressed in pixels; SwiftUI points would
-        // under-sample the image on 2x/3x displays.
+        // under-sample the image on 2x/3x displays. Quantizing the pixel size
+        // keeps the request cacheable while a window or grid is resizing.
         let pixelScale = max(displayScale, 1)
         request.thumbnail = ImageRequest.ThumbnailOptions(
             size: CGSize(
-                width: max(size.width, 1) * pixelScale,
-                height: max(size.height, 1) * pixelScale
+                width: Self.quantizedPixelLength(
+                    size.width * pixelScale
+                ),
+                height: Self.quantizedPixelLength(
+                    size.height * pixelScale
+                )
             ),
             contentMode: .aspectFill
         )
         return request
+    }
+
+    private nonisolated static func quantizedPixelLength(
+        _ value: CGFloat
+    ) -> CGFloat {
+        let finiteValue = value.isFinite ? max(value, 1) : 1
+        return max((finiteValue / 16).rounded(.up) * 16, 16)
     }
 
     private var imageLoadAnimation: Animation? {
