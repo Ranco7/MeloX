@@ -176,7 +176,13 @@ struct MusicCollectionDetailLayout<Hero: View, Tracks: View>: View {
         .frame(maxWidth: .infinity)
         .onGeometryChange(for: CGFloat?.self) { geometry in
             let width = geometry.size.width
-            return width >= MusicCollectionLayout.wideLayoutBreakpoint ? width : nil
+            guard width >= MusicCollectionLayout.wideLayoutBreakpoint else {
+                return nil
+            }
+            // Continuous Stage Manager resizing otherwise rebuilds the whole
+            // hero and track layout for every pixel. An 8pt step keeps the
+            // adaptive layout while cutting the update rate.
+            return (width / 8).rounded(.down) * 8
         } action: { measuredWideWidth = $0 }
     }
 }

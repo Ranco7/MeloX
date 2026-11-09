@@ -17,9 +17,16 @@ struct PlaylistTrackList: View {
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, minHeight: 180)
         } else {
+            let indicesBySongID = Dictionary(
+                tracks.enumerated().map { ($0.element.id, $0.offset) },
+                uniquingKeysWith: { first, _ in first }
+            )
             LazyVStack(spacing: 0) {
-                ForEach(tracks.indices, id: \.self) { index in
-                    let song = tracks[index]
+                // Rows are identified by song ID, not by array position. A
+                // refresh or removal can then never evaluate an out-of-range
+                // index while SwiftUI is diffing the previous list.
+                ForEach(tracks, id: \.id) { song in
+                    let index = indicesBySongID[song.id] ?? 0
                     PlaylistTrackRow(
                         song: song,
                         tracks: tracks,

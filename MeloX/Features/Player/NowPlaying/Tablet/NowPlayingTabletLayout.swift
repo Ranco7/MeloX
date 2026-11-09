@@ -59,11 +59,16 @@ struct NowPlayingTabletLayout {
             )
         }
         // Preserve the desktop proportions while leaving room for both
-        // columns in portrait and resizable iPad windows.
-        return min(
-            scaledPlayerWidth,
-            viewport.width * Self.splitViewWidthRatio
-                - Self.splitViewHorizontalInset
+        // columns in portrait and resizable iPad windows. A transient
+        // zero-width geometry pass during Stage Manager resizing must not
+        // produce a negative frame.
+        return max(
+            min(
+                scaledPlayerWidth,
+                viewport.width * Self.splitViewWidthRatio
+                    - Self.splitViewHorizontalInset
+            ),
+            1
         )
     }
 
@@ -80,7 +85,11 @@ struct NowPlayingTabletLayout {
     }
 
     var panelWidth: CGFloat {
-        viewport.width * 0.5 - max(24, viewport.width * 0.045)
+        max(
+            viewport.width * 0.5
+                - max(24, viewport.width * 0.045),
+            1
+        )
     }
 
     private var referenceArtworkSize: CGFloat {
