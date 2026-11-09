@@ -1,11 +1,15 @@
 import Nuke
 import NukeUI
 import SwiftUI
+import UIKit
 
 /// Bridges the moment between a new thumbnail request and Nuke's decoded-image
 /// cache. Nuke keys decoded images by request (including thumbnail pixels), so
 /// a layout change while a row is rebuilt would otherwise briefly show a
 /// spinner even though the same artwork was just on screen.
+///
+/// Entries share Nuke's decoded pixel buffers; the cost is the real decoded
+/// byte count so a few large covers cannot pin tens of megabytes.
 private final class ArtworkImageMemoryCache {
     static let shared = ArtworkImageMemoryCache()
 
@@ -28,11 +32,26 @@ private final class ArtworkImageMemoryCache {
         storage.object(forKey: url as NSURL)?.image
     }
 
-    func store(_ image: Image, for url: URL) {
+    func store(_ image: Image, byteCost: Int, for url: URL) {
         storage.setObject(
             Entry(image),
             forKey: url as NSURL,
-            cost: 512 * 1_024
+            cost: byteCost
+        )
+    }
+
+    nonisolated static func byteCost(of image: UIImage) -> Int {
+        if let cgImage = image.cgImage {
+            return max(cgImage.bytesPerRow * cgImage.height, 1)
+        }
+        let scale = max(image.scale, 1)
+        return max(
+            Int(
+                image.size.width * scale
+                    * image.size.height * scale
+                    * 4
+            ),
+            1
         )
     }
 }
@@ -54,6 +73,17 @@ struct ArtworkImage: View {
                 request: imageRequest(for: proxy.size),
                 transaction: Transaction(animation: imageLoadAnimation)
             ) { state in
+                if let url,
+                   let image = state.image,
+                   let response = state.response {
+                    ArtworkImageMemoryCache.shared.store(
+                        image,
+                        byteCost: ArtworkImageMemoryCache.byteCost(
+                            of: response.image
+                        ),
+                        for: url
+                    )
+                }
                 content(
                     image: state.image ?? cachedImage,
                     hasError: state.error != nil
@@ -62,13 +92,6 @@ struct ArtworkImage: View {
                     width: proxy.size.width,
                     height: proxy.size.height
                 )
-                .onChange(of: state.image != nil, initial: true) {
-                    _, hasImage in
-                    guard hasImage,
-                          let image = state.image,
-                          let url else { return }
-                    ArtworkImageMemoryCache.shared.store(image, for: url)
-                }
             }
             .onDisappear(.lowerPriority)
         }
