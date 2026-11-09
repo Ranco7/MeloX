@@ -159,6 +159,11 @@ nonisolated enum L10n {
             ),
             let bundle = Bundle(path: path)
         else {
+            #if DEBUG
+            assertionFailure(
+                "MeloXLocalization is missing \(localization).lproj in \(Bundle.main.bundleIdentifier ?? "the main bundle")."
+            )
+            #endif
             return .main
         }
         return bundle
