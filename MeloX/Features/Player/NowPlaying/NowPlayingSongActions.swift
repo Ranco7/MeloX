@@ -54,7 +54,7 @@ struct NowPlayingSongActions: View {
                     : "star"
             )
             .font(.title3.weight(.medium))
-            .frame(width: 40, height: 40)
+            .frame(width: 44, height: 44)
             .background(.white.opacity(0.13), in: .circle)
             .contentShape(.circle)
         }
@@ -217,7 +217,7 @@ struct NowPlayingSongActions: View {
             Image(systemName: "ellipsis")
                 .font(.title3.weight(.semibold))
                 .foregroundStyle(usesCompactMenu ? Color.primary : .white)
-                .frame(width: usesCompactMenu ? 44 : 40, height: usesCompactMenu ? 44 : 40)
+                .frame(width: 44, height: 44)
                 .background(usesCompactMenu ? Color.clear : .white.opacity(0.15), in: .circle)
                 .contentShape(.circle)
         }

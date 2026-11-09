@@ -82,7 +82,7 @@ struct TabletMiniPlayerView: View {
             } label: {
                 HStack(spacing: 9) {
                     ArtworkImage(url: song.album?.artworkURL, cornerRadius: 7)
-                        .frame(width: 40, height: 40)
+                        .frame(width: 44, height: 44)
                         .matchedTransitionSource(id: artworkTransitionID, in: artworkTransitionNamespace)
 
                     VStack(alignment: .leading, spacing: 2) {

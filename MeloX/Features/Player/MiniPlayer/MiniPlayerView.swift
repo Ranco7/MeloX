@@ -1,6 +1,9 @@
 import SwiftUI
 
 struct MiniPlayerView: View {
+    /// Keeps every transport control at the HIG minimum touch size.
+    static let minimumTouchTarget: CGFloat = 44
+
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
     @Environment(PlayerStore.self) private var player
@@ -44,7 +47,8 @@ struct MiniPlayerView: View {
                 if player.isLoading {
                     ProgressView()
                         .controlSize(.small)
-                        .frame(width: 36, height: 36)
+                        .frame(width: Self.minimumTouchTarget, height: Self.minimumTouchTarget)
+                        .accessibilityHidden(true)
                 } else {
                     Button {
                         player.togglePlayback()
@@ -65,7 +69,7 @@ struct MiniPlayerView: View {
                                     : .snappy(duration: 0.2, extraBounce: 0),
                                 value: player.isPlaying
                             )
-                            .frame(width: 36, height: 36)
+                            .frame(width: Self.minimumTouchTarget, height: Self.minimumTouchTarget)
                             .contentShape(.circle)
                     }
                     .buttonStyle(.plain)
@@ -82,7 +86,7 @@ struct MiniPlayerView: View {
                     } label: {
                         Image(systemName: "forward.fill")
                             .font(.title3.weight(.semibold))
-                            .frame(width: 36, height: 36)
+                            .frame(width: Self.minimumTouchTarget, height: Self.minimumTouchTarget)
                             .contentShape(.circle)
                     }
                     .buttonStyle(.plain)
