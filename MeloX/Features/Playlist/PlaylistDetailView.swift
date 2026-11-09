@@ -304,8 +304,12 @@ struct PlaylistDetailView: View {
         let palette = artworkPalette
             ?? .fallback(prefersDarkAppearance: systemColorScheme == .dark)
         return usesTabletBackdrop
-            ? palette.tabletPalette(usesLightAppearance: settings.appearance == .light)
+            ? palette.tabletPalette(usesLightAppearance: usesLightAppearance)
             : palette
+    }
+
+    private var usesLightAppearance: Bool {
+        (settings.appearance.preferredColorScheme ?? systemColorScheme) == .light
     }
 
     private var interfaceColorScheme: ColorScheme {
