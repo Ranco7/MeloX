@@ -333,25 +333,21 @@ struct ContentView: View {
 
     @ViewBuilder
     private var playerAwareTabView: some View {
-        if player.currentSong != nil {
-            if #available(iOS 26.1, *) {
-                tabs
-                    .tabViewBottomAccessory(
-                        isEnabled: !isTabViewBottomAccessorySuppressed
-                    ) {
-                        miniPlayer
-                    }
-            } else {
-                tabs
-                    .tabViewBottomAccessory {
-                        if !isTabViewBottomAccessorySuppressed {
-                            miniPlayer
-                        }
-                    }
+        if #available(iOS 26.1, *) {
+            tabs.tabViewBottomAccessory(isEnabled: showsMiniPlayer) {
+                miniPlayer
             }
         } else {
-            tabs
+            tabs.tabViewBottomAccessory {
+                if showsMiniPlayer {
+                    miniPlayer
+                }
+            }
         }
+    }
+
+    private var showsMiniPlayer: Bool {
+        player.currentSong != nil && !isTabViewBottomAccessorySuppressed
     }
 
     private var miniPlayer: some View {
@@ -370,7 +366,7 @@ struct ContentView: View {
                 navigationTab(for: tab)
 
                 if tab == .library, !displayedSidebarLibraryTabs.isEmpty {
-                    TabSection(L10n.string("ui.navigation.library")) {
+                    TabSection(L10n.string("ui.library.category_picker")) {
                         ForEach(displayedSidebarLibraryTabs) { shortcut in
                             navigationTab(for: shortcut)
                                 .defaultVisibility(
@@ -383,6 +379,7 @@ struct ContentView: View {
             }
         }
         .tabViewStyle(.sidebarAdaptable)
+        .defaultAdaptableTabBarPlacement(.sidebar)
         .tabBarMinimizeBehavior(.onScrollDown)
         .environment(\.musicNavigationNamespace, musicNavigationNamespace)
     }
