@@ -45,7 +45,11 @@ final class WatchAccountStore: ObservableObject {
     }
 
     var isLoggedIn: Bool {
-        cookie.contains("MUSIC_U=")
+        let rawCookie = cookie.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rawCookie.isEmpty else { return false }
+        // Phone sync also supports a bare MUSIC_U token without a "=" pair.
+        guard rawCookie.contains("=") else { return true }
+        return rawCookie.contains("MUSIC_U=")
     }
 
     var prefersLocalLogin: Bool {
