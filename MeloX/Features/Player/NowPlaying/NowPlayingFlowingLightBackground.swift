@@ -9,6 +9,7 @@ struct NowPlayingFlowingLightBackground: View {
     @Environment(\.isLuminanceReduced)
     private var isLuminanceReduced
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.nowPlayingCardInTransit) private var cardInTransit
 
     let palette: ArtworkFlowingLightPalette
     let beatTimeline: PlaybackBeatTimeline?
@@ -68,6 +69,7 @@ struct NowPlayingFlowingLightBackground: View {
             || isLuminanceReduced
             || scenePhase != .active
             || !player.isPlaying
+            || cardInTransit
     }
 
     private var allowsBeatEffects: Bool {

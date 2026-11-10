@@ -11,6 +11,7 @@ struct NowPlayingAppleMusicBackground: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.effectiveLyricsRefreshRate)
     private var effectiveLyricsRefreshRate
+    @Environment(\.nowPlayingCardInTransit) private var cardInTransit
 
     let artworkURL: URL?
     let isBehindLyrics: Bool
@@ -150,6 +151,7 @@ struct NowPlayingAppleMusicBackground: View {
             || isLuminanceReduced
             || scenePhase != .active
             || !player.isPlaying
+            || cardInTransit
     }
 
     private var effectiveSpectrum:

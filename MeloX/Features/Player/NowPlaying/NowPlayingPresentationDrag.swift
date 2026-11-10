@@ -1,7 +1,7 @@
 import Foundation
 
 /// Point/velocity policy shared by the card and its scroll-aware pan recognizer.
-enum NowPlayingPresentationDrag {
+nonisolated enum NowPlayingPresentationDrag {
     static let maximumTopCornerRadius = 34.0
     // Rational easing preserves the measured ~23.65pt radius at 38% travel,
     // while growing continuously from square to the display-like 34pt radius.

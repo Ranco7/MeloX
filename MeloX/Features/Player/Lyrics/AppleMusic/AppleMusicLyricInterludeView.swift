@@ -16,6 +16,7 @@ enum AppleMusicLyricsPlaybackFocus: Hashable {
 }
 
 struct AppleMusicLyricsFocusCoordinator: View {
+    @Environment(\.nowPlayingCardInTransit) private var cardInTransit
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
 
@@ -50,10 +51,11 @@ struct AppleMusicLyricsFocusCoordinator: View {
             // activity changes, so watching the 10 Hz progress value only
             // repeated a full lyric scan on every clock tick.
             .onChange(of: isActive) { _, isActive in
-                guard isActive else { return }
+                guard isActive, !cardInTransit else { return }
                 synchronizeImmediately()
             }
-            .task(id: synchronizationTrigger) {
+            .task(id: CardTransitTaskID(value: synchronizationTrigger, isInTransit: cardInTransit)) {
+                guard !cardInTransit else { return }
                 await synchronizeAtTransitions()
             }
     }
@@ -87,7 +89,7 @@ struct AppleMusicLyricsFocusCoordinator: View {
     }
 
     private func synchronizeAtTransitions() async {
-        guard isActive else { return }
+        guard isActive, !cardInTransit else { return }
         while !Task.isCancelled {
             let adjustedProgress = player.estimatedProgress()
                 + advanceTime
@@ -176,6 +178,7 @@ struct AppleMusicLyricInterludeView: View {
     private var accessibilityReduceMotion
     @Environment(\.effectiveLyricsRefreshRate)
     private var effectiveLyricsRefreshRate
+    @Environment(\.nowPlayingCardInTransit) private var cardInTransit
     @Environment(PlayerStore.self) private var player
 
     let interlude: LyricInterlude
@@ -218,7 +221,7 @@ struct AppleMusicLyricInterludeView: View {
                     .animation(
                         minimumInterval:
                             effectiveLyricsRefreshRate.minimumInterval,
-                        paused: !player.isPlaying || !isAnimationActive
+                        paused: cardInTransit || !player.isPlaying || !isAnimationActive
                     )
                 ) { timeline in
                     dots(

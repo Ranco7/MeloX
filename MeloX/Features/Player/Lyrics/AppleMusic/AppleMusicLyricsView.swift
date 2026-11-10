@@ -69,6 +69,7 @@ struct AppleMusicLyricsView: View {
 
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @Environment(\.nowPlayingCardInTransit) private var cardInTransit
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
 
@@ -906,7 +907,8 @@ struct AppleMusicLyricsView: View {
             .onAppear {
                 synchronizeFocusWithPlayback()
             }
-            .task(id: focusMovementTrigger) {
+            .task(id: CardTransitTaskID(value: focusMovementTrigger, isInTransit: cardInTransit)) {
+                guard !cardInTransit else { return }
                 await performFocusMovement(
                     viewportWidth: viewportWidth,
                     viewportHeight: viewportHeight,

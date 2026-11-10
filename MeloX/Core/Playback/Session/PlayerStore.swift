@@ -219,6 +219,10 @@ final class PlayerStore {
     @ObservationIgnored
     private var cachedHandoffToken: UUID?
 
+    @ObservationIgnored private var nowPlayingCardInTransit = false
+    @ObservationIgnored private var ownedBeatAnalysisID = UUID()
+    @ObservationIgnored private var ownedBeatAnalysisTask: Task<PlaybackBeatTimeline?, Never>?
+
     @ObservationIgnored
     private var beatAnalysisGeneration = 0
 
@@ -929,8 +933,41 @@ final class PlayerStore {
         prepareAutoMixIfNeeded()
     }
 
+    /// Pauses only visual-analysis work, never playback or existing results.
+    func setNowPlayingCardInTransit(_ value: Bool) {
+        guard nowPlayingCardInTransit != value else { return }
+        nowPlayingCardInTransit = value
+        if value {
+            beatAnalysisTask?.cancel()
+            beatAnalysisTask = nil
+            ownedBeatAnalysisID = UUID()
+            ownedBeatAnalysisTask?.cancel()
+            ownedBeatAnalysisTask = nil
+            beatAnalysisGeneration += 1
+            restoreBeatAnalysisStatus()
+        } else {
+            scheduleBeatAnalysisIfNeeded()
+        }
+    }
+
     @discardableResult
     func analyzeCurrentSongBeats() async -> PlaybackBeatTimeline? {
+        guard !nowPlayingCardInTransit else { return currentBeatTimeline }
+        if let ownedBeatAnalysisTask { return await ownedBeatAnalysisTask.value }
+        let requestID = UUID()
+        ownedBeatAnalysisID = requestID
+        let task = Task { [weak self] in await self?.performCurrentSongBeatAnalysis() }
+        ownedBeatAnalysisTask = task
+        let result = await task.value
+        // A cancelled generation must not erase a newly scheduled owner.
+        if ownedBeatAnalysisID == requestID { ownedBeatAnalysisTask = nil }
+        return result
+    }
+
+    private func performCurrentSongBeatAnalysis() async -> PlaybackBeatTimeline? {
+        // Cancellation does not prevent a queued task body from entering.
+        // Transit must never take the invalid-song branch that clears results.
+        guard !Task.isCancelled, !nowPlayingCardInTransit else { return currentBeatTimeline }
         guard let song = currentSong,
               !song.isPodcastProgram,
               let source = currentPlaybackSource else {
@@ -1004,6 +1041,9 @@ final class PlayerStore {
     }
 
     private func resetBeatAnalysis() {
+        ownedBeatAnalysisID = UUID()
+        ownedBeatAnalysisTask?.cancel()
+        ownedBeatAnalysisTask = nil
         beatAnalysisTask?.cancel()
         beatAnalysisTask = nil
         beatAnalysisGeneration += 1
@@ -1012,8 +1052,8 @@ final class PlayerStore {
     }
 
     private func scheduleBeatAnalysisIfNeeded() {
-        guard settings.playerBackgroundStyle
-            == .flowingLight,
+        guard !nowPlayingCardInTransit,
+            settings.playerBackgroundStyle == .flowingLight,
             settings
                 .playerBackgroundBeatEffectsEnabled,
             currentSong?.isPodcastProgram == false,

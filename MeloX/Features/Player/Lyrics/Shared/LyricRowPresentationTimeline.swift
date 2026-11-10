@@ -5,6 +5,7 @@ import SwiftUI
 struct LyricRowPresentationTimeline<Content: View>: View {
     @Environment(\.effectiveLyricsRefreshRate)
     private var effectiveLyricsRefreshRate
+    @Environment(\.nowPlayingCardInTransit) private var cardInTransit
 
     let lyricID: LyricLine.ID
     let focusedLyricID: LyricLine.ID?
@@ -17,7 +18,7 @@ struct LyricRowPresentationTimeline<Content: View>: View {
         TimelineView(
             .animation(
                 minimumInterval: effectiveLyricsRefreshRate.minimumInterval,
-                paused: !requiresContinuousUpdates || !isActive
+                paused: cardInTransit || !requiresContinuousUpdates || !isActive
             )
         ) { context in
             content(

@@ -146,6 +146,8 @@ struct ContentView: View {
                         dismissalRequested: isPlayerDismissalRequested,
                         onDismiss: dismissPlayer
                     )
+                        .ignoresSafeArea()
+                        .preferredColorScheme(.dark)
                         .environment(
                             \.openMusicRoute,
                             OpenMusicRouteAction(action: openMusicRoute)

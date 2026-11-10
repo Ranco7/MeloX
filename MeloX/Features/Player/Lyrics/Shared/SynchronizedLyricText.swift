@@ -58,6 +58,7 @@ struct SynchronizedLyricText: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.effectiveLyricsRefreshRate) private var effectiveLyricsRefreshRate
+    @Environment(\.nowPlayingCardInTransit) private var cardInTransit
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
 
@@ -375,7 +376,7 @@ struct SynchronizedLyricText: View {
         TimelineView(
             .animation(
                 minimumInterval: effectiveLyricsRefreshRate.minimumInterval,
-                paused: !presentsTimedRomanization || !player.isPlaying
+                paused: cardInTransit || !presentsTimedRomanization || !player.isPlaying
                     || !isAnimationActive || !displaysRomanization
             )
         ) { _ in
@@ -472,7 +473,7 @@ struct SynchronizedLyricText: View {
         TimelineView(
             .animation(
                 minimumInterval: effectiveLyricsRefreshRate.minimumInterval,
-                paused: !presentsTimedLyrics
+                paused: cardInTransit || !presentsTimedLyrics
                     || !player.isPlaying || !isAnimationActive
             )
         ) { _ in

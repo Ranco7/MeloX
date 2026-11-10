@@ -3,6 +3,7 @@ import SwiftUI
 struct NowPlayingLyricSynchronizer: View {
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
+    @Environment(\.nowPlayingCardInTransit) private var cardInTransit
 
     let lyrics: [LyricLine]
     @Binding var highlightedLyricID: LyricLine.ID?
@@ -29,7 +30,8 @@ struct NowPlayingLyricSynchronizer: View {
             advanceTime: advanceTime,
             lyricCount: lyrics.count,
             firstLyricID: lyrics.first?.id,
-            lastLyricID: lyrics.last?.id
+            lastLyricID: lyrics.last?.id,
+            isInTransit: cardInTransit
         )
     }
 
@@ -40,6 +42,7 @@ struct NowPlayingLyricSynchronizer: View {
         )
 
         while !Task.isCancelled {
+            guard !cardInTransit else { return }
             let adjustedProgress = player.estimatedProgress() + advanceTime
             let position = LyricPlaybackTimeline.position(
                 at: adjustedProgress,
@@ -81,4 +84,5 @@ private struct LyricSynchronizationTrigger: Hashable {
     let lyricCount: Int
     let firstLyricID: LyricLine.ID?
     let lastLyricID: LyricLine.ID?
+    let isInTransit: Bool
 }

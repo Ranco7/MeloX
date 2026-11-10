@@ -11,6 +11,7 @@ struct NowPlayingView: View {
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
     @Environment(LyricsStore.self) private var lyricsStore
+    @Environment(\.nowPlayingCardInTransit) private var cardInTransit
 
     @State private var pageTransition: NowPlayingTransitionCoordinator
     @State private var showsLyricsControls = true
@@ -178,8 +179,9 @@ struct NowPlayingView: View {
                 showsTextPVLandscapeSuggestion = false
             }
         }
-        .task(id: appleMusicControlsActivityGeneration) {
-            guard usesAutoHidingAppleMusicInterface,
+        .task(id: controlsAutoHideTaskID) {
+            guard !cardInTransit,
+                  usesAutoHidingAppleMusicInterface,
                   showsLyricsControls,
                   !accessibilityVoiceOverEnabled else {
                 return
@@ -285,7 +287,15 @@ struct NowPlayingView: View {
                     == .flowingLight
                     && settings
                         .playerBackgroundBeatEffectsEnabled
-                    && player.currentSong?.isPodcastProgram != true
+                    && player.currentSong?.isPodcastProgram != true,
+            isInTransit: cardInTransit
+        )
+    }
+
+    private var controlsAutoHideTaskID: NowPlayingControlsAutoHideTaskID {
+        NowPlayingControlsAutoHideTaskID(
+            generation: appleMusicControlsActivityGeneration,
+            isInTransit: cardInTransit
         )
     }
 
@@ -295,6 +305,7 @@ struct NowPlayingView: View {
             player.clearCurrentSongBeatAnalysis()
             return
         }
+        guard !cardInTransit else { return }
         guard
               taskID.isPlaybackReady,
               taskID.songID != nil else {
@@ -912,7 +923,8 @@ struct NowPlayingView: View {
                 .requestID,
             songID: player.currentSong?.id,
             preparedSongID: preparedLyricsSongID,
-            isContentPrepared: isLyricsContentPrepared
+            isContentPrepared: isLyricsContentPrepared,
+            isInTransit: cardInTransit
         )
     }
 
@@ -961,8 +973,10 @@ struct NowPlayingView: View {
             return
         }
         let requestID = pendingEntrance.requestID
+        guard !cardInTransit else { return }
 
         await Task.yield()
+        guard !cardInTransit else { return }
         guard !Task.isCancelled,
               pageTransition.pendingLyricsEntrance?.requestID
                 == requestID else {
@@ -1001,6 +1015,7 @@ struct NowPlayingView: View {
         }
 
         guard !Task.isCancelled,
+              !cardInTransit,
               page == .lyrics,
               pageTransition.pendingLyricsEntrance?.requestID
                 == requestID else {
@@ -1098,6 +1113,12 @@ private struct NowPlayingBeatAnalysisTaskID: Equatable {
     let songID: Int?
     let isPlaybackReady: Bool
     let isEnabled: Bool
+    let isInTransit: Bool
+}
+
+private struct NowPlayingControlsAutoHideTaskID: Equatable {
+    let generation: Int
+    let isInTransit: Bool
 }
 
 private struct NowPlayingTransitionSettlementTaskID: Equatable {
@@ -1110,18 +1131,17 @@ private struct NowPlayingLyricsEntranceTaskID: Equatable {
     let songID: Song.ID?
     let preparedSongID: Song.ID?
     let isContentPrepared: Bool
+    let isInTransit: Bool
 }
 
-/// The only view that observes the card's dynamic background extension. The
-/// player body keeps its layout size; this leaf alone grows the artwork-tinted
-/// background below the content while the card is above the top edge.
+/// The player background fills the card. The card's static extension layer is
+/// owned by the UIKit container and never participates in SwiftUI layout.
 private struct NowPlayingBackgroundLayer: View {
     let artworkURL: URL?
     let beatTimeline: PlaybackBeatTimeline?
     let isBehindLyrics: Bool
     let usesMonochrome: Bool
     let size: CGSize
-    @Environment(\.nowPlayingBackgroundExtension) private var backgroundExtension
 
     var body: some View {
         Group {
@@ -1136,16 +1156,9 @@ private struct NowPlayingBackgroundLayer: View {
                 )
             }
         }
-        // Extend the existing artwork-tinted background only. The outer frame
-        // keeps the content's original geometry and alignment.
         .frame(
             width: size.width,
-            height: size.height + backgroundExtension
-        )
-        .frame(
-            width: size.width,
-            height: size.height,
-            alignment: .top
+            height: size.height
         )
     }
 }

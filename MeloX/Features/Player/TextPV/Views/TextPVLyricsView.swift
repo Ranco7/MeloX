@@ -3,6 +3,7 @@ import SwiftUI
 struct TextPVLyricsView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.effectiveLyricsRefreshRate) private var effectiveLyricsRefreshRate
+    @Environment(\.nowPlayingCardInTransit) private var cardInTransit
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
 
@@ -38,7 +39,7 @@ struct TextPVLyricsView: View {
             TimelineView(
                 .animation(
                     minimumInterval: textPVMinimumInterval,
-                    paused: !player.isPlaying || settings.textPV.animationSpeed <= 0
+                    paused: cardInTransit || !player.isPlaying || settings.textPV.animationSpeed <= 0
                 )
             ) { timeline in
                 stageFrame(
