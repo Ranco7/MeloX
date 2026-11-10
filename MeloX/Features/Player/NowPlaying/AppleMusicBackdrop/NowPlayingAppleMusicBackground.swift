@@ -122,36 +122,17 @@ struct NowPlayingAppleMusicBackground: View {
 
     @ViewBuilder
     private func artwork(in size: CGSize) -> some View {
-        AsyncImage(
+        ArtworkBackdropImage(
             url: artworkURL,
-            transaction: Transaction(
-                animation: accessibilityReduceMotion
-                    ? nil
-                    : .timingCurve(
-                        0,
-                        0,
-                        0.3,
-                        1,
-                        duration: 0.8
-                    )
+            placeholderColor: Color(
+                red: 0.18,
+                green: 0.18,
+                blue: 0.18
             )
-        ) { phase in
-            if case .success(let image) = phase {
-                image
-                    .resizable()
-                    .scaledToFill()
-                    .transition(.opacity)
-            } else {
-                Color(
-                    red: 0.18,
-                    green: 0.18,
-                    blue: 0.18
-                )
-            }
-        }
-        .id(artworkURL)
-        .frame(width: size.width, height: size.height)
-        .clipped()
+        )
+            .id(artworkURL)
+            .frame(width: size.width, height: size.height)
+            .clipped()
     }
 
     /// The backdrop is heavily blurred and mostly covered while lyrics are

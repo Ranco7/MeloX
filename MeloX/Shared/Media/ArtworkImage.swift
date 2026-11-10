@@ -10,34 +10,57 @@ import UIKit
 ///
 /// Entries share Nuke's decoded pixel buffers; the cost is the real decoded
 /// byte count so a few large covers cannot pin tens of megabytes.
-private final class ArtworkImageMemoryCache {
+nonisolated final class ArtworkImageMemoryCache: @unchecked Sendable {
     static let shared = ArtworkImageMemoryCache()
 
     private final class Entry {
-        let image: Image
+        let image: UIImage
+        let pixelArea: Int
 
-        init(_ image: Image) {
+        init(_ image: UIImage, pixelArea: Int) {
             self.image = image
+            self.pixelArea = pixelArea
         }
     }
 
     private let storage = NSCache<NSURL, Entry>()
+    private let lock = NSLock()
 
     init() {
         storage.countLimit = 128
         storage.totalCostLimit = 64 * 1_024 * 1_024
     }
 
-    func image(for url: URL) -> Image? {
+    @MainActor func image(for url: URL) -> Image? {
+        uiImage(for: url).map { Image(uiImage: $0) }
+    }
+
+    func uiImage(for url: URL) -> UIImage? {
         storage.object(forKey: url as NSURL)?.image
     }
 
-    func store(_ image: Image, byteCost: Int, for url: URL) {
+    func store(_ image: UIImage, byteCost: Int, for url: URL) {
+        let cost = max(byteCost, 1)
+        let area = Self.pixelArea(of: image)
+        lock.lock()
+        defer { lock.unlock() }
+        if let existing = storage.object(forKey: url as NSURL),
+           !ArtworkImageCachePolicy.shouldReplace(
+               existingCost: existing.pixelArea,
+               newCost: area
+           ) {
+            return
+        }
         storage.setObject(
-            Entry(image),
+            Entry(image, pixelArea: area),
             forKey: url as NSURL,
-            cost: byteCost
+            cost: cost
         )
+    }
+
+    static func pixelArea(of image: UIImage) -> Int {
+        if let image = image.cgImage { return image.width * image.height }
+        return max(Int(image.size.width * image.size.height * image.scale * image.scale), 1)
     }
 
     nonisolated static func byteCost(of image: UIImage) -> Int {
@@ -88,7 +111,7 @@ struct ArtworkImage: View {
                     return
                 }
                 ArtworkImageMemoryCache.shared.store(
-                    Image(uiImage: response.image),
+                    response.image,
                     byteCost: ArtworkImageMemoryCache.byteCost(
                         of: response.image
                     ),

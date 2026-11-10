@@ -1,4 +1,5 @@
 import Nuke
+import Observation
 import SwiftUI
 import UIKit
 
@@ -16,6 +17,35 @@ private enum ContentRoute: Hashable {
 private enum ContentTab: Hashable {
     case page(AppTab)
     case playlist(Int)
+}
+
+@Observable
+private final class ContentColumnGeometryStore {
+    private(set) var storedBounds: [ContentTab: ContentColumnHorizontalBounds] = [:]
+
+    func update(_ tab: ContentTab, bounds: ContentColumnHorizontalBounds?) {
+        if let bounds {
+            guard storedBounds[tab] != bounds else { return }
+            storedBounds[tab] = bounds
+        } else if storedBounds[tab] != nil {
+            storedBounds[tab] = nil
+        }
+    }
+
+    func bounds(for tab: ContentTab) -> ContentColumnHorizontalBounds? {
+        storedBounds[tab]
+    }
+
+    func retainTabs(_ tabs: Set<ContentTab>) {
+        let retained = storedBounds.filter { tabs.contains($0.key) }
+        guard retained.count != storedBounds.count else { return }
+        storedBounds = retained
+    }
+
+    func reset() {
+        guard !storedBounds.isEmpty else { return }
+        storedBounds.removeAll()
+    }
 }
 
 private struct SidebarArtworkRequest: Hashable {
@@ -38,8 +68,9 @@ private struct HeartModeLaunchReadiness: Equatable {
 struct ContentView: View {
     private static let sidebarArtworkSize = CGSize(width: 24, height: 24)
     private static let floatingMiniPlayerClearance = MusicCollectionLayout.miniPlayerClearance
-    private static let floatingMiniPlayerOuterPadding = MusicCollectionLayout.miniPlayerInset
-    private static let floatingMiniPlayerWideContentPadding: CGFloat = 16
+    fileprivate static let floatingMiniPlayerOuterPadding = MusicCollectionLayout.miniPlayerInset
+    fileprivate static let floatingMiniPlayerWideContentPadding: CGFloat = 16
+    fileprivate static let contentColumnCoordinateSpace = "content-column-bounds"
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -51,11 +82,12 @@ struct ContentView: View {
     @Environment(DownloadStore.self) private var downloads
     @Environment(LyricsStore.self) private var lyrics
     @Environment(FloatingLyricsController.self) private var floatingLyrics
+    @Environment(\.displayScale) private var displayScale
 
     @State private var selectedTab: ContentTab
     @State private var navigationPaths: [ContentTab: NavigationPath] = [:]
     @State private var tabletCollectionChrome: [ContentTab: TabletCollectionChrome] = [:]
-    @State private var contentColumnFrames: [ContentTab: CGRect] = [:]
+    @State private var contentColumnGeometry = ContentColumnGeometryStore()
     @State private var sidebarArtwork: [SidebarArtworkRequest: UIImage] = [:]
     @State private var presentedSheet: ContentSheet?
     @State private var playerPresentation: PlayerPresentation?
@@ -165,6 +197,10 @@ struct ContentView: View {
             ) {
                 await startHeartModeOnLaunchIfNeeded()
             }
+            .task(id: player.currentSong?.album?.artworkURL) {
+                guard let url = player.currentSong?.album?.artworkURL else { return }
+                _ = await ArtworkBackdropImageProvider.shared.image(for: url, pixelDimension: 1024)
+            }
             .task(id: player.currentSong?.id) {
                 await synchronizeLyrics()
             }
@@ -177,7 +213,7 @@ struct ContentView: View {
             .onChange(of: settings.cookie) { _, _ in
                 navigationPaths = [:]
                 tabletCollectionChrome = [:]
-                contentColumnFrames = [:]
+                contentColumnGeometry.reset()
                 sidebarArtwork = [:]
                 if case .playlist = selectedTab {
                     selectedTab = .page(settings.fallbackNavigationTab)
@@ -371,42 +407,16 @@ struct ContentView: View {
         // safe area here keeps the bar at the window's bottom edge.
         .overlay(alignment: .bottom) {
             if usesFloatingMiniPlayer && showsMiniPlayer {
-                GeometryReader { proxy in
-                    let rootFrame = proxy.frame(in: .global)
-                    let measuredFrame = contentColumnFrames[selectedTab] ?? rootFrame
-                    let leading = max(0, min(measuredFrame.minX - rootFrame.minX, proxy.size.width))
-                    let trailing = max(0, min(rootFrame.maxX - measuredFrame.maxX, proxy.size.width - leading))
-                    let columnWidth = max(0, proxy.size.width - leading - trailing)
-                    TabletMiniPlayerView(
-                        collectionPalette:
-                            tabletCollectionChrome[selectedTab]?.palette,
-                        usesWideLayout:
-                            columnWidth
-                            - Self.floatingMiniPlayerOuterPadding * 2
-                            - Self.floatingMiniPlayerWideContentPadding
-                            >= TabletMiniPlayerView
-                                .minimumControlsWidth,
-                        onOpen: openPlayer
-                    )
-                    .padding(.leading, leading + Self.floatingMiniPlayerOuterPadding)
-                    .padding(.trailing, trailing + Self.floatingMiniPlayerOuterPadding)
-                    .padding(
-                        .bottom,
-                        MusicCollectionLayout.miniPlayerScreenBottomInset
-                    )
-                    .frame(
-                        maxWidth: .infinity,
-                        maxHeight: .infinity,
-                        alignment: .bottom
-                    )
-                }
-                // Measure the bottom inset from the window edge itself, like
-                // Apple Music's floating player, instead of stacking it on top
-                // of the home-indicator safe area. The keyboard is ignored for
-                // the same reason (see above).
-                .ignoresSafeArea(.all, edges: .bottom)
+                FloatingMiniPlayerBar(
+                    geometry: contentColumnGeometry,
+                    tab: selectedTab,
+                    collectionPalette:
+                        tabletCollectionChrome[selectedTab]?.palette,
+                    onOpen: openPlayer
+                )
             }
         }
+        .coordinateSpace(.named(Self.contentColumnCoordinateSpace))
     }
 
     private var showsMiniPlayer: Bool {
@@ -424,9 +434,26 @@ struct ContentView: View {
         }
     }
 
+    private func prepareArtworkForPresentation() {
+        guard let artworkURL = player.currentSong?.album?.artworkURL else {
+            return
+        }
+        // The mini player already uses this exact URL. Warm one bounded Nuke
+        // decode so the full-player artwork and backdrop share its encoded
+        // data instead of starting a duplicate full-size request.
+        if settings.playerBackgroundStyle == .flowingLight {
+            Task {
+                _ = await ArtworkAccentColorProvider.shared.detailAssets(
+                    for: artworkURL
+                )
+            }
+        }
+    }
+
     private func openPlayer(_ page: NowPlayingPage? = nil) {
         // Keep the presentation locked until onDismiss, including an interactive exit.
         guard player.currentSong != nil, !isPlayerPresentationActive else { return }
+        prepareArtworkForPresentation()
         requestedPlayerPage = page
         playerUsesReducedMotion = accessibilityReduceMotion
         isPlayerDismissalRequested = false
@@ -637,7 +664,7 @@ struct ContentView: View {
             return true
         }
         tabletCollectionChrome = tabletCollectionChrome.filter { activeTabs.contains($0.key) }
-        contentColumnFrames = contentColumnFrames.filter { activeTabs.contains($0.key) }
+        contentColumnGeometry.retainTabs(activeTabs)
         guard !activeTabs.contains(selectedTab) else { return }
         switch selectedTab {
         case .page(let page) where settings.homeTabs.contains(page) && activeTabs.contains(.page(.home)):
@@ -695,10 +722,16 @@ struct ContentView: View {
                 .musicDestinations(in: musicNavigationNamespace)
         }
         .id(settings.cookie)
-        .onGeometryChange(for: CGRect.self) { proxy in
-            proxy.frame(in: .global)
-        } action: { frame in
-            contentColumnFrames[tab] = frame
+        .onGeometryChange(for: ContentColumnHorizontalBounds?.self) { proxy in
+            guard proxy.size.width > 0 else { return nil }
+            let frame = proxy.frame(in: .named(Self.contentColumnCoordinateSpace))
+            return ContentColumnGeometryMath.horizontalBounds(
+                minX: Double(frame.minX),
+                maxX: Double(frame.maxX),
+                displayScale: Double(displayScale)
+            )
+        } action: { bounds in
+            contentColumnGeometry.update(tab, bounds: bounds)
         }
         .environment(
             \.tabletCollectionChrome,
@@ -905,5 +938,64 @@ struct ContentView: View {
         var path = navigationPaths[selectedTab] ?? NavigationPath()
         path.append(route)
         navigationPaths[selectedTab] = path
+    }
+}
+
+/// The floating bar is the only reader of the measured per-tab horizontal
+/// bounds. A bounds update re-evaluates this leaf, not `ContentView`, its tabs
+/// or their content.
+private struct FloatingMiniPlayerBar: View {
+    let geometry: ContentColumnGeometryStore
+    let tab: ContentTab
+    let collectionPalette: ArtworkDetailPalette?
+    let onOpen: (NowPlayingPage?) -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            let rootWidth = proxy.size.width
+            let bounds = geometry.bounds(for: tab)
+            let leading = CGFloat(
+                max(0, min(bounds?.minX ?? 0, Double(rootWidth)))
+            )
+            let trailing = CGFloat(
+                max(
+                    0,
+                    min(
+                        Double(rootWidth) - (bounds?.maxX ?? Double(rootWidth)),
+                        Double(rootWidth) - Double(leading)
+                    )
+                )
+            )
+            let columnWidth = max(0, rootWidth - leading - trailing)
+            TabletMiniPlayerView(
+                collectionPalette: collectionPalette,
+                usesWideLayout:
+                    columnWidth
+                    - ContentView.floatingMiniPlayerOuterPadding * 2
+                    - ContentView.floatingMiniPlayerWideContentPadding
+                    >= TabletMiniPlayerView.minimumControlsWidth,
+                onOpen: onOpen
+            )
+            .padding(
+                .leading,
+                leading + ContentView.floatingMiniPlayerOuterPadding
+            )
+            .padding(
+                .trailing,
+                trailing + ContentView.floatingMiniPlayerOuterPadding
+            )
+            .padding(
+                .bottom,
+                MusicCollectionLayout.miniPlayerScreenBottomInset
+            )
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: .bottom
+            )
+        }
+        // The overlay ignores the bottom safe area and the keyboard, so the bar
+        // stays at the window's bottom edge instead of an inset tab frame.
+        .ignoresSafeArea(.all, edges: .bottom)
     }
 }

@@ -10,8 +10,10 @@ class PlaylistPolishTests(unittest.TestCase):
         self.assertIn("MusicCollectionLayout.miniPlayerBottomInset", source)
     def test_content_column_measured(self):
         source = read("MeloX/App/ContentView.swift")
-        self.assertIn("contentColumnFrames[tab] = frame", source)
-        self.assertIn("let columnWidth = max(0, proxy.size.width - leading - trailing)", source)
+        self.assertNotIn("contentColumnFrames", source)
+        self.assertIn("ContentColumnGeometryMath.horizontalBounds", source)
+        self.assertIn("contentColumnGeometry.update(tab, bounds: bounds)", source)
+        self.assertIn("let columnWidth = max(0, rootWidth - leading - trailing)", source)
     def test_shared_grid(self):
         source = read("MeloX/Features/Playlist/PlaylistTrackList.swift")
         self.assertIn("MusicCollectionLayout.titleLeadingInset", source)

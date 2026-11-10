@@ -37,7 +37,9 @@ struct NowPlayingQueuePage: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        let entries = upcomingEntries
+
+        return VStack(spacing: 0) {
             List {
                 // Reserve the header space once. Pinning the overlay must not
                 // resize the List or change its content at the scroll threshold.
@@ -57,7 +59,7 @@ struct NowPlayingQueuePage: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
 
-                    if upcomingEntries.isEmpty {
+                    if entries.isEmpty {
                         ContentUnavailableView(
                             "ui.player.no_up_next",
                             systemImage: "list.bullet"
@@ -75,7 +77,7 @@ struct NowPlayingQueuePage: View {
                         .listRowSeparator(.hidden)
                         .listRowBackground(Color.clear)
                     } else {
-                        ForEach(upcomingEntries) { entry in
+                        ForEach(entries) { entry in
                             NowPlayingQueueRow(entry: entry)
                         }
                         .onMove(perform: moveQueueItems)

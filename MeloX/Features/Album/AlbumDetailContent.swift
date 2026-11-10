@@ -17,15 +17,17 @@ struct AlbumDetailContent: View {
     var highlightedSongID: Int?
 
     var body: some View {
-        ZStack {
+        let prepared = MusicCollectionPreparedTracks(tracks: songs, query: searchQuery)
+        return ZStack {
             MusicCollectionArtworkBackdrop(
                 blurredArtworkImage: blurredBackdropImage,
                 palette: palette,
                 usesTabletBackdrop: usesTabletBackdrop
             )
 
+            GeometryReader { viewport in
             ScrollView {
-                MusicCollectionDetailLayout { artworkSize in
+                MusicCollectionDetailLayout(availableWidth: viewport.size.width) { artworkSize in
                     StandardMusicCollectionDetailHero(
                         artworkURL: album.artworkURL,
                         title: album.name,
@@ -39,7 +41,8 @@ struct AlbumDetailContent: View {
                     )
                 } tracks: { wideArtistColumnWidth in
                     MusicCollectionTrackContent(
-                        tracks: filteredTracks,
+                        tracks: prepared.tracks,
+                        indicesBySongID: prepared.indicesBySongID,
                         sourceID: album.id,
                         showsArtwork: false,
                         loadingTitle: L10n.string("ui.album.loading"),
@@ -55,6 +58,7 @@ struct AlbumDetailContent: View {
             .scrollIndicators(.hidden)
             .refreshable {
                 await onRefresh()
+            }
             }
         }
         .foregroundStyle(.primary)
@@ -75,9 +79,6 @@ struct AlbumDetailContent: View {
         )
     }
 
-    private var filteredTracks: [Song] {
-        filterMusicCollectionTracks(songs, query: searchQuery)
-    }
 }
 
 private extension String {

@@ -114,29 +114,24 @@ struct NowPlayingBackground: View {
     private func blurredArtworkBackground(
         in size: CGSize
     ) -> some View {
-        AsyncImage(url: artworkURL) { phase in
-            if case .success(let image) = phase {
-                image
-                    .resizable()
-                    .scaledToFill()
-                    .frame(
-                        width: size.width,
-                        height: size.height
+        ArtworkBackdropImage(url: artworkURL)
+            .id(artworkURL)
+            .frame(
+                width: size.width,
+                height: size.height
+            )
+            .clipped()
+            .scaleEffect(1.35)
+            .blur(
+                radius:
+                    CGFloat(
+                        settings
+                            .playerBackgroundBlur
                     )
-                    .clipped()
-                    .scaleEffect(1.35)
-                    .blur(
-                        radius:
-                            CGFloat(
-                                settings
-                                    .playerBackgroundBlur
-                            )
-                    )
-                    .saturation(
-                        settings.playerBackgroundSaturation
-                    )
-            }
-        }
+            )
+            .saturation(
+                settings.playerBackgroundSaturation
+            )
     }
 
     private var backgroundVeilOpacity: Double {

@@ -115,9 +115,14 @@ enum MusicCollectionLayout {
             + (selecting ? 24 + columnSpacing : 0)
             + (artwork ? rowArtworkSize : indexColumnWidth) + columnSpacing
     }
-    static let wideLayoutBreakpoint: CGFloat = 710
+    static let wideLayoutBreakpoint = CGFloat(MusicCollectionWidthPolicy.wideLayoutBreakpoint)
     static let heroArtworkRatio: CGFloat = 0.28
     static let maximumHeroArtworkSize: CGFloat = 300
+
+    static func wideWidth(_ width: CGFloat) -> CGFloat? {
+        MusicCollectionWidthPolicy.wideWidth(Double(width)).map { CGFloat($0) }
+    }
+
 }
 
 /// A scroll-view row has no native List cell to supply pressed feedback.

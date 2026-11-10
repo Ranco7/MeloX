@@ -2,6 +2,7 @@ import SwiftUI
 
 struct PlaylistTrackList: View {
     let tracks: [Song]
+    let indicesBySongID: [Song.ID: Int]
     let sourceID: Int
     let showsArtwork: Bool
     var onRemoveSong: ((Song) -> Void)?
@@ -11,16 +12,13 @@ struct PlaylistTrackList: View {
 
     private var usesWideRows: Bool { wideArtistColumnWidth != nil }
 
+
     var body: some View {
         if tracks.isEmpty {
             ContentUnavailableView("ui.songs.empty", systemImage: "music.note.list")
                 .foregroundStyle(.primary)
                 .frame(maxWidth: .infinity, minHeight: 180)
         } else {
-            let indicesBySongID = Dictionary(
-                tracks.enumerated().map { ($0.element.id, $0.offset) },
-                uniquingKeysWith: { first, _ in first }
-            )
             LazyVStack(spacing: 0) {
                 // Rows are identified by song ID, not by array position. A
                 // refresh or removal can then never evaluate an out-of-range
@@ -57,6 +55,7 @@ struct PlaylistTrackList: View {
                     }
                 }
             }
+
         }
     }
 

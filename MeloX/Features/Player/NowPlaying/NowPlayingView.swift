@@ -26,14 +26,15 @@ struct NowPlayingView: View {
     @Namespace private var pageArtworkNamespace
 
     let onDismiss: () -> Void
-    let backgroundExtension: CGFloat
 
     private var page: NowPlayingPage {
         pageTransition.page
     }
 
-    init(initialPage: NowPlayingPage = .artwork, backgroundExtension: CGFloat = 0, onDismiss: @escaping () -> Void) {
-        self.backgroundExtension = backgroundExtension
+    init(
+        initialPage: NowPlayingPage = .artwork,
+        onDismiss: @escaping () -> Void
+    ) {
         self.onDismiss = onDismiss
         _pageTransition = State(
             initialValue: NowPlayingTransitionCoordinator(
@@ -45,27 +46,19 @@ struct NowPlayingView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                Group {
-                    if usesMonochromeLyricsBackground {
-                        Color.black
-                            .ignoresSafeArea()
-                    } else {
-                        NowPlayingBackground(
-                            artworkURL:
-                                player.currentSong?
-                                    .album?
-                                    .artworkURL,
-                            beatTimeline:
-                                player.currentBeatTimeline,
-                            isBehindLyrics:
-                                page == .lyrics
-                        )
-                    }
-                }
-                // Extend the existing artwork-tinted background only. The outer
-                // frame keeps the content's original geometry and alignment.
-                .frame(width: proxy.size.width, height: proxy.size.height + backgroundExtension)
-                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+                NowPlayingBackgroundLayer(
+                    artworkURL:
+                        player.currentSong?
+                            .album?
+                            .artworkURL,
+                    beatTimeline:
+                        player.currentBeatTimeline,
+                    isBehindLyrics:
+                        page == .lyrics,
+                    usesMonochrome:
+                        usesMonochromeLyricsBackground,
+                    size: proxy.size
+                )
 
                 if let song = player.currentSong {
                     if showsFullScreenLyrics, page == .lyrics {
@@ -1117,4 +1110,42 @@ private struct NowPlayingLyricsEntranceTaskID: Equatable {
     let songID: Song.ID?
     let preparedSongID: Song.ID?
     let isContentPrepared: Bool
+}
+
+/// The only view that observes the card's dynamic background extension. The
+/// player body keeps its layout size; this leaf alone grows the artwork-tinted
+/// background below the content while the card is above the top edge.
+private struct NowPlayingBackgroundLayer: View {
+    let artworkURL: URL?
+    let beatTimeline: PlaybackBeatTimeline?
+    let isBehindLyrics: Bool
+    let usesMonochrome: Bool
+    let size: CGSize
+    @Environment(\.nowPlayingBackgroundExtension) private var backgroundExtension
+
+    var body: some View {
+        Group {
+            if usesMonochrome {
+                Color.black
+                    .ignoresSafeArea()
+            } else {
+                NowPlayingBackground(
+                    artworkURL: artworkURL,
+                    beatTimeline: beatTimeline,
+                    isBehindLyrics: isBehindLyrics
+                )
+            }
+        }
+        // Extend the existing artwork-tinted background only. The outer frame
+        // keeps the content's original geometry and alignment.
+        .frame(
+            width: size.width,
+            height: size.height + backgroundExtension
+        )
+        .frame(
+            width: size.width,
+            height: size.height,
+            alignment: .top
+        )
+    }
 }

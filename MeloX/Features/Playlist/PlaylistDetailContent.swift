@@ -42,13 +42,17 @@ struct PlaylistDetailContent: View {
     }
 
     var body: some View {
-        ZStack {
+        // Prepared outside the viewport closure: a width-only layout does not
+        // filter or rebuild the song index.
+        let prepared = MusicCollectionPreparedTracks(tracks: playlist.tracks, query: searchQuery)
+        return ZStack {
             MusicCollectionArtworkBackdrop(
                 blurredArtworkImage: blurredBackdropImage,
                 palette: palette,
                 usesTabletBackdrop: usesTabletBackdrop
             )
 
+            GeometryReader { viewport in
             ScrollView {
                 if usesToplistLayout {
                     LazyVStack(spacing: 0) {
@@ -61,11 +65,11 @@ struct PlaylistDetailContent: View {
                             usesWideLayout: usesWideToplistLayout,
                             onPlayAll: onPlayAll
                         )
-                        trackContent(wideArtistColumnWidth: nil)
+                        trackContent(prepared: prepared, wideArtistColumnWidth: nil)
                     }
                     .padding(.bottom, 32)
                 } else {
-                    MusicCollectionDetailLayout { artworkSize in
+                    MusicCollectionDetailLayout(availableWidth: viewport.size.width) { artworkSize in
                         StandardMusicCollectionDetailHero(
                             artworkURL: playlist.artworkURL,
                             title: playlist.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -87,7 +91,7 @@ struct PlaylistDetailContent: View {
                             canDownloadAll: canDownloadAll
                         )
                     } tracks: { wideArtistColumnWidth in
-                        trackContent(wideArtistColumnWidth: wideArtistColumnWidth)
+                        trackContent(prepared: prepared, wideArtistColumnWidth: wideArtistColumnWidth)
                     }
                 }
             }
@@ -99,13 +103,15 @@ struct PlaylistDetailContent: View {
                 .container,
                 edges: usesToplistLayout && !usesWideToplistLayout ? .top : []
             )
+            }
         }
         .foregroundStyle(.primary)
     }
 
-    private func trackContent(wideArtistColumnWidth: CGFloat?) -> some View {
+    private func trackContent(prepared: MusicCollectionPreparedTracks, wideArtistColumnWidth: CGFloat?) -> some View {
         MusicCollectionTrackContent(
-            tracks: filterMusicCollectionTracks(playlist.tracks, query: searchQuery),
+            tracks: prepared.tracks,
+            indicesBySongID: prepared.indicesBySongID,
             sourceID: playlist.id,
             showsArtwork: wideArtistColumnWidth != nil || usesToplistLayout,
             loadingTitle: usesToplistLayout
@@ -140,14 +146,15 @@ struct PlaylistDetailContent: View {
 
 struct MusicCollectionDetailLayout<Hero: View, Tracks: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var measuredWideWidth: CGFloat?
+    let availableWidth: CGFloat
 
     @ViewBuilder let hero: (CGFloat?) -> Hero
     @ViewBuilder let tracks: (CGFloat?) -> Tracks
 
     var body: some View {
         let wideWidth = UIDevice.current.userInterfaceIdiom == .pad
-            && !dynamicTypeSize.isAccessibilitySize ? measuredWideWidth : nil
+            && !dynamicTypeSize.isAccessibilitySize
+            ? MusicCollectionLayout.wideWidth(availableWidth) : nil
 
         let artworkSize = wideWidth.map {
             min(
@@ -175,22 +182,13 @@ struct MusicCollectionDetailLayout<Hero: View, Tracks: View>: View {
         }
         .padding(.bottom, 32)
         .frame(maxWidth: .infinity)
-        .onGeometryChange(for: CGFloat?.self) { geometry in
-            let width = geometry.size.width
-            guard width >= MusicCollectionLayout.wideLayoutBreakpoint else {
-                return nil
-            }
-            // Continuous Stage Manager resizing otherwise rebuilds the whole
-            // hero and track layout for every pixel. A 2pt step cuts the
-            // update rate while keeping the artist column within 1pt of the
-            // middle of the row.
-            return (width / 2).rounded(.down) * 2
-        } action: { measuredWideWidth = $0 }
+
     }
 }
 
 struct MusicCollectionTrackContent: View {
     let tracks: [Song]
+    let indicesBySongID: [Song.ID: Int]
     let sourceID: Int
     let showsArtwork: Bool
     let loadingTitle: String
@@ -224,6 +222,7 @@ struct MusicCollectionTrackContent: View {
                 VStack(spacing: 0) {
                     PlaylistTrackList(
                         tracks: tracks,
+                        indicesBySongID: indicesBySongID,
                         sourceID: sourceID,
                         showsArtwork: showsArtwork,
                         onRemoveSong: onRemoveSong,
@@ -721,6 +720,22 @@ private extension Int {
             .number
                 .notation(.compactName)
                 .locale(L10n.locale)
+        )
+    }
+}
+
+/// Data preparation is independent of viewport geometry. Keep first-index
+/// behavior for duplicate IDs, matching the defensive collection policy.
+struct MusicCollectionPreparedTracks {
+    let tracks: [Song]
+    let indicesBySongID: [Song.ID: Int]
+
+    init(tracks: [Song], query: String) {
+        let filtered = filterMusicCollectionTracks(tracks, query: query)
+        self.tracks = filtered
+        self.indicesBySongID = Dictionary(
+            filtered.enumerated().map { ($0.element.id, $0.offset) },
+            uniquingKeysWith: { first, _ in first }
         )
     }
 }

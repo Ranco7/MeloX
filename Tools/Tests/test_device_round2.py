@@ -107,7 +107,7 @@ class LayoutGuardsChecks(unittest.TestCase):
         source = read("MeloX/Features/Playlist/PlaylistTrackList.swift")
         self.assertIn("ForEach(tracks, id: \\.id)", source)
         self.assertNotIn("ForEach(tracks.indices", source)
-        self.assertIn("uniquingKeysWith:", source)
+        self.assertIn("uniquingKeysWith:", read("MeloX/Features/Playlist/PlaylistDetailContent.swift"))
 
     def test_tablet_player_width_is_never_negative(self):
         source = read(
@@ -116,9 +116,26 @@ class LayoutGuardsChecks(unittest.TestCase):
         self.assertIn("return max(\n            min(", source)
         self.assertIn("var panelWidth: CGFloat {\n        max(", source)
 
-    def test_collection_layout_updates_are_quantized(self):
+    def test_collection_layout_tracks_continuous_viewport_width(self):
         source = read("MeloX/Features/Playlist/PlaylistDetailContent.swift")
-        self.assertIn("(width / 8).rounded(.down) * 8", source)
+        album = read("MeloX/Features/Album/AlbumDetailContent.swift")
+        for content in (source, album):
+            self.assertIn("GeometryReader { viewport in", content)
+            self.assertIn("MusicCollectionDetailLayout(availableWidth: viewport.size.width)", content)
+            self.assertIn("let prepared = MusicCollectionPreparedTracks", content)
+        shared = source.split("struct MusicCollectionDetailLayout", 1)[1].split("struct MusicCollectionTrackContent", 1)[0]
+        self.assertNotIn("@State", shared)
+        self.assertNotIn("onGeometryChange", shared)
+        self.assertNotIn("quantized", shared)
+        self.assertIn("MusicCollectionLayout.wideWidth(availableWidth)", shared)
+        self.assertIn("rowWidth: width - 2 * MusicCollectionLayout.wideInset", shared)
+        policy = read("MeloX/Shared/Media/MusicCollectionWidthPolicy.swift")
+        self.assertIn("return width", policy)
+        self.assertNotIn("rounded", policy)
+        tracks = read("MeloX/Features/Playlist/PlaylistTrackList.swift")
+        self.assertNotIn("tracks.map", tracks)
+        self.assertNotIn("PreparedTrackIndex", tracks)
+        self.assertIn("let indicesBySongID:", tracks)
 
 
 class CollectionActionChecks(unittest.TestCase):
@@ -145,10 +162,16 @@ class FloatingMiniPlayerChecks(unittest.TestCase):
         player_aware = source.split(
             "private var playerAwareTabView", 1
         )[1].split("private var showsMiniPlayer", 1)[0]
+        leaf = source.split("private struct FloatingMiniPlayerBar", 1)[1]
         self.assertIn("floatingMiniPlayerClearance", source)
         self.assertIn(".overlay(alignment: .bottom)", player_aware)
-        self.assertIn(".ignoresSafeArea(.keyboard, edges: .bottom)", player_aware)
-        self.assertIn("TabletMiniPlayerView(", player_aware)
+        self.assertIn(
+            ".coordinateSpace(.named(Self.contentColumnCoordinateSpace))",
+            player_aware,
+        )
+        self.assertIn("FloatingMiniPlayerBar(", player_aware)
+        self.assertIn("TabletMiniPlayerView(", leaf)
+        self.assertIn(".ignoresSafeArea(.all, edges: .bottom)", leaf)
         self.assertEqual(source.count("TabletMiniPlayerView("), 1)
 
     def test_clearance_inset_stays_inside_the_tab(self):
@@ -163,17 +186,10 @@ class FloatingMiniPlayerChecks(unittest.TestCase):
 
     def test_wide_layout_budget_includes_inner_padding(self):
         source = read("MeloX/App/ContentView.swift")
-        player_aware = source.split(
-            "private var playerAwareTabView", 1
-        )[1].split("private var showsMiniPlayer", 1)[0]
-        self.assertIn("floatingMiniPlayerOuterPadding * 2", player_aware)
-        self.assertIn(
-            "floatingMiniPlayerWideContentPadding", player_aware
-        )
-        self.assertIn(
-            ">= TabletMiniPlayerView\n                                .minimumControlsWidth",
-            player_aware,
-        )
+        leaf = source.split("private struct FloatingMiniPlayerBar", 1)[1]
+        self.assertIn("floatingMiniPlayerOuterPadding * 2", leaf)
+        self.assertIn("floatingMiniPlayerWideContentPadding", leaf)
+        self.assertIn(">= TabletMiniPlayerView.minimumControlsWidth", leaf)
 
     def test_single_mini_player_layout_branch(self):
         source = read(
@@ -202,7 +218,7 @@ class ArtworkChecks(unittest.TestCase):
         self.assertIn("ArtworkImageMemoryCache", source)
         self.assertNotIn("state.response", source)
         self.assertIn(".onCompletion { result in", source)
-        self.assertIn("Image(uiImage: response.image)", source)
+        self.assertIn("uiImage(for: url)", source)
         self.assertIn("byteCost: ArtworkImageMemoryCache.byteCost(", source)
         self.assertIn("cgImage.bytesPerRow * cgImage.height", source)
         self.assertNotIn("cost: 512 * 1_024", source)
@@ -217,6 +233,92 @@ class ArtworkChecks(unittest.TestCase):
         self.assertIn("effectiveLyricsRefreshRate", source)
         self.assertIn("isBehindLyrics\n            ? 1.0 / 60.0", source)
         self.assertIn("effectiveLyricsRefreshRate.minimumInterval", source)
+
+    def test_artwork_cache_keeps_best_resolution(self):
+        source = read("MeloX/Shared/Media/ArtworkImage.swift")
+        policy = read("MeloX/Shared/Media/ArtworkImageCachePolicy.swift")
+        self.assertIn("uiImage(for: url)", source)
+        self.assertIn("ArtworkImageCachePolicy.shouldReplace(", source)
+        self.assertIn("existing.pixelArea", source)
+        self.assertIn("lock.lock()", source)
+        self.assertIn("defer { lock.unlock() }", source)
+        self.assertIn("newCost >= existingCost", policy)
+        self.assertIn("static let maximumPixelDimension = 1024.0", policy)
+
+    def test_backdrops_share_bounded_nuke_artwork(self):
+        source = read("MeloX/Shared/Media/ArtworkBackdropImage.swift")
+        apple = read(
+            "MeloX/Features/Player/NowPlaying/AppleMusicBackdrop/"
+            "NowPlayingAppleMusicBackground.swift"
+        )
+        background = read(
+            "MeloX/Features/Player/NowPlaying/NowPlayingBackground.swift"
+        )
+        self.assertIn(
+            "ImagePipeline.shared.image(\n                for: request",
+            source,
+        )
+        self.assertIn("ImageRequest.ThumbnailOptions", source)
+        self.assertIn("ArtworkBackdropSizing.quantized(", source)
+        self.assertIn("inFlight", source)
+        self.assertIn("ArtworkBackdropImage(", apple)
+        self.assertIn("ArtworkBackdropImage(", background)
+        self.assertIn(".id(artworkURL)", apple)
+        self.assertIn(".id(artworkURL)", background)
+        self.assertNotIn("AsyncImage", apple)
+        self.assertNotIn("AsyncImage", background)
+        artwork_method = apple.split(
+            "private func artwork(in size: CGSize)", 1
+        )[1].split("private var backdropMinimumInterval", 1)[0]
+        self.assertIn("placeholderColor:", artwork_method)
+        self.assertIn("red: 0.18", artwork_method)
+        self.assertIn("ImageRequest(url: url)", source)
+        self.assertNotIn("URLComponents", source)
+        self.assertNotIn("queryItems", source)
+        self.assertNotIn("param=", source)
+
+    def test_backdrop_fade_only_local_transaction(self):
+        source = read("MeloX/Shared/Media/ArtworkBackdropImage.swift")
+        self.assertIn("transaction.disablesAnimations = false", source)
+        self.assertIn("withTransaction(transaction)", source)
+        self.assertIn("accessibilityReduceMotion", source)
+        self.assertIn(
+            ".timingCurve(0, 0, 0.3, 1, duration: 0.8)",
+            source,
+        )
+        self.assertIn("completionCriteria: .removed", source)
+        self.assertIn("guard loadedImage === incoming", source)
+        self.assertIn("@State private var baseImage", source)
+        self.assertIn("install(cached)", source)
+        self.assertIn("install(image)", source)
+        self.assertNotIn("if baseImage == nil", source)
+        self.assertNotIn("fadeProgress < 0.999", source)
+        self.assertNotIn("response.image", source)
+
+    def test_player_artwork_prewarm_uses_current_song_url(self):
+        source = read("MeloX/App/ContentView.swift")
+        self.assertIn("prepareArtworkForPresentation()", source)
+        method = source.split(
+            "private func prepareArtworkForPresentation()", 1
+        )[1].split("private func", 1)[0]
+        self.assertIn(
+            "player.currentSong?.album?.artworkURL",
+            method,
+        )
+        self.assertIn(
+            "await ArtworkBackdropImageProvider.shared.image(for: url, pixelDimension: 1024)",
+            source,
+        )
+        self.assertIn(
+            "playerBackgroundStyle == .flowingLight",
+            method,
+        )
+        self.assertIn(
+            "ArtworkAccentColorProvider.shared.detailAssets",
+            method,
+        )
+        backdrop = read("MeloX/Shared/Media/ArtworkBackdropImage.swift")
+        self.assertIn(".task(id: player.currentSong?.album?.artworkURL)", source)
 
 
 if __name__ == "__main__":

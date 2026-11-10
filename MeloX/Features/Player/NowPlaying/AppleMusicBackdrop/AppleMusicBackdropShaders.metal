@@ -517,6 +517,12 @@ half4 appleMusicBackdropPinch(
     float meshIndex
 ) {
     float2 destination = position / size;
+    // pinchMix == 0 is the settled identity used whenever lyrics are not
+    // showing. Skip the mesh warp entirely in that state; the transition path
+    // below is unchanged.
+    if (pinchMix <= 0.0f) {
+        return layer.sample(clamp(destination, 0.0f, 1.0f) * size);
+    }
     bool usesWideMesh = size.x > size.y;
     uint meshPair = min(uint(max(meshIndex, 0.0f)), 4u);
     float2 firstCoordinates = meshTextureCoordinates(

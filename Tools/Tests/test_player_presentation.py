@@ -40,6 +40,7 @@ final class ContentView {
     var pendingMusicRoute: MusicRoute?
     var navigatedRoutes: [MusicRoute] = []
     func navigate(to route: MusicRoute) { navigatedRoutes.append(route) }
+    func prepareArtworkForPresentation() {}
     // PRODUCTION_ACTIONS
 
     static func checkNoSong() {
@@ -217,13 +218,183 @@ print("Shared offset policy passed: release derivative and corner continuity")
         self.assertIn("let overhang = max(0, -offset)", view)
         self.assertIn("height: window.size.height + overhang", view)
         self.assertIn(".frame(width: window.size.width, height: window.size.height)", view)
-        self.assertIn("backgroundExtension: overhang", view)
         self.assertNotIn("Color.black", view)
-        player = (ROOT / "MeloX/Features/Player/NowPlaying/NowPlayingView.swift").read_text()
-        self.assertIn("height: proxy.size.height + backgroundExtension", player)
-        self.assertIn("height: proxy.size.height, alignment: .top", player)
         self.assertNotIn("roundsTopCorners", view)
         self.assertNotIn("dragOrigin != nil ? 1", view)
+        self.assertIn("model.beginDrag(", view)
+        self.assertIn("model.updateDrag(", view)
+        self.assertIn("model.endDrag(", view)
+
+    def test_player_content_is_constructed_outside_timeline(self):
+        source = (ROOT / "MeloX/Features/Player/NowPlaying/NowPlayingPresentationView.swift").read_text()
+        host, modifier = source.split(
+            "private struct NowPlayingCardPresentationModifier", 1
+        )
+        self.assertIn("@Observable\nfinal class NowPlayingCardModel", source)
+        self.assertNotIn("private(set) var backgroundExtension", source)
+        self.assertIn(".environment(\\.nowPlayingBackgroundExtension, overhang)", source)
+        self.assertIn("NowPlayingView(", host)
+        self.assertEqual(source.count("NowPlayingView("), 1)
+        self.assertIn("NowPlayingCardPresentationModifier(", host)
+        self.assertIn("TimelineView", modifier)
+        self.assertIn("func body(content: Content)", modifier)
+        self.assertIn("\n                    content\n", modifier)
+        self.assertNotIn("NowPlayingView(", modifier)
+        for call in (
+            "model.beginDrag(",
+            "model.updateDrag(",
+            "model.endDrag(",
+            "model.collapse()",
+        ):
+            self.assertIn(call, modifier)
+        self.assertIn("model.settle(requestID: requestID)", modifier)
+
+    def test_background_extension_is_isolated_to_leaf(self):
+        source = (ROOT / "MeloX/Features/Player/NowPlaying/NowPlayingView.swift").read_text()
+        head, leaf = source.split(
+            "private struct NowPlayingBackgroundLayer", 1
+        )
+        self.assertIn("NowPlayingBackgroundLayer(", head)
+        self.assertNotIn("model.backgroundExtension", head)
+        self.assertNotIn("let backgroundExtension: CGFloat", head)
+        self.assertNotIn("let cardModel: NowPlayingCardModel", head)
+        self.assertIn("@Environment(\\.nowPlayingBackgroundExtension)", leaf)
+        self.assertIn("height: size.height + backgroundExtension", leaf)
+        self.assertIn(
+            "width: size.width,\n            height: size.height,\n            alignment: .top",
+            leaf,
+        )
+
+    def test_sidebar_geometry_is_isolated(self):
+        source = (ROOT / "MeloX/App/ContentView.swift").read_text()
+        head, leaf = source.split(
+            "private struct FloatingMiniPlayerBar", 1
+        )
+        self.assertIn(
+            "@Observable\nprivate final class ContentColumnGeometryStore",
+            head,
+        )
+        self.assertNotIn("contentColumnFrames", source)
+        self.assertNotIn("frame(in: .global)", head)
+        self.assertIn(
+            "@State private var contentColumnGeometry = ContentColumnGeometryStore()",
+            head,
+        )
+        self.assertIn("ContentColumnGeometryMath.horizontalBounds", head)
+        self.assertIn("contentColumnGeometry.update(tab, bounds: bounds)", head)
+        self.assertIn("contentColumnGeometry.retainTabs(activeTabs)", head)
+        self.assertIn("contentColumnGeometry.reset()", head)
+        self.assertIn("guard storedBounds[tab] != bounds else { return }", head)
+        self.assertIn(
+            ".coordinateSpace(.named(Self.contentColumnCoordinateSpace))",
+            head,
+        )
+        self.assertIn("FloatingMiniPlayerBar(", head)
+        self.assertNotIn("geometry.bounds(for: tab)", head)
+        self.assertIn("geometry.bounds(for: tab)", leaf)
+        self.assertIn(
+            "let columnWidth = max(0, rootWidth - leading - trailing)",
+            leaf,
+        )
+        self.assertIn(".ignoresSafeArea(.all, edges: .bottom)", leaf)
+
+        geometry = (ROOT / "MeloX/App/ContentColumnGeometry.swift").read_text()
+        bounds = geometry.split(
+            "struct ContentColumnHorizontalBounds", 1
+        )[1].split("}", 1)[0]
+        self.assertIn("let minX: Double", bounds)
+        self.assertIn("let maxX: Double", bounds)
+        self.assertNotIn("minY", bounds)
+        self.assertNotIn("let height", bounds)
+        self.assertIn("(minX * scale).rounded() / scale", geometry)
+        self.assertIn("(maxX * scale).rounded() / scale", geometry)
+
+    @unittest.skipUnless(shutil.which("swiftc"), "Swift compiler unavailable")
+    def test_column_geometry_quantization(self):
+        harness = r"""
+import Foundation
+
+let halfPoint = ContentColumnGeometryMath.horizontalBounds(
+    minX: 10.24, maxX: 100.26, displayScale: 2
+)!
+precondition(halfPoint.minX == 10.0)
+precondition(halfPoint.maxX == 100.5)
+precondition(
+    ContentColumnGeometryMath.horizontalBounds(
+        minX: 10.24, maxX: 100.26, displayScale: 2
+    ) == halfPoint
+)
+precondition(
+    ContentColumnGeometryMath.horizontalBounds(
+        minX: 10.25, maxX: 100.25, displayScale: 2
+    )!.minX == 10.5
+)
+precondition(
+    ContentColumnGeometryMath.horizontalBounds(
+        minX: 10.249, maxX: 100.249, displayScale: 2
+    )!.minX == 10.0
+)
+precondition(
+    ContentColumnGeometryMath.horizontalBounds(
+        minX: 10, maxX: 9, displayScale: 2
+    ) == nil
+)
+precondition(
+    ContentColumnGeometryMath.horizontalBounds(
+        minX: .nan, maxX: 9, displayScale: 2
+    ) == nil
+)
+let unscaled = ContentColumnGeometryMath.horizontalBounds(
+    minX: 10.4, maxX: 10.6, displayScale: 0
+)!
+precondition(unscaled.minX == 10.0 && unscaled.maxX == 11.0)
+precondition(MusicCollectionWidthPolicy.wideWidth(709.99) == nil)
+precondition(MusicCollectionWidthPolicy.wideWidth(710) == 710)
+precondition(MusicCollectionWidthPolicy.wideWidth(711.9) == 711.9)
+precondition(MusicCollectionWidthPolicy.wideWidth(712) == 712)
+precondition(MusicCollectionWidthPolicy.wideWidth(970.5) == 970.5)
+print("Column geometry policy passed: pixel geometry equality and continuous collection width")
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            swift = Path(directory) / "main.swift"
+            executable = Path(directory) / "column-geometry-checks"
+            swift.write_text(harness)
+            subprocess.run([
+                "swiftc", "-swift-version", "5",
+                str(ROOT / "MeloX/App/ContentColumnGeometry.swift"),
+                str(ROOT / "MeloX/Shared/Media/MusicCollectionWidthPolicy.swift"),
+                str(swift), "-o", str(executable),
+            ], check=True)
+            subprocess.run([str(executable)], check=True)
+
+    @unittest.skipUnless(shutil.which("swiftc"), "Swift compiler unavailable")
+    def test_artwork_cache_and_backdrop_sizing_policy(self):
+        harness = r"""
+import Foundation
+precondition(ArtworkImageCachePolicy.shouldReplace(existingCost: nil, newCost: 1))
+precondition(ArtworkImageCachePolicy.shouldReplace(existingCost: 100, newCost: 200))
+precondition(!ArtworkImageCachePolicy.shouldReplace(existingCost: 200, newCost: 100))
+precondition(ArtworkImageCachePolicy.shouldReplace(existingCost: 200, newCost: 200))
+precondition(ArtworkBackdropSizing.pixelDimension(longestPixel: 0) == 512)
+precondition(ArtworkBackdropSizing.pixelDimension(longestPixel: 500) == 512)
+precondition(ArtworkBackdropSizing.pixelDimension(longestPixel: 640) == 640)
+precondition(ArtworkBackdropSizing.pixelDimension(longestPixel: 1000) == 1008)
+precondition(ArtworkBackdropSizing.pixelDimension(longestPixel: 1024) == 1024)
+precondition(ArtworkBackdropSizing.pixelDimension(longestPixel: 4000) == 1024)
+precondition(ArtworkBackdropSizing.pixelDimension(longestPixel: .nan) == 512)
+precondition(ArtworkBackdropSizing.quantized(dimension: 641) == 656)
+print("Artwork cache/sizing policy passed: best resolution and bounded backdrop decode")
+"""
+        with tempfile.TemporaryDirectory() as directory:
+            swift = Path(directory) / "main.swift"
+            executable = Path(directory) / "artwork-policy-checks"
+            swift.write_text(harness)
+            subprocess.run([
+                "swiftc", "-swift-version", "5",
+                str(ROOT / "MeloX/Shared/Media/ArtworkImageCachePolicy.swift"),
+                str(swift), "-o", str(executable),
+            ], check=True)
+            subprocess.run([str(executable)], check=True)
 
 if __name__ == "__main__":
     unittest.main()
