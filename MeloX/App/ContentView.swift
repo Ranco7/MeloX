@@ -396,7 +396,7 @@ struct ContentView: View {
                     .padding(.trailing, trailing + Self.floatingMiniPlayerOuterPadding)
                     .padding(
                         .bottom,
-                        MusicCollectionLayout.miniPlayerBottomInset
+                        MusicCollectionLayout.miniPlayerScreenBottomInset
                     )
                     .frame(
                         maxWidth: .infinity,
@@ -404,7 +404,11 @@ struct ContentView: View {
                         alignment: .bottom
                     )
                 }
-                .ignoresSafeArea(.keyboard, edges: .bottom)
+                // Measure the bottom inset from the window edge itself, like
+                // Apple Music's floating player, instead of stacking it on top
+                // of the home-indicator safe area. The keyboard is ignored for
+                // the same reason (see above).
+                .ignoresSafeArea(.all, edges: .bottom)
             }
         }
     }

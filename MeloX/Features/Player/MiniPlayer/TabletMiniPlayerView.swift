@@ -1,8 +1,24 @@
 import SwiftUI
 
 struct TabletMiniPlayerView: View {
-    // 240pt icon cluster + 180pt title minimum + 162pt action cluster + spacing and padding.
-    static let minimumControlsWidth: CGFloat = 618
+    static let controlWidth: CGFloat = 44
+    static let playbackControlWidth: CGFloat = 48
+    static let titleMinimumWidth: CGFloat = 140
+    static let clusterSpacing: CGFloat = 10
+    static let leadingPadding: CGFloat = 10
+    static let trailingPadding: CGFloat = 6
+    static let artworkSize: CGFloat = 36
+    /// 44pt hit areas plus 5.5pt above and below give the 55pt bar height
+    /// Apple Music uses for its floating iPad player.
+    static let verticalPadding: CGFloat = 5.5
+    // Transport cluster (4 controls + play) + title minimum + 3 actions,
+    // the gaps between the three clusters, and the bar's own padding.
+    static let minimumControlsWidth: CGFloat =
+        controlWidth * 4 + playbackControlWidth
+        + titleMinimumWidth
+        + controlWidth * 3
+        + clusterSpacing * 2
+        + leadingPadding + trailingPadding
 
     @Environment(PlayerStore.self) private var player
     @Environment(\.colorScheme) private var colorScheme
@@ -22,9 +38,9 @@ struct TabletMiniPlayerView: View {
                             minWidth: Self.minimumControlsWidth,
                             maxWidth: .infinity
                         )
-                        .padding(.leading, 10)
-                        .padding(.trailing, 6)
-                        .padding(.vertical, 10)
+                        .padding(.leading, Self.leadingPadding)
+                        .padding(.trailing, Self.trailingPadding)
+                        .padding(.vertical, Self.verticalPadding)
                 } else {
                     MiniPlayerView(
                         artworkTransitionID: artworkTransitionID,
@@ -38,7 +54,16 @@ struct TabletMiniPlayerView: View {
                 }
             }
             .frame(maxWidth: MusicCollectionLayout.miniPlayerMaximumWidth)
-            .glassEffect(glass, in: .capsule)
+            // The glass is only the bar's backdrop. When the controls sat
+            // inside the glass layer, opening the ⋯ menu morphed the whole
+            // glass and hid the controls, and holding the bar let the press
+            // effect darken the entire capsule.
+            .background {
+                Capsule()
+                    .fill(.clear)
+                    .glassEffect(glass, in: .capsule)
+                    .allowsHitTesting(false)
+            }
             .overlay {
                 if let collectionPalette {
                     Capsule()
@@ -54,11 +79,11 @@ struct TabletMiniPlayerView: View {
         if let collectionPalette {
             return .regular.tint(collectionPalette.backgroundColor.opacity(0.32))
         }
-        return .regular.interactive()
+        return .regular
     }
 
     private func controls(for song: Song) -> some View {
-        HStack(spacing: 10) {
+        HStack(spacing: Self.clusterSpacing) {
             HStack(spacing: 0) {
                 control(
                     "shuffle", title: L10n.string(player.isShuffled ? "ui.player.shuffle_off" : "ui.player.shuffle_on"),
@@ -81,8 +106,8 @@ struct TabletMiniPlayerView: View {
                 onOpen(nil)
             } label: {
                 HStack(spacing: 9) {
-                    ArtworkImage(url: song.album?.artworkURL, cornerRadius: 7)
-                        .frame(width: 44, height: 44)
+                    ArtworkImage(url: song.album?.artworkURL, cornerRadius: 6)
+                        .frame(width: Self.artworkSize, height: Self.artworkSize)
                         .matchedTransitionSource(id: artworkTransitionID, in: artworkTransitionNamespace)
 
                     VStack(alignment: .leading, spacing: 2) {
@@ -94,7 +119,7 @@ struct TabletMiniPlayerView: View {
                     }
                     .lineLimit(1)
                 }
-                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .frame(minWidth: Self.titleMinimumWidth, maxWidth: .infinity, minHeight: 44, alignment: .leading)
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
@@ -103,13 +128,13 @@ struct TabletMiniPlayerView: View {
 
             HStack(spacing: 0) {
                 NowPlayingSongActions(song: song, showsFavoriteButton: false, usesCompactMenu: true)
-                    .frame(width: 54, height: 44)
+                    .frame(width: Self.controlWidth, height: 44)
                 if !song.isPodcastProgram {
-                    control("quote.bubble", title: L10n.string("ui.settings.lyrics.title"), width: 54) {
+                    control("quote.bubble", title: L10n.string("ui.settings.lyrics.title")) {
                         onOpen(.lyrics)
                     }
                 }
-                control("list.bullet", title: L10n.string("ui.player.queue"), width: 54) {
+                control("list.bullet", title: L10n.string("ui.player.queue")) {
                     onOpen(.queue)
                 }
             }
@@ -127,7 +152,7 @@ struct TabletMiniPlayerView: View {
                         .font(.largeTitle.weight(.semibold))
                 }
             }
-            .frame(width: 48, height: 44)
+            .frame(width: Self.playbackControlWidth, height: 44)
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -135,13 +160,13 @@ struct TabletMiniPlayerView: View {
     }
 
     private func control(
-        _ icon: String, title: String, font: Font = .body.weight(.semibold), width: CGFloat = 48,
+        _ icon: String, title: String, font: Font = .body.weight(.semibold), width: CGFloat = TabletMiniPlayerView.controlWidth,
         isOn: Bool? = nil, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(font)
-                .foregroundStyle(isOn.map { $0 ? Color.accentColor : .secondary } ?? .primary)
+                .foregroundStyle(isOn.map { $0 ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary) } ?? AnyShapeStyle(.primary))
                 .frame(width: width, height: 44)
                 .contentShape(.rect)
         }
