@@ -8,8 +8,6 @@ struct MiniPlayerView: View {
     @Environment(\.tabViewBottomAccessoryPlacement) private var placement
     @Environment(PlayerStore.self) private var player
 
-    let artworkTransitionID: String
-    let artworkTransitionNamespace: Namespace.ID
     let onExpand: () -> Void
 
     var body: some View {
@@ -19,10 +17,6 @@ struct MiniPlayerView: View {
                     HStack(spacing: isInline ? 8 : 10) {
                         ArtworkImage(url: song.album?.artworkURL, cornerRadius: 6)
                             .frame(width: artworkSize, height: artworkSize)
-                            .matchedTransitionSource(
-                                id: artworkTransitionID,
-                                in: artworkTransitionNamespace
-                            )
 
                         VStack(alignment: .leading, spacing: 1) {
                             Text(song.name)
@@ -97,6 +91,12 @@ struct MiniPlayerView: View {
             .padding(.vertical, isInline ? 3 : 6)
             .frame(maxWidth: .infinity)
             .contentShape(.rect)
+            .background {
+                // Fill the gaps without turning transport buttons into expand actions.
+                Color.clear
+                    .contentShape(.rect)
+                    .onTapGesture(perform: onExpand)
+            }
             .simultaneousGesture(trackSwipeGesture)
             .accessibilityAction(named: L10n.string("ui.player.previous")) {
                 Task { await player.previous() }

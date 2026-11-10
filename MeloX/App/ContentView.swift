@@ -44,6 +44,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
     @Environment(LibraryStore.self) private var library
@@ -58,6 +59,9 @@ struct ContentView: View {
     @State private var sidebarArtwork: [SidebarArtworkRequest: UIImage] = [:]
     @State private var presentedSheet: ContentSheet?
     @State private var playerPresentation: PlayerPresentation?
+    @State private var isPlayerPresentationActive = false
+    @State private var playerUsesReducedMotion = false
+    @State private var isPlayerDismissalRequested = false
     @State private var requestedPlayerPage: NowPlayingPage?
     @State private var neteaseSharePresentation: NeteaseSharePresentation?
     @State private var nowPlayingSharePresentation: NeteaseSharePresentation?
@@ -66,10 +70,7 @@ struct ContentView: View {
     @State private var hasRestoredPlayback = false
     @State private var hasHandledHeartModeLaunch = false
     @State private var heartModeLaunchErrorMessage: String?
-    @Namespace private var playerTransitionNamespace
     @Namespace private var musicNavigationNamespace
-
-    private let playerTransitionID = "now-playing"
 
     init(initialTab: AppTab = .home) {
         _selectedTab = State(initialValue: .page(initialTab))
@@ -107,7 +108,12 @@ struct ContentView: View {
             ) { destination in
                 switch destination {
                 case .nowPlaying:
-                    NowPlayingView(initialPage: requestedPlayerPage ?? initialNowPlayingPage)
+                    NowPlayingPresentationView(
+                        initialPage: requestedPlayerPage ?? initialNowPlayingPage,
+                        reducesMotion: playerUsesReducedMotion,
+                        dismissalRequested: isPlayerDismissalRequested,
+                        onDismiss: dismissPlayer
+                    )
                         .environment(
                             \.openMusicRoute,
                             OpenMusicRouteAction(action: openMusicRoute)
@@ -126,13 +132,6 @@ struct ContentView: View {
                             NeteaseShareSheet(presentation: presentation)
                         }
                         .presentationBackground(.clear)
-                        .presentationContentInteraction(.resizes)
-                        .navigationTransition(
-                            .zoom(
-                                sourceID: playerTransitionID,
-                                in: playerTransitionNamespace
-                            )
-                        )
                 }
             }
             .sheet(item: $neteaseSharePresentation) { presentation in
@@ -379,9 +378,6 @@ struct ContentView: View {
                     let trailing = max(0, min(rootFrame.maxX - measuredFrame.maxX, proxy.size.width - leading))
                     let columnWidth = max(0, proxy.size.width - leading - trailing)
                     TabletMiniPlayerView(
-                        artworkTransitionID: playerTransitionID,
-                        artworkTransitionNamespace:
-                            playerTransitionNamespace,
                         collectionPalette:
                             tabletCollectionChrome[selectedTab]?.palette,
                         usesWideLayout:
@@ -423,18 +419,32 @@ struct ContentView: View {
     }
 
     private var miniPlayer: some View {
-        MiniPlayerView(
-            artworkTransitionID: playerTransitionID,
-            artworkTransitionNamespace:
-                playerTransitionNamespace
-        ) {
+        MiniPlayerView {
             openPlayer()
         }
     }
 
     private func openPlayer(_ page: NowPlayingPage? = nil) {
+        // Keep the presentation locked until onDismiss, including an interactive exit.
+        guard player.currentSong != nil, !isPlayerPresentationActive else { return }
         requestedPlayerPage = page
-        playerPresentation = .nowPlaying
+        playerUsesReducedMotion = accessibilityReduceMotion
+        isPlayerDismissalRequested = false
+        isPlayerPresentationActive = true
+        setPlayerPresentation(.nowPlaying)
+    }
+
+    private func dismissPlayer() {
+        setPlayerPresentation(nil)
+    }
+
+    private func setPlayerPresentation(_ presentation: PlayerPresentation?) {
+        // The cover is only a presentation host; its card owns all motion.
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            playerPresentation = presentation
+        }
     }
 
     private var tabs: some View {
@@ -842,9 +852,9 @@ struct ContentView: View {
     }
 
     private func openMusicRoute(_ route: MusicRoute) {
-        guard playerPresentation == nil else {
+        guard !isPlayerPresentationActive else {
             pendingMusicRoute = route
-            playerPresentation = nil
+            isPlayerDismissalRequested = true
             return
         }
         navigate(to: route)
@@ -873,6 +883,10 @@ struct ContentView: View {
     }
 
     private func finishPendingSongNavigation() {
+        isPlayerPresentationActive = false
+        isPlayerDismissalRequested = false
+        requestedPlayerPage = nil
+        nowPlayingSharePresentation = nil
         guard let route = pendingMusicRoute else { return }
         pendingMusicRoute = nil
         navigate(to: route)

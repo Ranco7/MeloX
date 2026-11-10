@@ -23,8 +23,6 @@ struct TabletMiniPlayerView: View {
     @Environment(PlayerStore.self) private var player
     @Environment(\.colorScheme) private var colorScheme
 
-    let artworkTransitionID: String
-    let artworkTransitionNamespace: Namespace.ID
     let collectionPalette: ArtworkDetailPalette?
     let usesWideLayout: Bool
     let onOpen: (NowPlayingPage?) -> Void
@@ -42,11 +40,7 @@ struct TabletMiniPlayerView: View {
                         .padding(.trailing, Self.trailingPadding)
                         .padding(.vertical, Self.verticalPadding)
                 } else {
-                    MiniPlayerView(
-                        artworkTransitionID: artworkTransitionID,
-                        artworkTransitionNamespace:
-                            artworkTransitionNamespace
-                    ) {
+                    MiniPlayerView {
                         onOpen(nil)
                     }
                     .padding(.horizontal, 4)
@@ -70,6 +64,11 @@ struct TabletMiniPlayerView: View {
                         .strokeBorder(collectionPalette.edgeColor.opacity(0.18), lineWidth: 0.5)
                         .allowsHitTesting(false)
                 }
+            }
+            .background {
+                Color.clear
+                    .contentShape(.capsule)
+                    .onTapGesture { onOpen(nil) }
             }
             .environment(\.colorScheme, collectionPalette?.colorScheme ?? colorScheme)
         }
@@ -108,7 +107,6 @@ struct TabletMiniPlayerView: View {
                 HStack(spacing: 9) {
                     ArtworkImage(url: song.album?.artworkURL, cornerRadius: 6)
                         .frame(width: Self.artworkSize, height: Self.artworkSize)
-                        .matchedTransitionSource(id: artworkTransitionID, in: artworkTransitionNamespace)
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(song.name)

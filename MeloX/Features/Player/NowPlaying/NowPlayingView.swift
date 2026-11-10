@@ -2,7 +2,6 @@ import SwiftUI
 import UIKit
 
 struct NowPlayingView: View {
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -26,11 +25,16 @@ struct NowPlayingView: View {
     @State private var showsFullScreenLyrics = false
     @Namespace private var pageArtworkNamespace
 
+    let onDismiss: () -> Void
+    let backgroundExtension: CGFloat
+
     private var page: NowPlayingPage {
         pageTransition.page
     }
 
-    init(initialPage: NowPlayingPage = .artwork) {
+    init(initialPage: NowPlayingPage = .artwork, backgroundExtension: CGFloat = 0, onDismiss: @escaping () -> Void) {
+        self.backgroundExtension = backgroundExtension
+        self.onDismiss = onDismiss
         _pageTransition = State(
             initialValue: NowPlayingTransitionCoordinator(
                 initialPage: initialPage
@@ -41,21 +45,27 @@ struct NowPlayingView: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack {
-                if usesMonochromeLyricsBackground {
-                    Color.black
-                        .ignoresSafeArea()
-                } else {
-                    NowPlayingBackground(
-                        artworkURL:
-                            player.currentSong?
-                                .album?
-                                .artworkURL,
-                        beatTimeline:
-                            player.currentBeatTimeline,
-                        isBehindLyrics:
-                            page == .lyrics
-                    )
+                Group {
+                    if usesMonochromeLyricsBackground {
+                        Color.black
+                            .ignoresSafeArea()
+                    } else {
+                        NowPlayingBackground(
+                            artworkURL:
+                                player.currentSong?
+                                    .album?
+                                    .artworkURL,
+                            beatTimeline:
+                                player.currentBeatTimeline,
+                            isBehindLyrics:
+                                page == .lyrics
+                        )
+                    }
                 }
+                // Extend the existing artwork-tinted background only. The outer
+                // frame keeps the content's original geometry and alignment.
+                .frame(width: proxy.size.width, height: proxy.size.height + backgroundExtension)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
 
                 if let song = player.currentSong {
                     if showsFullScreenLyrics, page == .lyrics {
@@ -69,7 +79,7 @@ struct NowPlayingView: View {
                             lyricError: lyricError,
                             highlightedLyricID: highlightedLyricID,
                             artworkNamespace: pageArtworkNamespace,
-                            onDismiss: { dismiss() },
+                            onDismiss: onDismiss,
                             onExpandLyrics: {
                                 showsLyricsControls = true
                                 showsFullScreenLyrics = true
@@ -86,7 +96,7 @@ struct NowPlayingView: View {
                             lyrics: lyrics,
                             errorMessage: lyricError,
                             highlightedLyricID: highlightedLyricID,
-                            onDismiss: { dismiss() },
+                            onDismiss: onDismiss,
                             onToggleInterface:
                                 toggleLyricsControls
                         )
@@ -101,7 +111,7 @@ struct NowPlayingView: View {
                             lyricError: lyricError,
                             highlightedLyricID: highlightedLyricID,
                             artworkNamespace: pageArtworkNamespace,
-                            onDismiss: { dismiss() },
+                            onDismiss: onDismiss,
                             onInterfaceInteraction:
                                 handleLyricsInterfaceInteraction,
                             onInterfaceVisibilityChange:
@@ -510,13 +520,13 @@ struct NowPlayingView: View {
         .frame(height: NowPlayingPortraitLayout.dismissalHandleHeight)
         .contentShape(.rect)
         .onTapGesture {
-            dismiss()
+            onDismiss()
         }
         .accessibilityElement()
         .accessibilityLabel("ui.player.collapse")
         .accessibilityHint("ui.player.collapse_hint")
         .accessibilityAction {
-            dismiss()
+            onDismiss()
         }
     }
 
