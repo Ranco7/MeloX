@@ -35,7 +35,7 @@ struct NowPlayingBottomControls: View {
     private var coreControls: some View {
         VStack(spacing: 0) {
             interfaceLayer(.progress) {
-                NowPlayingProgressControl(song: song)
+                NowPlayingProgressControl(song: song, usesCompactTimeRow: true)
                     .fixedSize(horizontal: false, vertical: true)
                     .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
                         onProgressHeightChange(height)
@@ -63,7 +63,7 @@ struct NowPlayingBottomControls: View {
                 .frame(height: layout.volumeSelectorGap)
 
             interfaceLayer(.pageSelector) {
-                NowPlayingPageSelector(page: $page)
+                NowPlayingPageSelector(page: $page, rowHeight: layout.pageSelectorHeight)
                     .frame(height: layout.pageSelectorHeight)
             }
         }

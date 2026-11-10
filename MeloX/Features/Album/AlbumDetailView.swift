@@ -50,7 +50,7 @@ struct AlbumDetailView: View {
                 palette: resolvedPalette,
                 blurredBackdropImage: blurredBackdropImage,
                 usesTabletBackdrop: usesTabletBackdrop,
-                searchQuery: searchQuery,
+                searchQuery: $searchQuery,
                 isLoading: isInitialLoading,
                 failureMessage: initialFailureMessage,
                 isSubscribed: isSubscribed,
@@ -69,10 +69,10 @@ struct AlbumDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(
+        .musicCollectionNativeSearch(
             text: $searchQuery,
-            placement: .navigationBarDrawer(displayMode: .always),
-            prompt: Text("ui.album.search_prompt")
+            prompt: Text("ui.album.search_prompt"),
+            enabled: !usesTabletBackdrop
         )
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(interfaceColorScheme, for: .navigationBar, .tabBar)

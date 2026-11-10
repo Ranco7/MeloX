@@ -1,3 +1,4 @@
+import AVKit
 import MediaPlayer
 import SwiftUI
 
@@ -6,43 +7,67 @@ struct NowPlayingProgressControl: View {
 
     let song: Song
 
+    var usesCompactTimeRow = false
+
     var body: some View {
-        VStack(spacing: 6) {
-            NowPlayingProgressSlider(maximum: progressMaximum)
-
-            HStack(spacing: 10) {
-                NowPlayingProgressElapsedTime()
-                    .frame(
-                        maxWidth: .infinity,
-                        alignment: .leading
-                    )
-
-                Group {
-                    if player.isAutoMixTransitioning {
-                        NowPlayingAutoMixStatus()
-                    } else {
-                        NowPlayingQualityMenu()
-                    }
-                }
-                .layoutPriority(1)
-                .animation(
-                    .smooth(duration: 0.25),
-                    value: player.isAutoMixTransitioning
-                )
-
-                NowPlayingProgressRemainingTime()
-                    .frame(
-                        maxWidth: .infinity,
-                        alignment: .trailing
-                    )
+        if usesCompactTimeRow {
+            // Time labels are passive: they can share the bottom of the
+            // slider's 44pt hit region without overlapping another action.
+            VStack(spacing: -8) {
+                NowPlayingProgressSlider(maximum: progressMaximum)
+                    .frame(height: 44)
+                timeRow
+                    .allowsHitTesting(false)
             }
-            .font(.caption2.monospacedDigit())
-            .foregroundStyle(.white.opacity(0.5))
+            .frame(minHeight: NowPlayingPortraitLayout.baseProgressHeight)
+        } else {
+            VStack(spacing: 6) {
+                NowPlayingProgressSlider(maximum: progressMaximum)
+                HStack(spacing: 10) {
+                    NowPlayingProgressElapsedTime()
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    NowPlayingQualityControl()
+                        .layoutPriority(1)
+                    NowPlayingProgressRemainingTime()
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.white.opacity(0.5))
+            }
         }
+    }
+
+    private var timeRow: some View {
+        HStack {
+            NowPlayingProgressElapsedTime()
+            Spacer(minLength: 8)
+            NowPlayingProgressRemainingTime()
+        }
+        .font(.caption2.monospacedDigit())
+        .foregroundStyle(.white.opacity(0.64))
     }
 
     private var progressMaximum: TimeInterval {
         max(player.duration, TimeInterval(song.durationMS) / 1_000, 1)
+    }
+}
+
+/// Portrait shares this action with the existing top chrome. Other player
+/// arrangements retain their quality/time row.
+struct NowPlayingQualityControl: View {
+    @Environment(PlayerStore.self) private var player
+
+    var body: some View {
+        Group {
+            if player.isAutoMixTransitioning {
+                NowPlayingAutoMixStatus()
+            } else {
+                NowPlayingQualityMenu()
+            }
+        }
+        .font(.caption2)
+        .frame(minWidth: 44, minHeight: 44)
+        .animation(.smooth(duration: 0.25), value: player.isAutoMixTransitioning)
     }
 }
 
@@ -234,9 +259,24 @@ struct NowPlayingTransportControls: View {
 
     var presentation: Presentation = .standard
     var rowHeight: CGFloat? = nil
+    var availableWidth: CGFloat? = nil
 
     private var isTablet: Bool { presentation == .tablet }
-    private var controlDiameter: CGFloat { isTablet ? 44 : 64 }
+    private var controlDiameter: CGFloat {
+        isTablet ? min(64, max(rowHeight ?? 64, 44), max(44, ((availableWidth ?? 320) - 88) / 3))
+            : min(64, max(rowHeight ?? 64, 44))
+    }
+
+    private var skipSymbolSize: CGFloat {
+        NowPlayingPortraitLayout.skipSymbolSize(controlDiameter: controlDiameter)
+    }
+
+    private var playSymbolSize: CGFloat {
+        NowPlayingPortraitLayout.playSymbolSize(
+            controlDiameter: controlDiameter,
+            isTablet: isTablet
+        )
+    }
 
     var body: some View {
         HStack(spacing: isTablet ? 0 : nil) {
@@ -263,7 +303,7 @@ struct NowPlayingTransportControls: View {
                 Task { await player.previous() }
             } label: {
                 Image(systemName: "backward.fill")
-                    .font(.system(size: isTablet ? 24 : 34, weight: .medium))
+                    .font(.system(size: skipSymbolSize, weight: .medium))
                     .frame(width: controlDiameter, height: controlDiameter)
                     .contentShape(.circle)
             }
@@ -287,7 +327,7 @@ struct NowPlayingTransportControls: View {
                             .tint(.white)
                     } else {
                         Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
-                            .font(.system(size: isTablet ? 30 : 48, weight: .medium))
+                            .font(.system(size: playSymbolSize, weight: .medium))
                             .contentTransition(
                                 accessibilityReduceMotion
                                     ? .identity
@@ -325,7 +365,7 @@ struct NowPlayingTransportControls: View {
                 Task { await player.next() }
             } label: {
                 Image(systemName: "forward.fill")
-                    .font(.system(size: isTablet ? 24 : 34, weight: .medium))
+                    .font(.system(size: skipSymbolSize, weight: .medium))
                     .frame(width: controlDiameter, height: controlDiameter)
                     .contentShape(.circle)
             }
@@ -352,7 +392,7 @@ struct NowPlayingTransportControls: View {
                 .accessibilityAddTraits(player.repeatMode == .off ? [] : .isSelected)
             }
         }
-        .frame(height: max(rowHeight ?? (isTablet ? 52 : 82), controlDiameter))
+        .frame(height: max(rowHeight ?? (isTablet ? 64 : 82), controlDiameter))
     }
 }
 
@@ -408,34 +448,61 @@ private final class AlignedSystemVolumeView: MPVolumeView {
     }
 }
 
-private struct SystemVolumeSlider: UIViewRepresentable {
-    func makeUIView(context: Context) -> AlignedSystemVolumeView {
-        let volumeView = AlignedSystemVolumeView(
-            frame: CGRect(x: 0, y: 0, width: 200, height: 32)
-        )
-        volumeView.backgroundColor = .clear
-        volumeView.showsVolumeSlider = true
-        volumeView.tintColor = .white
-        return volumeView
+/// Keep native drawing geometry independent of the outer touch target.
+/// SwiftUI owns the host size; only the child receives the native frame.
+private final class SystemVolumeHostView: UIView {
+    private let volumeView = AlignedSystemVolumeView(
+        frame: CGRect(x: 0, y: 0, width: 200, height: 32)
+    )
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .clear
+        addSubview(volumeView)
+        volumeView.frame = NowPlayingVolumeGeometry.nativeFrame(in: bounds)
+        configure()
     }
 
-    func updateUIView(
-        _ volumeView: AlignedSystemVolumeView,
-        context: Context
-    ) {
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func configure() {
+        volumeView.backgroundColor = .clear
         volumeView.showsVolumeSlider = true
+        volumeView.showsRouteButton = false
         volumeView.tintColor = .white
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        volumeView.frame = NowPlayingVolumeGeometry.nativeFrame(in: bounds)
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard !isHidden, alpha > 0.01, isUserInteractionEnabled,
+              self.point(inside: point, with: event) else { return nil }
+        // Forward the 6pt top/bottom padding to the native slider using public
+        // hit testing, without inspecting MPVolumeView's private subviews.
+        let nativePoint = NowPlayingVolumeGeometry.nativeHitPoint(point, frame: volumeView.frame)
+        return volumeView.hitTest(nativePoint, with: event) ?? self
+    }
+}
+
+private struct SystemVolumeSlider: UIViewRepresentable {
+    func makeUIView(context: Context) -> SystemVolumeHostView {
+        SystemVolumeHostView(frame: CGRect(origin: .zero, size: NowPlayingVolumeGeometry.size(proposedWidth: nil)))
+    }
+
+    func updateUIView(_ volumeView: SystemVolumeHostView, context: Context) {
+        volumeView.configure()
     }
 
     func sizeThatFits(
         _ proposal: ProposedViewSize,
-        uiView: AlignedSystemVolumeView,
+        uiView: SystemVolumeHostView,
         context: Context
     ) -> CGSize? {
-        CGSize(
-            width: proposal.width ?? 200,
-            height: proposal.height ?? 32
-        )
+        NowPlayingVolumeGeometry.size(proposedWidth: proposal.width)
     }
 }
 
@@ -445,6 +512,7 @@ struct NowPlayingPageSelector: View {
     @Environment(PlayerStore.self) private var player
 
     @Binding var page: NowPlayingPage
+    var rowHeight: CGFloat = 50
 
     var body: some View {
         Group {
@@ -474,7 +542,7 @@ struct NowPlayingPageSelector: View {
 
                     Spacer()
 
-                    FloatingLyricsButton()
+                    NowPlayingAirPlayControl()
 
                     Spacer()
 
@@ -492,7 +560,7 @@ struct NowPlayingPageSelector: View {
         }
         .padding(.horizontal, 32)
         .foregroundStyle(.white.opacity(0.72))
-        .frame(height: 50)
+        .frame(height: max(rowHeight, 44))
     }
 
     private func pageButton(
@@ -557,5 +625,21 @@ struct NowPlayingPageSelector: View {
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
+struct NowPlayingAirPlayControl: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let view = AVRoutePickerView()
+        view.tintColor = .white.withAlphaComponent(0.72)
+        view.activeTintColor = .white
+        view.prioritizesVideoDevices = false
+        return view
+    }
+
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: AVRoutePickerView, context: Context) -> CGSize? {
+        CGSize(width: 44, height: 44)
     }
 }

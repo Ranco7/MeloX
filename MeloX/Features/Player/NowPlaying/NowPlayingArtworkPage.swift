@@ -108,54 +108,53 @@ struct NowPlayingArtworkPage: View {
     }
 
     private var metadata: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(song.name)
                     .font(.title3.weight(.semibold))
                     .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .layoutPriority(1)
-                    .frame(
-                        maxWidth: .infinity,
-                        alignment: .leading
-                    )
-
-                NowPlayingSongActions(
-                    song: song,
-                    showsFavoriteButton: false
-                )
-                .fixedSize()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(song.artistText)
+                    .font(.title3)
+                    .foregroundStyle(.white.opacity(0.64))
+                    .lineLimit(1)
             }
-
-            Text(song.artistText)
-                .font(.title3)
-                .foregroundStyle(.white.opacity(0.64))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(
-                    maxWidth: .infinity,
-                    alignment: .leading
-                )
-
-            NowPlayingMetadataBadges()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            NowPlayingSongActions(song: song)
+                .fixedSize()
         }
         .padding(.horizontal, layout.horizontalMargin)
     }
 }
 
-/// The heart-mode and listen-together capsules get their own row so they can
-/// never compete with the song title or the trailing actions.
-private struct NowPlayingMetadataBadges: View {
+/// Active states stay separate from title/artist. Portrait can place these in
+/// the utility header with full hit targets; tablet retains its metadata row.
+struct NowPlayingMetadataBadges: View {
     @Environment(PlayerStore.self) private var player
     @Environment(ListenTogetherStore.self) private var listenTogether
+    var minimumTouchHeight: CGFloat = 0
+    var stacksVertically = false
 
     var body: some View {
         if player.isHeartModeActive || listenTogether.room != nil {
-            HStack(spacing: 8) {
-                HeartModeNowPlayingBadge()
-                ListenTogetherNowPlayingBadge()
+            Group {
+                if stacksVertically {
+                    VStack(alignment: .leading, spacing: 0) {
+                        badges
+                    }
+                } else {
+                    HStack(spacing: 8) {
+                        badges
+                    }
+                }
             }
-            .padding(.top, 2)
+            .padding(.top, minimumTouchHeight > 0 ? 0 : 2)
         }
+    }
+
+    @ViewBuilder
+    private var badges: some View {
+        HeartModeNowPlayingBadge(minimumTouchHeight: minimumTouchHeight)
+        ListenTogetherNowPlayingBadge(minimumTouchHeight: minimumTouchHeight)
     }
 }

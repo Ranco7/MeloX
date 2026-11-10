@@ -1,12 +1,14 @@
 import SwiftUI
+import UIKit
 
 struct AlbumDetailContent: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let album: Album
     let songs: [Song]
     let palette: ArtworkDetailPalette
     let blurredBackdropImage: CGImage?
     let usesTabletBackdrop: Bool
-    let searchQuery: String
+    @Binding var searchQuery: String
     let isLoading: Bool
     let failureMessage: String?
     let isSubscribed: Bool
@@ -26,7 +28,18 @@ struct AlbumDetailContent: View {
             )
 
             GeometryReader { viewport in
-            ScrollView {
+            let wideWidth = MusicCollectionLayout.wideWidth(
+                viewport.size.width,
+                isTablet: UIDevice.current.userInterfaceIdiom == .pad,
+                isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+            )
+            MusicCollectionScrollView(
+                query: $searchQuery,
+                prompt: L10n.string("ui.album.search_prompt"),
+                usesInlineSearch: usesTabletBackdrop,
+                searchInset: MusicCollectionLayout.horizontalInset(wide: wideWidth != nil),
+                heroTopInset: wideWidth != nil ? MusicCollectionLayout.heroTopInset : 26
+            ) {
                 MusicCollectionDetailLayout(availableWidth: viewport.size.width) { artworkSize in
                     StandardMusicCollectionDetailHero(
                         artworkURL: album.artworkURL,

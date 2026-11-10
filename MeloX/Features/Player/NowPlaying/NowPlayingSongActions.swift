@@ -5,6 +5,7 @@ struct NowPlayingSongActions: View {
     @Environment(AppSettings.self) private var settings
     @Environment(LibraryStore.self) private var library
     @Environment(PlayerStore.self) private var player
+    @Environment(FloatingLyricsController.self) private var floatingLyrics
     @Environment(ListenTogetherStore.self) private var listenTogether
 
     let song: Song
@@ -68,6 +69,16 @@ struct NowPlayingSongActions: View {
     private var songMenu: some View {
         Menu {
             lyricsSourceMenu
+
+            Button {
+                floatingLyrics.toggle()
+            } label: {
+                Label(
+                    L10n.string(floatingLyrics.isActive ? "ui.floating_lyrics.close" : "ui.floating_lyrics.open"),
+                    systemImage: floatingLyrics.isActive ? "pip.exit" : "pip.enter"
+                )
+            }
+            .disabled(!floatingLyrics.isActive && !floatingLyrics.isPossible)
 
             Divider()
             Button {

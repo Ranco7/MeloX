@@ -338,7 +338,11 @@ struct NowPlayingView: View {
             // unit, so no control is clipped and nothing is rebuilt on resize.
             ScrollView(.vertical) {
                 VStack(spacing: 0) {
-                    dismissalHandle
+                    portraitHeader(layout: layout)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                            portraitHeaderHeight = height
+                        }
 
                     pageContent(for: song, layout: layout)
                         .frame(maxWidth: .infinity)
@@ -374,6 +378,7 @@ struct NowPlayingView: View {
 
     @State private var portraitMetadataHeight: CGFloat? = nil
     @State private var portraitProgressHeight: CGFloat? = nil
+    @State private var portraitHeaderHeight: CGFloat? = nil
 
     private func portraitLayout(
         for size: CGSize
@@ -384,7 +389,8 @@ struct NowPlayingView: View {
             showsUtilityRow: usesExpandedAppleMusicLyricsLayout,
             showsArtworkPage: page == .artwork,
             measuredMetadataHeight: portraitMetadataHeight,
-            measuredProgressHeight: portraitProgressHeight
+            measuredProgressHeight: portraitProgressHeight,
+            measuredHeaderHeight: portraitHeaderHeight
         )
     }
 
@@ -526,25 +532,44 @@ struct NowPlayingView: View {
         page == .lyrics && settings.lyricsStyle.usesMonochromePlayerBackground
     }
 
+    private func portraitHeader(layout: NowPlayingPortraitLayout) -> some View {
+        NowPlayingPortraitHeaderLayout {
+            portraitHeaderBadges()
+            dismissalHandle
+            portraitHeaderQuality
+        }
+        .padding(.horizontal, layout.horizontalMargin)
+        .foregroundStyle(.white)
+    }
+
+    private func portraitHeaderBadges(stacksVertically: Bool = false) -> some View {
+        NowPlayingMetadataBadges(minimumTouchHeight: 44, stacksVertically: stacksVertically || dynamicTypeSize.isAccessibilitySize)
+            .opacity(hidesLyricsControls ? 0 : 1)
+            .allowsHitTesting(!hidesLyricsControls)
+            .accessibilityHidden(hidesLyricsControls)
+    }
+
+    private var portraitHeaderQuality: some View {
+        NowPlayingQualityControl()
+            .opacity(hidesLyricsControls ? 0 : 1)
+            .allowsHitTesting(!hidesLyricsControls)
+            .accessibilityHidden(hidesLyricsControls)
+    }
+
     private var dismissalHandle: some View {
-        ZStack(alignment: .top) {
+        Button(action: onDismiss) {
             Capsule()
                 .fill(.white.opacity(0.52))
-                .frame(width: 60, height: 5)
-                .padding(.top, 12)
+                .frame(width: NowPlayingPortraitHeaderMetrics.handleWidth, height: 5)
+                .frame(
+                    width: NowPlayingPortraitHeaderMetrics.handleWidth,
+                    height: NowPlayingPortraitHeaderMetrics.handleHeight
+                )
+                .contentShape(.rect)
         }
-        .frame(maxWidth: .infinity)
-        .frame(height: NowPlayingPortraitLayout.dismissalHandleHeight)
-        .contentShape(.rect)
-        .onTapGesture {
-            onDismiss()
-        }
-        .accessibilityElement()
+        .buttonStyle(.plain)
         .accessibilityLabel("ui.player.collapse")
         .accessibilityHint("ui.player.collapse_hint")
-        .accessibilityAction {
-            onDismiss()
-        }
     }
 
     private func pageContent(
@@ -1097,6 +1122,36 @@ struct NowPlayingView: View {
         appleMusicControlsActivityGeneration &+= 1
     }
 
+}
+
+private struct NowPlayingPortraitHeaderLayout: Layout {
+    private func frames(width: CGFloat, subviews: Subviews) -> NowPlayingPortraitHeaderMetrics.Frames {
+        NowPlayingPortraitHeaderMetrics.frames(
+            width: width,
+            badges: subviews[0].sizeThatFits(ProposedViewSize(width: width, height: nil)),
+            quality: subviews[2].sizeThatFits(ProposedViewSize(width: width, height: nil))
+        )
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let naturalWidth = max(
+            subviews[0].sizeThatFits(.unspecified).width + 8 + subviews[2].sizeThatFits(.unspecified).width,
+            NowPlayingPortraitHeaderMetrics.handleWidth
+        )
+        let width = proposal.width.flatMap { $0.isFinite ? max($0, 0) : nil } ?? naturalWidth
+        return CGSize(width: width, height: frames(width: width, subviews: subviews).height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let positions = frames(width: bounds.width, subviews: subviews)
+        for (index, frame) in [positions.badges, positions.handle, positions.quality].enumerated() {
+            subviews[index].place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                anchor: .topLeading,
+                proposal: ProposedViewSize(width: frame.width, height: frame.height)
+            )
+        }
+    }
 }
 
 private struct NowPlayingBeatAnalysisTaskID: Equatable {

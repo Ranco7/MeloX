@@ -3,6 +3,8 @@ import SwiftUI
 struct HeartModeNowPlayingBadge: View {
     @Environment(PlayerStore.self) private var player
 
+    var minimumTouchHeight: CGFloat = 0
+
     @State private var showsActions = false
 
     var body: some View {
@@ -17,6 +19,8 @@ struct HeartModeNowPlayingBadge: View {
                     .padding(.vertical, 5)
                     .foregroundStyle(.white)
                     .background(.white.opacity(0.14), in: .capsule)
+                    .frame(minHeight: minimumTouchHeight)
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .fixedSize()

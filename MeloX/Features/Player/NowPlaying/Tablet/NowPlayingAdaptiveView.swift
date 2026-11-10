@@ -39,16 +39,16 @@ struct NowPlayingAdaptiveView: View {
         GeometryReader { proxy in
             let layout = NowPlayingTabletLayout(viewport: proxy.size, fillsRegion: true)
 
-            ScrollView {
+            ScrollView([.horizontal, .vertical]) {
                 NowPlayingTabletPlayerColumn(song: song, layout: layout) { size in
                     if size.isFinite && size > 0 { fittedArtworkSize = size }
                 }
-                    .frame(width: layout.playerContainerWidth)
-                    .frame(maxWidth: .infinity)
+                    .frame(width: layout.playerWidth)
+                    .frame(minWidth: proxy.size.width)
             }
-            .scrollBounceBehavior(.basedOnSize)
+            .scrollBounceBehavior(.basedOnSize, axes: [.horizontal, .vertical])
             .scrollIndicators(.hidden)
-            .scrollClipDisabled()
+            .scrollClipDisabled(layout.playerWidth <= layout.playerContainerWidth)
         }
     }
 
@@ -82,7 +82,8 @@ struct NowPlayingAdaptiveView: View {
         .visibilityPriority(.high)
 
         ToolbarItem(placement: .bottomBar) {
-            FloatingLyricsButton()
+            NowPlayingAirPlayControl()
+                .frame(width: 44, height: 44)
         }
         .axisBehavior(.verticalPreferred)
 

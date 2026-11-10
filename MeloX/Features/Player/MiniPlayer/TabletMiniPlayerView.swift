@@ -7,10 +7,10 @@ struct TabletMiniPlayerView: View {
     static let clusterSpacing: CGFloat = 10
     static let leadingPadding: CGFloat = 10
     static let trailingPadding: CGFloat = 6
-    static let artworkSize: CGFloat = 36
-    /// 44pt hit areas plus 5.5pt above and below give the 55pt bar height
-    /// Apple Music uses for its floating iPad player.
-    static let verticalPadding: CGFloat = 5.5
+    static let artworkSize: CGFloat = 40
+    /// 44pt controls + 10pt on each side yield a 64pt capsule and 12pt
+    /// of vertical space around the 40pt artwork.
+    static let verticalPadding: CGFloat = 10
     // Transport cluster (4 controls + play) + title minimum + 3 actions,
     // the gaps between the three clusters, and the bar's own padding.
     static let minimumControlsWidth: CGFloat =
@@ -104,8 +104,8 @@ struct TabletMiniPlayerView: View {
             Button {
                 onOpen(nil)
             } label: {
-                HStack(spacing: 9) {
-                    ArtworkImage(url: song.album?.artworkURL, cornerRadius: 6)
+                HStack(spacing: 12) {
+                    ArtworkImage(url: song.album?.artworkURL, cornerRadius: 5)
                         .frame(width: Self.artworkSize, height: Self.artworkSize)
 
                     VStack(alignment: .leading, spacing: 2) {

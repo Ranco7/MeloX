@@ -298,6 +298,45 @@ print("Shared offset policy passed: release derivative and corner continuity")
             ], check=True)
             subprocess.run([str(executable)], check=True)
 
+    @unittest.skipUnless(shutil.which("swiftc"), "Swift compiler unavailable")
+    def test_collection_search_and_volume_preferences(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "search-volume-checks"
+            subprocess.run([
+                "swiftc", "-swift-version", "5",
+                str(ROOT / "MeloX/Shared/Media/MusicCollectionSearchLayout.swift"),
+                str(ROOT / "MeloX/Shared/Media/MusicCollectionWidthPolicy.swift"),
+                str(ROOT / "MeloX/Core/Settings/Playback/PlayerVolumeControlMode.swift"),
+                str(ROOT / "Tests/Player/MusicCollectionSearchLayoutChecks.swift"),
+                "-o", str(executable),
+            ], check=True)
+            subprocess.run([str(executable)], check=True)
+
+    @unittest.skipUnless(shutil.which("swiftc"), "Swift compiler unavailable")
+    def test_system_volume_native_geometry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "system-volume-checks"
+            subprocess.run([
+                "swiftc", "-swift-version", "5",
+                str(ROOT / "MeloX/Features/Player/NowPlaying/NowPlayingVolumeGeometry.swift"),
+                str(ROOT / "Tests/Player/NowPlayingSystemVolumeChecks.swift"),
+                "-o", str(executable),
+            ], check=True)
+            subprocess.run([str(executable)], check=True)
+
+    def test_native_volume_is_hosted_separately_from_touch_target(self):
+        source = (ROOT / "MeloX/Features/Player/NowPlaying/NowPlayingControls.swift").read_text()
+        host = source.split("private final class SystemVolumeHostView:", 1)[1].split("private struct SystemVolumeSlider:", 1)[0]
+        self.assertIn("volumeView.frame = NowPlayingVolumeGeometry.nativeFrame(in: bounds)", host)
+        self.assertIn("NowPlayingVolumeGeometry.nativeHitPoint(point, frame: volumeView.frame)", host)
+        bridge = source.split("private struct SystemVolumeSlider:", 1)[1].split("struct NowPlayingPageSelector:", 1)[0]
+        self.assertIn("NowPlayingVolumeGeometry.size(proposedWidth: proposal.width)", bridge)
+        self.assertNotIn("proposal.height", bridge)
+        self.assertNotIn("width: proposal.width ??", bridge)
+        geometry = (ROOT / "MeloX/Features/Player/NowPlaying/NowPlayingVolumeGeometry.swift").read_text()
+        self.assertIn("nativeHeight: CGFloat = 32", geometry)
+        self.assertIn("touchHeight: CGFloat = 44", geometry)
+
     def test_card_interruption_and_snapshot_admission_regressions(self):
         path = ROOT / "MeloX/Features/Player/NowPlaying/NowPlayingPresentationView.swift"
         source = path.read_text()

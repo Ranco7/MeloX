@@ -7,7 +7,7 @@ class PlaylistPolishTests(unittest.TestCase):
     def test_bottom_inset_not_doubled(self):
         source = read("MeloX/App/ContentView.swift")
         self.assertNotIn("max(proxy.safeAreaInsets.bottom, 0) + 8", source)
-        self.assertIn("MusicCollectionLayout.miniPlayerBottomInset", source)
+        self.assertIn("MusicCollectionLayout.miniPlayerScreenBottomInset", source)
     def test_content_column_measured(self):
         source = read("MeloX/App/ContentView.swift")
         self.assertNotIn("contentColumnFrames", source)
@@ -16,8 +16,8 @@ class PlaylistPolishTests(unittest.TestCase):
         self.assertIn("let columnWidth = max(0, rootWidth - leading - trailing)", source)
     def test_shared_grid(self):
         source = read("MeloX/Features/Playlist/PlaylistTrackList.swift")
-        self.assertIn("MusicCollectionLayout.titleLeadingInset", source)
-        self.assertIn(".padding(.horizontal, MusicCollectionLayout.horizontalInset", source)
+        self.assertIn("MusicCollectionLayout.wideRowLeadingPadding(showsFavorite:", source)
+        self.assertIn(".padding(.trailing, MusicCollectionLayout.horizontalInset", source)
         self.assertIn(".frame(width: MusicCollectionLayout.controlMinimumSize, height:", source)
     def test_mutations_invalidate_detail(self):
         source = read("MeloX/Core/Library/LibraryStore.swift")

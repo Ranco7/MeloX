@@ -2,12 +2,13 @@ import SwiftUI
 import UIKit
 
 struct PlaylistDetailContent: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let playlist: Playlist
     let toplistSummary: Playlist?
     let palette: ArtworkDetailPalette
     let blurredBackdropImage: CGImage?
     let usesTabletBackdrop: Bool
-    let searchQuery: String
+    @Binding var searchQuery: String
     let isLoading: Bool
     let failureMessage: String?
     let hasMoreTracks: Bool
@@ -53,7 +54,18 @@ struct PlaylistDetailContent: View {
             )
 
             GeometryReader { viewport in
-            ScrollView {
+            let wideWidth = MusicCollectionLayout.wideWidth(
+                viewport.size.width,
+                isTablet: UIDevice.current.userInterfaceIdiom == .pad,
+                isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+            )
+            MusicCollectionScrollView(
+                query: $searchQuery,
+                prompt: L10n.string(usesToplistLayout ? "ui.toplists.search_prompt" : "ui.playlists.search_prompt"),
+                usesInlineSearch: usesTabletBackdrop && !usesToplistLayout,
+                searchInset: MusicCollectionLayout.horizontalInset(wide: wideWidth != nil),
+                heroTopInset: wideWidth != nil ? MusicCollectionLayout.heroTopInset : 26
+            ) {
                 if usesToplistLayout {
                     LazyVStack(spacing: 0) {
                         ToplistDetailHero(
@@ -152,9 +164,11 @@ struct MusicCollectionDetailLayout<Hero: View, Tracks: View>: View {
     @ViewBuilder let tracks: (CGFloat?) -> Tracks
 
     var body: some View {
-        let wideWidth = UIDevice.current.userInterfaceIdiom == .pad
-            && !dynamicTypeSize.isAccessibilitySize
-            ? MusicCollectionLayout.wideWidth(availableWidth) : nil
+        let wideWidth = MusicCollectionLayout.wideWidth(
+            availableWidth,
+            isTablet: UIDevice.current.userInterfaceIdiom == .pad,
+            isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+        )
 
         let artworkSize = wideWidth.map {
             min(
@@ -305,10 +319,10 @@ struct StandardMusicCollectionDetailHero: View {
     }
 
     private var artwork: some View {
-        ArtworkImage(url: artworkURL, cornerRadius: isWide ? 11 : 12)
+        ArtworkImage(url: artworkURL, cornerRadius: isWide ? 10 : 12)
             .overlay {
                 if isWide {
-                    RoundedRectangle(cornerRadius: 11)
+                    RoundedRectangle(cornerRadius: 10)
                         .strokeBorder(
                             Color.primary.opacity(colorScheme == .dark ? 0.12 : 0.08),
                             lineWidth: 0.5
@@ -604,10 +618,9 @@ struct MusicCollectionPrimaryActions: View {
         usesWideControls ? MusicCollectionLayout.heroControlSpacing : 14
     }
 
-    /// Visible wide controls are 40pt like Apple Music; the hit area grows to
-    /// the 44pt minimum without changing layout.
+    /// Smaller visual controls still reserve a 44pt touch target.
     private var hitSlop: CGFloat {
-        (MusicCollectionLayout.controlMinimumSize - MusicCollectionLayout.heroControlSize) / 2
+        max(0, (MusicCollectionLayout.controlMinimumSize - MusicCollectionLayout.heroControlSize) / 2)
     }
 
     private var primaryActionBackground: Color {

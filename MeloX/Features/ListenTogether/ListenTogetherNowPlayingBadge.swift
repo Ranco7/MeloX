@@ -3,6 +3,8 @@ import SwiftUI
 struct ListenTogetherNowPlayingBadge: View {
     @Environment(ListenTogetherStore.self) private var listenTogether
 
+    var minimumTouchHeight: CGFloat = 0
+
     @State private var showsMembers = false
 
     var body: some View {
@@ -17,6 +19,8 @@ struct ListenTogetherNowPlayingBadge: View {
                     .padding(.vertical, 5)
                     .foregroundStyle(.white)
                     .background(.white.opacity(0.14), in: .capsule)
+                    .frame(minHeight: minimumTouchHeight)
+                    .contentShape(.rect)
             }
             .buttonStyle(.plain)
             .fixedSize()

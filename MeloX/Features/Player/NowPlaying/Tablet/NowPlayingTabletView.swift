@@ -33,7 +33,7 @@ struct NowPlayingTabletView: View {
                 )
             } else {
                 GeometryReader { proxy in
-                    let layout = NowPlayingTabletLayout(viewport: proxy.size)
+                    let layout = NowPlayingTabletLayout(viewport: proxy.size, showsSidePanel: page != .artwork)
 
                     standardPlayer(layout: layout)
                         .frame(width: proxy.size.width, height: proxy.size.height)
@@ -46,14 +46,14 @@ struct NowPlayingTabletView: View {
 
     private func standardPlayer(layout: NowPlayingTabletLayout) -> some View {
         ZStack(alignment: .topLeading) {
-            ScrollView {
+            ScrollView([.horizontal, .vertical]) {
                 NowPlayingTabletPlayerColumn(song: song, layout: layout) { size in
                     if size.isFinite && size > 0 { fittedArtworkSize = size }
                 }
             }
-            .scrollBounceBehavior(.basedOnSize)
+            .scrollBounceBehavior(.basedOnSize, axes: [.horizontal, .vertical])
             .scrollIndicators(.hidden)
-            .scrollClipDisabled()
+            .scrollClipDisabled(layout.playerWidth <= layout.playerContainerWidth)
             .frame(width: layout.playerContainerWidth, height: layout.contentHeight)
             .offset(
                 x: page == .artwork ? layout.centeredPlayerLeading : layout.playerLeading,
@@ -103,7 +103,8 @@ struct NowPlayingTabletView: View {
 
             GlassEffectContainer(spacing: 12) {
                 HStack(spacing: 12) {
-                    FloatingLyricsButton()
+                    NowPlayingAirPlayControl()
+                        .frame(width: 44, height: 44)
 
                     if page == .lyrics {
                         if lyrics.contains(where: { $0.hasTranslation || $0.hasRomanization }) {

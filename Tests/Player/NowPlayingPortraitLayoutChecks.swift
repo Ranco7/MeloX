@@ -15,8 +15,10 @@ struct NowPlayingPortraitLayoutChecks {
         runUtilityAndMargins()
         runArtworkMonotonic()
         runTouchTargets()
+        runHeaderAndSymbols()
         runWholePlayerScroll()
         runCompactWindowVisibility()
+        runReferenceFirstScreen()
         runTabletMatrix()
         print("Now Playing adaptive layout checks passed")
     }
@@ -26,6 +28,7 @@ struct NowPlayingPortraitLayoutChecks {
             Case(name: "320x480", size: CGSize(width: 320, height: 480), route: "portrait"),
             Case(name: "375x667", size: CGSize(width: 375, height: 667), route: "portrait"),
             Case(name: "430x700", size: CGSize(width: 430, height: 700), route: "portrait"),
+            Case(name: "320x300", size: CGSize(width: 320, height: 300), route: "portrait"),
             Case(name: "500x400", size: CGSize(width: 500, height: 400), route: "portrait"),
             Case(name: "700x900", size: CGSize(width: 700, height: 900), route: "portrait"),
             Case(name: "1024x768", size: CGSize(width: 1_024, height: 768), route: "portrait"),
@@ -133,8 +136,8 @@ struct NowPlayingPortraitLayoutChecks {
         }
 
         check(
-            firstFallbackCase == "500x400",
-            "Only the physically shorter page should need scrolling, got \(firstFallbackCase ?? "none")"
+            firstFallbackCase == "320x300",
+            "Physically short pages should retain recognisable artwork and scroll, got \(firstFallbackCase ?? "none")"
         )
     }
 
@@ -253,6 +256,37 @@ struct NowPlayingPortraitLayoutChecks {
         )
     }
 
+    private static func runHeaderAndSymbols() {
+        for width: CGFloat in [284.8, 333.75, 396.94, 544.44] {
+            for badge in [CGSize.zero, CGSize(width: 72, height: 44), CGSize(width: 154, height: 44), CGSize(width: 190, height: 88)] {
+                for quality in [CGSize(width: 44, height: 44), CGSize(width: 80, height: 44), CGSize(width: 160, height: 66), CGSize(width: 280, height: 66)] {
+                    let frames = NowPlayingPortraitHeaderMetrics.frames(width: width, badges: badge, quality: quality)
+                    check(abs(frames.handle.midX - width / 2) < 0.001, "Asymmetric/hidden side content moved the handle")
+                    let rectangles = [frames.badges, frames.handle, frames.quality]
+                    for rect in rectangles {
+                        check(rect.minX >= 0 && rect.maxX <= width + 0.001 && rect.minY >= 0, "Header utility escaped its column")
+                    }
+                    for pair in [(frames.badges, frames.handle), (frames.quality, frames.handle), (frames.badges, frames.quality)] {
+                        let width = max(min(pair.0.maxX, pair.1.maxX) - max(pair.0.minX, pair.1.minX), 0)
+                        let height = max(min(pair.0.maxY, pair.1.maxY) - max(pair.0.minY, pair.1.minY), 0)
+                        check(width * height == 0, "Header targets overlap")
+                    }
+                    check(frames.handle.height == 44 && frames.height >= 44, "Handle target shrank")
+                }
+            }
+        }
+        for diameter: CGFloat in [44, 47.4, 52, 64] {
+            for tablet in [false, true] {
+                check(NowPlayingPortraitLayout.playSymbolSize(controlDiameter: diameter, isTablet: tablet) <= diameter - 4, "Play glyph overflows its target")
+            }
+            check(NowPlayingPortraitLayout.skipSymbolSize(controlDiameter: diameter) * 1.4 <= diameter - 4 + 0.001, "Wide skip glyph overflows its target")
+        }
+        for height: CGFloat in [428, 442, 536, 638, 900] {
+            let layout = NowPlayingPortraitLayout(viewport: CGSize(width: 375, height: height))
+            check(layout.progressTransportGap >= 4 && layout.transportVolumeGap >= 4 && layout.volumeSelectorGap >= 4 && layout.metadataBottomSpacing >= 4, "Minimum inter-group rhythm disappeared")
+        }
+    }
+
     private static func runWholePlayerScroll() {
         let shortLargeType = NowPlayingPortraitLayout(
             viewport: CGSize(width: 500, height: 360),
@@ -319,10 +353,10 @@ struct NowPlayingPortraitLayoutChecks {
                             check(!layout.needsWholePlayerScroll && !layout.usesScrollFallback, "A fitting stack should not scroll")
                         } else {
                             check(layout.needsWholePlayerScroll && layout.usesScrollFallback, "An oversized control band must scroll")
-                            check(layout.artworkSide == 1, "Controls must keep their size before the fallback")
+                            check(layout.artworkSide == 64, "Scroll fallback must keep recognisable artwork and native controls")
                         }
                         check(layout.contentWidth == viewport.width - 2 * layout.horizontalMargin, "Controls narrowed with the artwork")
-                        check(layout.transportHeight >= 64 && layout.volumeHeight >= 44 && layout.pageSelectorHeight >= 44, "Short-window fit reduced native hit targets")
+                        check(layout.transportHeight >= 44 && layout.volumeHeight >= 44 && layout.pageSelectorHeight >= 44, "Short-window fit reduced native hit targets")
                         let paused = layout.artworkSide * 0.82
                         let inset = (layout.artworkSide - paused) * 0.5
                         check(inset >= 0 && abs(inset + paused * 0.5 - layout.artworkSide * 0.5) < 0.001, "Paused artwork is not centered")
@@ -332,10 +366,10 @@ struct NowPlayingPortraitLayoutChecks {
             }
         }
         let known: [(CGSize, CGFloat)] = [
-            (CGSize(width: 440, height: 570), 112.285714),
-            (CGSize(width: 430, height: 540), 88.857143),
-            (CGSize(width: 500, height: 600), 135.714286),
-            (CGSize(width: 440, height: 526), 77.923810),
+            (CGSize(width: 440, height: 570), 227.428571),
+            (CGSize(width: 430, height: 540), 206.285714),
+            (CGSize(width: 500, height: 600), 248.571429),
+            (CGSize(width: 440, height: 526), 196.419048),
         ]
         for (size, expectedSide) in known {
             let layout = NowPlayingPortraitLayout(viewport: size)
@@ -365,6 +399,44 @@ struct NowPlayingPortraitLayoutChecks {
         print("Compact volume fit passed: 180 complete stacks, including measured progress and scroll fallback")
     }
 
+    /// Acceptance gate: these are normal windows. Passing by hiding volume,
+    /// clipping the toolbar, or returning a scroll fallback is a regression.
+    private static func runReferenceFirstScreen() {
+        let windows = [CGSize(width: 375, height: 486), CGSize(width: 446, height: 580), CGSize(width: 375, height: 682)]
+        var count = 0
+        for window in windows {
+            for safeArea: CGFloat in [0, 44, 58] {
+                for metadata: CGFloat in [52, 76] {
+                    let viewport = CGSize(width: window.width, height: window.height - safeArea)
+                    let layout = NowPlayingPortraitLayout(
+                        viewport: viewport, measuredMetadataHeight: metadata,
+                        measuredProgressHeight: 52, measuredHeaderHeight: 44
+                    )
+                    let progressTop = 44 + layout.pageAreaHeight
+                    let transportTop = progressTop + layout.progressHeight + layout.progressTransportGap
+                    let volumeTop = transportTop + layout.transportHeight + layout.transportVolumeGap
+                    let toolbarTop = volumeTop + 44 + layout.volumeSelectorGap
+                    let toolbarBottom = toolbarTop + 44
+                    check(!layout.needsWholePlayerScroll && !layout.usesScrollFallback, "Normal reference window must show all controls without scrolling: \(viewport)")
+                    check(toolbarBottom + 4 <= viewport.height + 0.001, "Toolbar extends below first screen")
+                    check(volumeTop + 44 <= toolbarTop + 0.001, "Volume and toolbar overlap")
+                    check(abs(layout.portraitStackHeight - viewport.height) < 0.001, "Complete stack does not fit viewport")
+                    check(layout.headerHeight >= 44 && layout.progressHeight >= 44 && layout.transportHeight >= 44, "Header/slider/transport targets shrank")
+                    check(layout.volumeHeight == 44 && layout.pageSelectorHeight == 44, "Volume or toolbar targets shrank")
+                    check(layout.artworkSide >= 80, "Normal-window cover is needlessly tiny")
+                    count += 1
+                }
+            }
+        }
+        let compact = NowPlayingPortraitLayout(viewport: CGSize(width: 375, height: 442), measuredMetadataHeight: 52, measuredProgressHeight: 52)
+        check(abs(compact.artworkSide - 126) < 0.001, "Short reference square should use remaining height")
+        let parent = NowPlayingPortraitLayout(viewport: CGSize(width: 446, height: 536), measuredMetadataHeight: 52, measuredProgressHeight: 52)
+        check(abs(parent.artworkSide - 203.466667) < 0.001, "Parent-size square should use remaining height")
+        let expandedHeader = NowPlayingPortraitLayout(viewport: CGSize(width: 375, height: 442), measuredMetadataHeight: 148, measuredProgressHeight: 160, measuredHeaderHeight: 88)
+        check(expandedHeader.headerHeight == 88 && expandedHeader.needsWholePlayerScroll, "Expanded accessibility/status header must reserve real height and scroll")
+        print("Normal portrait first-screen acceptance passed: \(count) complete stacks, quality/badges in header, default volume and toolbar visible")
+    }
+
     /// Production tablet layout is a separate route from the portrait model.
     /// These checks prove column geometry only — they do not claim a rendered
     /// SwiftUI verification of the tablet chrome.
@@ -387,8 +459,8 @@ struct NowPlayingPortraitLayoutChecks {
                 "\(name): non-positive artwork size"
             )
             check(
-                abs(layout.artworkSize - layout.playerWidth) < 0.001,
-                "\(name): playing artwork not aligned with player column"
+                layout.artworkSize <= layout.playerWidth + 0.001,
+                "\(name): artwork exceeds independent player column"
             )
             check(
                 layout.playerWidth <= size.width + 0.001,
@@ -409,7 +481,7 @@ struct NowPlayingPortraitLayoutChecks {
                         viewport: CGSize(width: width, height: height), fillsRegion: fillsRegion
                     )
                     check(layout.artworkSize.isFinite && layout.artworkSize >= 1, "Transient and resized artwork must remain valid")
-                    check(abs(layout.artworkSize - layout.playerWidth) < 0.001, "Both tablet routes must align to the content column")
+                    check(layout.artworkSize <= layout.playerWidth + 0.001, "Both tablet routes must keep artwork within the content column")
                     check(layout.artworkTopInset >= 0 && layout.metadataTopInset >= 0, "Vertical sections must not overlap")
                 }
             }

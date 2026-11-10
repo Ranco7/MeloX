@@ -77,7 +77,7 @@ struct PlaylistDetailView: View {
                 palette: resolvedPalette,
                 blurredBackdropImage: blurredBackdropImage,
                 usesTabletBackdrop: usesTabletBackdrop,
-                searchQuery: searchQuery,
+                searchQuery: $searchQuery,
                 isLoading: isInitialLoading,
                 failureMessage: initialFailureMessage,
                 hasMoreTracks: hasMoreTracks && songToLocate == nil,
@@ -145,14 +145,14 @@ struct PlaylistDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(
+        .musicCollectionNativeSearch(
             text: $searchQuery,
-            placement: .navigationBarDrawer(displayMode: .always),
             prompt: Text(
                 prefersToplistLayout
                     ? L10n.string("ui.toplists.search_prompt")
                     : L10n.string("ui.playlists.search_prompt")
-            )
+            ),
+            enabled: !usesTabletBackdrop || prefersToplistLayout
         )
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbarColorScheme(interfaceColorScheme, for: .navigationBar, .tabBar)

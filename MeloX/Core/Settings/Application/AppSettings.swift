@@ -4,7 +4,7 @@ import Observation
 @MainActor
 @Observable
 final class AppSettings {
-    static let defaultPlayerVolumeControlMode: PlayerVolumeControlMode = .system
+    static let defaultPlayerVolumeControlMode = PlayerVolumeControlMode.defaultMode
     static let defaultPlayerBackgroundStyle: PlayerBackgroundStyle =
         .appleMusicBackdrop
     static let defaultPlayerBackgroundMotionIntensity = 1.0
@@ -1337,9 +1337,9 @@ final class AppSettings {
         cellularQuality = MusicQuality(
             rawValue: defaults.string(forKey: Key.cellularQuality) ?? ""
         ) ?? .high
-        playerVolumeControlMode = PlayerVolumeControlMode(
-            rawValue: defaults.string(forKey: Key.playerVolumeControlMode) ?? ""
-        ) ?? Self.defaultPlayerVolumeControlMode
+        playerVolumeControlMode = PlayerVolumeControlMode.resolved(
+            storedValue: defaults.string(forKey: Key.playerVolumeControlMode)
+        )
         systemNowPlayingLyricsEnabled = defaults.object(
             forKey: Key.systemNowPlayingLyricsEnabled
         ) as? Bool

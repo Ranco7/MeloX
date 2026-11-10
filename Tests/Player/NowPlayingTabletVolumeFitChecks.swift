@@ -1,135 +1,98 @@
 import CoreGraphics
 import Foundation
 
-/// Tests the production geometry with complete intrinsic control-band inputs.
-/// Row heights are explicit fixtures, not claims of SwiftUI rendering on Linux.
+/// Intrinsic rows are explicit fixtures, not rendered SwiftUI measurements.
 @main
 struct NowPlayingTabletVolumeFitChecks {
-    private struct Rows {
-        let metadata: CGFloat
-        let progress: CGFloat
-        let transport: CGFloat
-        let volume: CGFloat
-
-        func bandHeight(_ layout: NowPlayingTabletLayout) -> CGFloat {
-            // Independently sum every view and padding in the column. Do not
-            // use estimatedControlsHeight to prove the estimate fits itself.
-            24 + metadata + 24 * layout.elementScale + progress
-                + 24 * layout.elementScale + transport + 12 + volume + 20
-        }
-    }
-
     static func main() {
+        // Original pixels, calibrated against the source's 60pt handle and
+        // 44pt menu. Also cover the requested approximate 446x580 estimate.
         let windows: [CGSize] = [
-            CGSize(width: 1194, height: 834),
-            CGSize(width: 834, height: 1194),
-            CGSize(width: 1366, height: 1024),
-            CGSize(width: 1024, height: 1366),
-            CGSize(width: 597, height: 834),
-            CGSize(width: 507, height: 834),
-            CGSize(width: 694, height: 1024),
-            CGSize(width: 507, height: 1194),
-        ]
-        let rows = [
-            Rows(metadata: 48, progress: 78, transport: 52, volume: 44),
-            Rows(metadata: 64, progress: 78, transport: 52, volume: 44),
-            Rows(metadata: 128, progress: 110, transport: 52, volume: 44),
-            Rows(metadata: 200, progress: 150, transport: 52, volume: 44),
+            CGSize(width: 375, height: 486), CGSize(width: 375, height: 682),
+            CGSize(width: 698, height: 886), CGSize(width: 698, height: 590),
+            CGSize(width: 446, height: 580), CGSize(width: 320, height: 480),
+            CGSize(width: 1194, height: 834), CGSize(width: 834, height: 1194),
+            CGSize(width: 1366, height: 1024), CGSize(width: 1024, height: 1366),
+            CGSize(width: 597, height: 834), CGSize(width: 507, height: 834),
         ]
         var count = 0
         for window in windows {
-            // The card host already applies safe area padding. GeometryReader
-            // receives this reduced size; subtract it exactly once.
-            for safeInsets: CGFloat in [0, 44, 58] {
+            for safeArea: CGFloat in [0, 44, 58] {
                 for fillsRegion in [false, true] {
-                    let viewport = CGSize(
-                        width: window.width,
-                        height: window.height - safeInsets
-                            - (fillsRegion ? 112 : 0)
-                    )
-                    let base = NowPlayingTabletLayout(viewport: viewport, fillsRegion: fillsRegion)
-                    for row in rows {
-                        verify(base, rows: row)
-                        count += 1
+                    for sidePanel in [false, true] {
+                        for metadata: CGFloat in [48, 76, 96, 105, 124, 128, 148, 240] {
+                            for progress: CGFloat in [78, 160] {
+                                let base = NowPlayingTabletLayout(
+                                    viewport: CGSize(width: window.width, height: window.height - safeArea),
+                                    fillsRegion: fillsRegion, showsSidePanel: sidePanel
+                                )
+                                verify(base, metadata: metadata, progress: progress)
+                                count += 1
+                            }
+                        }
                     }
                 }
             }
         }
-        verifyKnownGeometry()
-        verifyHeightAndFontChanges()
-        print("Tablet volume fit passed: \(count) full stacks, safe areas, measured fonts/badges, both tablet routes")
-    }
-
-    private static func verify(_ base: NowPlayingTabletLayout, rows: Rows) {
-        let band = rows.bandHeight(base)
-        let fitted = base.fitting(controlsHeight: band)
-        let chrome: CGFloat = base.fillsRegion ? 0 : 48
-        let bottomBar: CGFloat = base.fillsRegion ? 0 : 64
-
-        let artworkTop = chrome + fitted.artworkTopInset
-        let gap = fitted.distributedGap
-        let metadataTop = artworkTop + fitted.artworkSize + 24 + gap
-        let progressTop = metadataTop + rows.metadata + 24 * fitted.elementScale + gap
-        let transportTop = progressTop + rows.progress + 24 * fitted.elementScale + gap
-        let volumeTop = transportTop + rows.transport + 12 + gap
-        let volumeBottom = volumeTop + rows.volume
-        let stackBottom = volumeBottom + 20 + gap
-        let visibleBottom = base.viewport.height - bottomBar
-
-        check(abs(fitted.artworkSize - fitted.playerWidth) < 0.001, "Artwork and controls must share a width")
-        check(fitted.playerWidth <= fitted.playerContainerWidth, "Column exceeds its horizontal allowance")
-        check(abs(stackBottom - chrome - fitted.renderedStackHeight) < 0.001, "Full stack omits a row or gap")
-        check(abs(stackBottom - visibleBottom) < 0.001, "Surplus height must be shared between groups")
-        check(stackBottom <= visibleBottom + 0.001, "Full stack overflows: \(base.viewport), band \(band)")
-        check(volumeTop >= chrome && volumeBottom <= visibleBottom - 20 + 0.001, "Volume is outside the visible player region")
-        check(rows.volume >= 44 && rows.transport >= 44, "Native touch controls must keep their height")
-        check(fitted.artworkTopInset == 16, "Artwork top gap must stay modest at every height")
-
-        // The native artwork surface scales about its center without changing
-        // the stack. Verify both paused edges remain inside the playing square.
-        let pausedSide = fitted.artworkSize * 0.82
-        let inset = (fitted.artworkSize - pausedSide) * 0.5
-        check(inset >= 0 && abs(inset + pausedSide * 0.5 - fitted.artworkSize * 0.5) < 0.001, "Paused center moved")
-        check(artworkTop + inset + pausedSide <= artworkTop + fitted.artworkSize, "Paused artwork escaped its square")
-    }
-
-    private static func verifyKnownGeometry() {
-        let cases: [(CGSize, CGFloat, CGFloat)] = [
-            (CGSize(width: 1194, height: 834), 364, 722),
-            (CGSize(width: 834, height: 1194), 377, 735),
-            (CGSize(width: 1366, height: 1024), 480.376667, 845.016667),
-            (CGSize(width: 1024, height: 1366), 422, 780),
-            (CGSize(width: 597, height: 834), 258.5, 616.5),
-            (CGSize(width: 1194, height: 790), 320, 678),
-        ]
-        let normal = Rows(metadata: 64, progress: 78, transport: 52, volume: 44)
-        for (size, width, height) in cases {
-            let base = NowPlayingTabletLayout(viewport: size)
-            let fitted = base.fitting(controlsHeight: normal.bandHeight(base))
-            check(abs(fitted.playerWidth - width) < 0.001, "Unexpected width at \(size): \(fitted.playerWidth)")
-            check(abs(fitted.playerStackHeight - height) < 0.001, "Unexpected full stack at \(size)")
+        // Normal wide reference windows must pass without a scroll fallback.
+        for window in [CGSize(width: 698, height: 886), CGSize(width: 698, height: 590)] {
+            for safeArea: CGFloat in [0, 44, 58] {
+                for metadata: CGFloat in [52, 76, 96, 105, 124, 128] {
+                    let base = NowPlayingTabletLayout(viewport: CGSize(width: window.width, height: window.height - safeArea))
+                    let layout = base.fitting(controlsHeight: 16 + metadata + 8 + 78 + 4 + base.transportHeight + 4 + 44 + 8)
+                    check(!layout.needsScroll, "Normal wide reference must retain full first-screen controls")
+                    check(abs(layout.renderedStackHeight + 48 + 64 - layout.viewport.height) < 0.001, "Normal wide full stack lost chrome/toolbar")
+                }
+            }
         }
+        let tall = NowPlayingTabletLayout(viewport: CGSize(width: 698, height: 842), controlsHeight: 298)
+        let short = NowPlayingTabletLayout(viewport: CGSize(width: 698, height: 546), controlsHeight: 298)
+        check(abs(tall.playerWidth - 544.44) < 0.001, "Measured split window must have a broad column")
+        check(tall.playerWidth == short.playerWidth, "Resizing height must never narrow metadata/progress")
+        check(tall.artworkSize > short.artworkSize, "Height should be absorbed by artwork")
+        let larger = tall.fitting(controlsHeight: 378)
+        check(larger.playerWidth == tall.playerWidth, "Dynamic Type must not narrow the column")
+        check(abs(tall.artworkSize - larger.artworkSize - 80) < 0.001, "Native row growth must consume artwork height")
+        check(abs(tall.lyricsFocusAnchorOffset - larger.lyricsFocusAnchorOffset - 40) < 0.001, "Lyrics must follow the fitted square")
+        let narrow = NowPlayingTabletLayout(viewport: CGSize(width: 320, height: 600), showsSidePanel: true)
+        check(narrow.playerWidth == 220 && narrow.playerContainerWidth < 220, "Narrow panes need a scrollable 44pt transport row")
+        let roomy = NowPlayingTabletLayout(viewport: CGSize(width: 375, height: 1200))
+        check(roomy.artworkSize == roomy.playerWidth, "Align square and column when height permits")
+        for height in stride(from: CGFloat(300), through: 1400, by: 1) {
+            let before = NowPlayingTabletLayout(viewport: CGSize(width: 698, height: height - 0.001))
+            let after = NowPlayingTabletLayout(viewport: CGSize(width: 698, height: height + 0.001))
+            check(abs(before.artworkSize - after.artworkSize) < 0.003, "Height resize must be continuous")
+            check(before.playerWidth == after.playerWidth, "Column changed with height")
+        }
+        print("Tablet independent-column fit passed: \(count) stacks; reference windows, safe areas, accessibility, scroll fallback, both routes")
     }
 
-    private static func verifyHeightAndFontChanges() {
-        let size = CGSize(width: 1194, height: 834)
-        let base = NowPlayingTabletLayout(viewport: size)
-        let normal = base.fitting(controlsHeight: 342)
-        let largerText = base.fitting(controlsHeight: 422)
-        check(abs(normal.playerWidth - largerText.playerWidth - 80) < 0.001, "Growing text must shrink both artwork and column")
-        check(abs(normal.playerStackHeight - largerText.playerStackHeight) < 0.001, "Growing text pushed volume offscreen")
-        check(abs(normal.lyricsFocusAnchorOffset - largerText.lyricsFocusAnchorOffset - 40) < 0.001, "Lyrics focus must follow the fitted artwork center")
-
-        let shorter = NowPlayingTabletLayout(viewport: CGSize(width: 1194, height: 790), controlsHeight: 342)
-        check(abs(normal.playerWidth - shorter.playerWidth - 44) < 0.001, "Safe area did not reduce the square and column together")
-        let tooShort = NowPlayingTabletLayout(viewport: CGSize(width: 1194, height: 300), controlsHeight: 342)
-        check(tooShort.playerWidth == 1 && tooShort.playerStackHeight > tooShort.contentHeight, "Physically impossible bands must retain scrollable controls")
+    private static func verify(_ base: NowPlayingTabletLayout, metadata: CGFloat, progress: CGFloat) {
+        // Full visible-volume band, reconstructed independently of the model.
+        let band: CGFloat = 16 + metadata + 8 + progress + 4 + base.transportHeight + 4 + 44 + 8
+        let fitted = base.fitting(controlsHeight: band)
+        let gap = fitted.distributedGap
+        let metadataTop = 16 + fitted.artworkSize + 16 + gap
+        let progressTop = metadataTop + metadata + 8 + gap
+        let transportTop = progressTop + progress + 4 + gap
+        let volumeTop = transportTop + fitted.transportHeight + 4 + gap
+        let stackBottom = volumeTop + 44 + 8 + gap
+        check(abs(stackBottom - fitted.renderedStackHeight) < 0.001, "Missing native row/padding")
+        check(fitted.playerWidth == base.playerWidth, "Fitting controls narrowed the column")
+        check(fitted.artworkSize <= fitted.playerWidth, "Square exceeds column")
+        if fitted.needsScroll {
+            check(fitted.artworkSize == min(fitted.playerWidth, 64), "Impossible stack must keep artwork floor")
+            check(stackBottom > fitted.contentHeight, "Scroll fallback has no overflow")
+        } else {
+            check(abs(stackBottom - fitted.contentHeight) < 0.001, "Surplus height is not evenly distributed")
+            check(volumeTop + 44 <= fitted.contentHeight - 8 + 0.001, "Default volume is offscreen")
+        }
+        let paused = fitted.artworkSize * 0.82
+        let inset = (fitted.artworkSize - paused) * 0.5
+        check(abs(inset + paused * 0.5 - fitted.artworkSize * 0.5) < 0.001, "Paused artwork center moved")
     }
 
     private static func check(_ condition: Bool, _ message: String) {
-        guard condition else {
-            fputs("FAIL: \(message)\n", stderr)
-            preconditionFailure(message)
-        }
+        guard condition else { fatalError(message) }
     }
 }

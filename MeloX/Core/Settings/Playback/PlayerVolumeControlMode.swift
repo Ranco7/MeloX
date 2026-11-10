@@ -5,6 +5,12 @@ enum PlayerVolumeControlMode: String, CaseIterable, Identifiable {
     case independent
     case system
 
+    static let defaultMode: Self = .system
+
+    static func resolved(storedValue: String?) -> Self {
+        storedValue.flatMap(Self.init(rawValue:)) ?? defaultMode
+    }
+
     var id: String { rawValue }
 
     var title: String {

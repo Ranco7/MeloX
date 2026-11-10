@@ -113,8 +113,8 @@ class LayoutGuardsChecks(unittest.TestCase):
         source = read(
             "MeloX/Features/Player/NowPlaying/Tablet/NowPlayingTabletLayout.swift"
         )
-        self.assertIn("return max(\n            min(", source)
-        self.assertIn("var panelWidth: CGFloat {\n        max(", source)
+        self.assertIn("return max(min(regionWidth - 2 * margin, 640), 1)", source)
+        self.assertIn("var panelWidth: CGFloat { max(viewport.width * 0.5 - 24, 1) }", source)
 
     def test_collection_layout_tracks_continuous_viewport_width(self):
         source = read("MeloX/Features/Playlist/PlaylistDetailContent.swift")
@@ -123,11 +123,15 @@ class LayoutGuardsChecks(unittest.TestCase):
             self.assertIn("GeometryReader { viewport in", content)
             self.assertIn("MusicCollectionDetailLayout(availableWidth: viewport.size.width)", content)
             self.assertIn("let prepared = MusicCollectionPreparedTracks", content)
+            self.assertIn("isTablet: UIDevice.current.userInterfaceIdiom == .pad", content)
+            self.assertIn("isAccessibilitySize: dynamicTypeSize.isAccessibilitySize", content)
+            self.assertIn("searchInset: MusicCollectionLayout.horizontalInset(wide: wideWidth != nil)", content)
         shared = source.split("struct MusicCollectionDetailLayout", 1)[1].split("struct MusicCollectionTrackContent", 1)[0]
         self.assertNotIn("@State", shared)
         self.assertNotIn("onGeometryChange", shared)
         self.assertNotIn("quantized", shared)
-        self.assertIn("MusicCollectionLayout.wideWidth(availableWidth)", shared)
+        self.assertIn("MusicCollectionLayout.wideWidth(", shared)
+        self.assertIn("isAccessibilitySize: dynamicTypeSize.isAccessibilitySize", shared)
         self.assertIn("rowWidth: width - 2 * MusicCollectionLayout.wideInset", shared)
         policy = read("MeloX/Shared/Media/MusicCollectionWidthPolicy.swift")
         self.assertIn("return width", policy)
