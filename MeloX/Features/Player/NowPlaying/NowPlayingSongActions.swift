@@ -221,7 +221,9 @@ struct NowPlayingSongActions: View {
                 .background(usesCompactMenu ? Color.clear : .white.opacity(0.15), in: .circle)
                 .contentShape(.circle)
         }
-        .tint(usesCompactMenu ? Color.accentColor : .white)
+        // Menu item icons follow the app's red tint in both the full player
+        // and the mini player; the label keeps its own colour above.
+        .tint(.red)
         .menuOrder(.fixed)
         .accessibilityLabel("ui.common.more")
     }
