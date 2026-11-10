@@ -56,12 +56,8 @@ struct NowPlayingPortraitLayoutChecks {
                 "\(testCase.name): artwork below minimum"
             )
             check(
-                layout.artworkSide
-                    <= min(
-                        NowPlayingPortraitLayout.maximumArtworkSide,
-                        layout.contentWidth
-                    ) + 0.001,
-                "\(testCase.name): artwork wider than content or cap"
+                abs(layout.artworkSide - layout.contentWidth) < 0.001,
+                "\(testCase.name): playing artwork must equal the controls column"
             )
 
             let progressBlock =
@@ -94,21 +90,6 @@ struct NowPlayingPortraitLayoutChecks {
                     >= layout.minimumPageAreaHeight - 0.001,
                 "\(testCase.name): page area shorter than the page floor"
             )
-            // When artwork is not width/cap limited, natural content fills the
-            // page band. The 420pt cap on tall windows is allowed to leave
-            // unused vertical space above the metadata.
-            if layout.artworkSide + 0.001
-                < NowPlayingPortraitLayout.maximumArtworkSide
-                && layout.artworkSide + 0.001 < layout.contentWidth
-            {
-                check(
-                    abs(
-                        layout.naturalContentHeight
-                            - layout.pageAreaHeight
-                    ) < 1.5,
-                    "\(testCase.name): unconstrained artwork should fill the page band"
-                )
-            }
             check(
                 layout.naturalContentHeight
                     + layout.overlayHeight
@@ -298,9 +279,13 @@ struct NowPlayingPortraitLayoutChecks {
             viewport: CGSize(width: 430, height: 700)
         )
         check(
-            !comfortable.needsWholePlayerScroll,
-            "430x700 should not need whole-player scroll at default type"
+            comfortable.pageAreaHeight >= comfortable.naturalContentHeight,
+            "Full-width artwork must reserve enough vertical space before controls"
         )
+        let lyrics = NowPlayingPortraitLayout(
+            viewport: CGSize(width: 430, height: 700), showsArtworkPage: false
+        )
+        check(!lyrics.needsWholePlayerScroll, "Lyrics must not inherit the artwork's full-square height")
     }
 
     /// Production tablet layout is a separate route from the portrait model.
@@ -325,8 +310,8 @@ struct NowPlayingPortraitLayoutChecks {
                 "\(name): non-positive artwork size"
             )
             check(
-                layout.artworkSize <= layout.playerWidth + 0.001,
-                "\(name): artwork wider than player column"
+                abs(layout.artworkSize - layout.playerWidth) < 0.001,
+                "\(name): playing artwork not aligned with player column"
             )
             check(
                 layout.playerWidth <= size.width + 0.001,
@@ -338,6 +323,28 @@ struct NowPlayingPortraitLayoutChecks {
                     && layout.panelLeading.isFinite,
                 "\(name): non-finite column origins"
             )
+        }
+
+        for width: CGFloat in [0, 240, 320, 390, 500, 700, 834, 1024, 1194, 1366] {
+            for height: CGFloat in [0, 320, 400, 600, 768, 834, 1024, 1366] {
+                for fillsRegion in [false, true] {
+                    let layout = NowPlayingTabletLayout(
+                        viewport: CGSize(width: width, height: height), fillsRegion: fillsRegion
+                    )
+                    check(layout.artworkSize.isFinite && layout.artworkSize >= 1, "Transient and resized artwork must remain valid")
+                    check(abs(layout.artworkSize - layout.playerWidth) < 0.001, "Both tablet routes must align to the content column")
+                    check(layout.artworkTopInset >= 0 && layout.metadataTopInset >= 0, "Vertical sections must not overlap")
+                }
+            }
+        }
+
+        for width: CGFloat in [320, 568, 700, 844, 1024, 1366] {
+            for height: CGFloat in [0, 200, 320, 430] {
+                let layout = NowPlayingLandscapeLayout(viewport: CGSize(width: width, height: height))
+                check(layout.columnWidth.isFinite && layout.columnWidth >= 1, "Compact landscape has invalid columns")
+                check(layout.columnWidth * 2 + layout.spacing <= width + 0.001, "Equal landscape columns overlap")
+                check(layout.controlsHeight >= 360, "Landscape controls need a scrollable native-height column")
+            }
         }
 
         let fills = NowPlayingTabletLayout(

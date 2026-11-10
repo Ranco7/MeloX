@@ -2,7 +2,6 @@ import SwiftUI
 
 struct NowPlayingLandscapeView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
-    @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
 
     @Binding var page: NowPlayingPage
@@ -53,17 +52,18 @@ struct NowPlayingLandscapeView: View {
             dismissalHandle
 
             GeometryReader { proxy in
-                let artworkSide = min(
-                    proxy.size.height,
-                    proxy.size.width * 0.43,
-                    460
-                )
+                let layout = NowPlayingLandscapeLayout(viewport: proxy.size)
 
-                HStack(spacing: landscapeSpacing(for: proxy.size.width)) {
-                    artwork(side: artworkSide)
+                HStack(spacing: layout.spacing) {
+                    artwork(side: layout.columnWidth)
 
-                    rightPanel
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    ScrollView(.vertical) {
+                        rightPanel
+                            .frame(width: layout.columnWidth, height: layout.controlsHeight)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollIndicators(.hidden)
+                    .frame(width: layout.columnWidth, height: proxy.size.height)
                 }
                 .frame(maxWidth: 1_100, maxHeight: .infinity)
                 .frame(maxWidth: .infinity)
@@ -83,25 +83,14 @@ struct NowPlayingLandscapeView: View {
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .frame(height: 28)
+        .frame(height: 44)
         .accessibilityLabel("ui.player.collapse")
         .accessibilityHint("ui.player.collapse_hint")
     }
 
     private func artwork(side: CGFloat) -> some View {
-        ArtworkImage(url: song.album?.artworkURL, cornerRadius: 12)
+        NowPlayingPortraitArtwork(song: song, isArtworkPage: true)
             .frame(width: side, height: side)
-            .scaleEffect(player.isPlaying || !settings.shrinksPausedArtwork ? 1 : 0.9)
-            .shadow(
-                color: .black.opacity(
-                    player.isPlaying ? 0.32 : 0.18
-                ),
-                radius: player.isPlaying ? 24 : 14,
-                y: player.isPlaying ? 12 : 7
-            )
-            .animation(.smooth(duration: 0.45), value: player.isPlaying)
-            .accessibilityElement()
-            .accessibilityLabel(L10n.format("ui.song.artwork_accessibility", song.name))
     }
 
     private var rightPanel: some View {
@@ -281,10 +270,6 @@ struct NowPlayingLandscapeView: View {
             NowPlayingVolumeControl()
             Spacer(minLength: 0)
         }
-    }
-
-    private func landscapeSpacing(for width: CGFloat) -> CGFloat {
-        min(max(width * 0.035, 18), 38)
     }
 
     private var lyricsInterfaceAccessibilityActionName: String {

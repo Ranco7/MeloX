@@ -1,11 +1,7 @@
 import SwiftUI
 
 struct NowPlayingArtworkPage: View {
-    static let pausedArtworkScale: CGFloat = 0.74
-
-    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
-    @Environment(PlayerStore.self) private var player
-    @Environment(AppSettings.self) private var settings
+    static let pausedArtworkScale: CGFloat = 0.82
 
     let song: Song
     let layout: NowPlayingPortraitLayout
@@ -13,8 +9,6 @@ struct NowPlayingArtworkPage: View {
     let usesArtworkTransition: Bool
     let showsArtwork: Bool
     let onArtworkFrameChange: (CGRect) -> Void
-
-    @State private var artworkBounceScale: CGFloat = 1
 
     init(
         song: Song,
@@ -31,10 +25,6 @@ struct NowPlayingArtworkPage: View {
         self.usesArtworkTransition = usesArtworkTransition
         self.showsArtwork = showsArtwork
         self.onArtworkFrameChange = onArtworkFrameChange
-    }
-
-    private var isArtworkExpanded: Bool {
-        player.isPlaying || !settings.shrinksPausedArtwork
     }
 
     var body: some View {
@@ -71,28 +61,12 @@ struct NowPlayingArtworkPage: View {
     private var artwork: some View {
         ZStack {
             if showsArtwork {
-                ArtworkImage(
-                    url: song.album?.artworkURL,
-                    cornerRadius: 12
-                )
-                .frame(
-                    width: displayedArtworkSize,
-                    height: displayedArtworkSize
-                )
-                .scaleEffect(artworkBounceScale)
-                .nowPlayingArtworkTransition(
-                    id: song.id,
-                    in: artworkNamespace,
-                    isEnabled: usesArtworkTransition,
-                    isSource: true
-                )
-                .shadow(
-                    color: .black.opacity(
-                        player.isPlaying ? 0.34 : 0.18
-                    ),
-                    radius: player.isPlaying ? 26 : 14,
-                    y: player.isPlaying ? 15 : 8
-                )
+                NowPlayingPortraitArtwork(song: song, isArtworkPage: true)
+                    .frame(width: layout.artworkSide, height: layout.artworkSide)
+                    .nowPlayingArtworkTransition(
+                        id: song.id, in: artworkNamespace,
+                        isEnabled: usesArtworkTransition, isSource: true
+                    )
             } else {
                 Color.clear
                     .frame(
@@ -115,18 +89,6 @@ struct NowPlayingArtworkPage: View {
             height: layout.artworkSide
         )
         .frame(maxWidth: .infinity)
-        .animation(
-            accessibilityReduceMotion
-                ? nil
-                : .smooth(duration: 0.48),
-            value: isArtworkExpanded
-        )
-        .animation(
-            accessibilityReduceMotion
-                ? nil
-                : .easeInOut(duration: 0.3),
-            value: player.isPlaying
-        )
         .accessibilityElement()
         .accessibilityLabel(
             L10n.format(
@@ -135,16 +97,6 @@ struct NowPlayingArtworkPage: View {
             )
         )
         .accessibilityHidden(!showsArtwork)
-        .task(id: player.isPlaying) {
-            await animateArtworkBounce(
-                whenPlaying: player.isPlaying
-            )
-        }
-    }
-
-    private var displayedArtworkSize: CGFloat {
-        layout.artworkSide
-            * (isArtworkExpanded ? 1 : Self.pausedArtworkScale)
     }
 
     private var metadata: some View {
@@ -180,32 +132,6 @@ struct NowPlayingArtworkPage: View {
             NowPlayingMetadataBadges()
         }
         .padding(.horizontal, layout.horizontalMargin)
-    }
-
-    private func animateArtworkBounce(
-        whenPlaying isPlaying: Bool
-    ) async {
-        artworkBounceScale = 1
-        guard showsArtwork,
-              isPlaying,
-              !accessibilityReduceMotion else {
-            return
-        }
-
-        await Task.yield()
-        withAnimation(.easeOut(duration: 0.17)) {
-            artworkBounceScale = 1.055
-        }
-
-        do {
-            try await Task.sleep(for: .milliseconds(170))
-        } catch {
-            return
-        }
-
-        withAnimation(.spring(duration: 0.42, bounce: 0.24)) {
-            artworkBounceScale = 1
-        }
     }
 }
 

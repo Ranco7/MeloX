@@ -368,14 +368,14 @@ struct NowPlayingVolumeControl: View {
 
                 volumeSlider
                     .frame(maxWidth: .infinity)
-                    .frame(height: 32)
+                    .frame(height: 44)
                     .layoutPriority(1)
 
                 Image(systemName: "speaker.wave.3.fill")
                     .font(.caption)
             }
             .foregroundStyle(.white.opacity(0.62))
-            .frame(height: 42)
+            .frame(height: 44)
         }
     }
 

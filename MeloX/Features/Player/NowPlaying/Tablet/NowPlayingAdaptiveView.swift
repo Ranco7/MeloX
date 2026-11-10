@@ -45,6 +45,7 @@ struct NowPlayingAdaptiveView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
             .scrollIndicators(.hidden)
+            .scrollClipDisabled()
         }
     }
 

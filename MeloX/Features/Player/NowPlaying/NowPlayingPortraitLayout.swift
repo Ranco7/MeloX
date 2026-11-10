@@ -10,7 +10,6 @@ struct NowPlayingPortraitLayout {
     static let minimumHorizontalMargin: CGFloat = 16
     static let maximumHorizontalMargin: CGFloat = 32
     static let minimumArtworkSide: CGFloat = 96
-    static let maximumArtworkSide: CGFloat = 420
     static let minimumTouchTarget: CGFloat = 44
 
     /// Progress slider plus the time/quality row. The quality capsule and the
@@ -38,7 +37,7 @@ struct NowPlayingPortraitLayout {
         + basePageSelectorHeight
     static let baseOverlayHeight = baseUtilityHeight + baseCoreHeight
 
-    private static let baseArtworkTopSpacing: CGFloat = 8
+    private static let baseArtworkTopSpacing: CGFloat = 16
     private static let baseArtworkBottomSpacing: CGFloat = 22
     /// Conservative budget used only for artwork sizing — never for deciding
     /// whether text remains reachable (the page always size-based-scrolls).
@@ -53,6 +52,7 @@ struct NowPlayingPortraitLayout {
     let viewport: CGSize
     var textScale: CGFloat = 1
     var showsUtilityRow = false
+    var showsArtworkPage = true
 
     private var clampedTextScale: CGFloat {
         min(max(textScale, 1), 1.35)
@@ -204,27 +204,16 @@ struct NowPlayingPortraitLayout {
     }
 
     var artworkSide: CGFloat {
-        let heightBudget = max(
-            pageAreaHeight
-                - artworkTopSpacing
-                - artworkBottomSpacing
-                - metadataEstimatedHeight,
-            0
-        )
-        return min(
-            contentWidth,
-            min(
-                Self.maximumArtworkSide,
-                max(heightBudget, Self.minimumArtworkSide)
-            )
-        )
+        // The playing cover and controls share one column at every width.
+        // Short windows scroll instead of narrowing only the artwork.
+        contentWidth
     }
 
     /// Height given to the page column inside the portrait stack. Matches the
     /// space above the control band when everything fits; grows to the page
     /// floor when the whole player must scroll so nothing is clipped.
     var pageAreaHeight: CGFloat {
-        max(pageContentHeight, minimumPageAreaHeight)
+        max(pageContentHeight, showsArtworkPage ? naturalContentHeight : minimumPageAreaHeight)
     }
 
     /// True when the conservative natural page content exceeds the band left
@@ -238,7 +227,7 @@ struct NowPlayingPortraitLayout {
     /// control band plus the page floor cannot share the viewport. The whole
     /// portrait stack then scrolls so every control stays reachable.
     var needsWholePlayerScroll: Bool {
-        pageContentHeight < minimumPageAreaHeight - 0.5
+        pageContentHeight < (showsArtworkPage ? naturalContentHeight : minimumPageAreaHeight) - 0.5
     }
 
     /// Total height of the portrait stack. Equal to the visible height
@@ -249,4 +238,15 @@ struct NowPlayingPortraitLayout {
             + pageAreaHeight
             + overlayHeight
     }
+}
+
+/// Equal-width side-by-side columns for compact landscape windows. The right
+/// column can scroll independently when its native controls need more height.
+struct NowPlayingLandscapeLayout {
+    let viewport: CGSize
+    var spacing: CGFloat { min(max(viewport.width * 0.035, 32), 38) }
+    var columnWidth: CGFloat {
+        max(1, min(viewport.height, (min(viewport.width, 1_100) - spacing) * 0.5, 460))
+    }
+    var controlsHeight: CGFloat { max(viewport.height, 360) }
 }

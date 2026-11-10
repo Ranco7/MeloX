@@ -378,7 +378,8 @@ struct NowPlayingView: View {
         NowPlayingPortraitLayout(
             viewport: size,
             textScale: portraitTextScale,
-            showsUtilityRow: usesExpandedAppleMusicLyricsLayout
+            showsUtilityRow: usesExpandedAppleMusicLyricsLayout,
+            showsArtworkPage: page == .artwork
         )
     }
 
@@ -833,15 +834,6 @@ struct NowPlayingView: View {
                 x: artworkFrame.midX,
                 y: artworkFrame.midY
             )
-            .animation(
-                accessibilityReduceMotion
-                    ? nil
-                    : NowPlayingPageTransition
-                        .motion
-                        .artworkResize
-                        .animation,
-                value: isPortraitArtworkExpanded
-            )
             .allowsHitTesting(false)
         }
     }
@@ -850,7 +842,7 @@ struct NowPlayingView: View {
         layout: NowPlayingPortraitLayout
     ) -> CGRect {
         if page == .artwork {
-            return displayedArtworkPageFrame
+            return artworkPageFrame
         }
 
         return CGRect(
@@ -859,28 +851,6 @@ struct NowPlayingView: View {
             width: NowPlayingSongHeader.referenceHeight,
             height: NowPlayingSongHeader.referenceHeight
         )
-    }
-
-    private var displayedArtworkPageFrame: CGRect {
-        guard !isPortraitArtworkExpanded else {
-            return artworkPageFrame
-        }
-        let horizontalInset =
-            artworkPageFrame.width
-            * (1 - NowPlayingArtworkPage.pausedArtworkScale)
-            / 2
-        let verticalInset =
-            artworkPageFrame.height
-            * (1 - NowPlayingArtworkPage.pausedArtworkScale)
-            / 2
-        return artworkPageFrame.insetBy(
-            dx: horizontalInset,
-            dy: verticalInset
-        )
-    }
-
-    private var isPortraitArtworkExpanded: Bool {
-        player.isPlaying || !settings.shrinksPausedArtwork
     }
 
     private var sharedPortraitSongHeaderOffset: CGFloat {

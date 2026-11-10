@@ -1,28 +1,16 @@
 import SwiftUI
 
 struct NowPlayingTabletPlayerColumn: View {
-    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
-    @Environment(PlayerStore.self) private var player
-    @Environment(AppSettings.self) private var settings
-
     let song: Song
     let layout: NowPlayingTabletLayout
-
-    private var isArtworkExpanded: Bool {
-        player.isPlaying || !settings.shrinksPausedArtwork
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             NowPlayingPortraitArtwork(song: song, isArtworkPage: true)
                 .frame(width: layout.artworkSize, height: layout.artworkSize)
-                .scaleEffect(isArtworkExpanded ? 1 / NowPlayingArtworkPage.pausedArtworkScale : 1)
                 .frame(maxWidth: .infinity)
                 .padding(.top, layout.artworkTopInset)
-                .animation(
-                    accessibilityReduceMotion ? nil : .smooth(duration: 0.48),
-                    value: isArtworkExpanded
-                )
+
 
             NowPlayingTabletMetadata(song: song)
                 .padding(.top, layout.metadataTopInset)

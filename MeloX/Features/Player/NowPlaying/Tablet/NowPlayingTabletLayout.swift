@@ -93,7 +93,7 @@ struct NowPlayingTabletLayout {
     }
 
     private var referenceArtworkSize: CGFloat {
-        min((214 + heightProgress * 94) * elementScale, playerWidth * 0.74)
+        playerWidth
     }
 
     private var referenceArtworkTopInset: CGFloat {
@@ -116,11 +116,11 @@ struct NowPlayingTabletLayout {
     }
 
     var artworkSize: CGFloat {
-        referenceArtworkSize * verticalCompressionScale
+        playerWidth
     }
 
     var artworkTopInset: CGFloat {
-        referenceArtworkTopInset * verticalCompressionScale
+        max(16, referenceArtworkTopInset * verticalCompressionScale)
     }
 
     var metadataTopInset: CGFloat {

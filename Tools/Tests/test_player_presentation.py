@@ -255,6 +255,37 @@ print("Shared offset policy passed: release derivative and corner continuity")
         self.assertNotIn("setTransit", drag)
         self.assertNotIn("rootView", drag)
 
+    def test_artwork_playback_uses_fixed_native_surface(self):
+        folder = ROOT / "MeloX/Features/Player/NowPlaying"
+        surface = (folder / "NowPlayingPortraitArtwork.swift").read_text()
+        self.assertIn("UIViewPropertyAnimator(duration: 0.48", surface)
+        self.assertIn("surface.transform = CGAffineTransform(scaleX: targetScale", surface)
+        self.assertIn("CATransaction.setDisableActions(true)", surface)
+        self.assertIn("surface.layer.shadowPath", surface)
+        self.assertIn("let radius = 12 / targetScale", surface)
+        self.assertNotIn("bounceScale", surface)
+        self.assertNotIn("TimelineView", surface)
+        tablet = (folder / "Tablet/NowPlayingTabletPlayerColumn.swift").read_text()
+        self.assertNotIn(".scaleEffect", tablet)
+        self.assertIn(".frame(width: layout.artworkSize, height: layout.artworkSize)", tablet)
+        player = (folder / "NowPlayingView.swift").read_text()
+        self.assertNotIn("displayedArtworkPageFrame", player)
+        self.assertIn("return artworkPageFrame", player)
+        self.assertIn("pausedArtworkScale: CGFloat = 0.82", (folder / "NowPlayingArtworkPage.swift").read_text())
+
+    @unittest.skipUnless(shutil.which("swiftc"), "Swift compiler unavailable")
+    def test_aligned_artwork_window_matrix(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "artwork-layout-checks"
+            subprocess.run([
+                "swiftc", "-swift-version", "5",
+                str(ROOT / "MeloX/Features/Player/NowPlaying/NowPlayingPortraitLayout.swift"),
+                str(ROOT / "MeloX/Features/Player/NowPlaying/Tablet/NowPlayingTabletLayout.swift"),
+                str(ROOT / "Tests/Player/NowPlayingPortraitLayoutChecks.swift"),
+                "-o", str(executable),
+            ], check=True)
+            subprocess.run([str(executable)], check=True)
+
     def test_card_interruption_and_snapshot_admission_regressions(self):
         path = ROOT / "MeloX/Features/Player/NowPlaying/NowPlayingPresentationView.swift"
         source = path.read_text()
