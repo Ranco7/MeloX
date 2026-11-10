@@ -43,13 +43,9 @@ struct PlaylistTrackList: View {
                             .overlay(Color.primary.opacity(0.12))
                             .padding(
                                 .leading,
-                                // Wide rows: the separator starts on the same
-                                // edge as the hero artwork and the thumbnails.
-                                usesWideRows
-                                    ? MusicCollectionLayout.wideInset
-                                    : MusicCollectionLayout.titleLeadingInset(
-                                        wide: false, artwork: showsArtwork, selecting: isSelectingDownloads
-                                    )
+                                MusicCollectionLayout.titleLeadingInset(
+                                    wide: usesWideRows, artwork: showsArtwork, selecting: isSelectingDownloads
+                                )
                             )
                             .padding(.trailing, MusicCollectionLayout.horizontalInset(wide: usesWideRows))
                     }

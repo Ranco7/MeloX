@@ -31,6 +31,19 @@ struct NowPlayingPortraitArtwork: View {
     }
 }
 
+/// Preserve the old slot and playing-size square while playback scales only
+/// the native layer. The old parent scaleEffect is the explicit 82% exception.
+struct NowPlayingReferenceArtwork: View {
+    let song: Song
+    let artworkSize: CGFloat
+
+    var body: some View {
+        NowPlayingPortraitArtwork(song: song, isArtworkPage: true, usesReferenceAppearance: true)
+            .frame(width: artworkSize / 0.74, height: artworkSize / 0.74)
+            .frame(width: artworkSize, height: artworkSize)
+    }
+}
+
 private struct NowPlayingArtworkSurface: UIViewControllerRepresentable {
     let url: URL?
     let scale: CGFloat

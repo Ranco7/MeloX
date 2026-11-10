@@ -36,8 +36,8 @@ struct MediaCardGridLayout {
 
 enum MusicCollectionLayout {
     // Every column on the playlist/album page is derived from `wideInset`,
-    // the leading edge of the hero artwork, so the artwork, the row
-    // thumbnails and the separators share one edge at any window width.
+    // the leading edge of the hero artwork. Row thumbnails share that edge;
+    // song separators start at the title column beyond the leading content.
     // Proportions follow Apple Music on iPad (2026-11 reference): thumbnails
     // align with the hero artwork, the favourite mark hangs in the margin,
     // the artist column starts at the middle of the row and rows are 56pt.
@@ -111,9 +111,13 @@ enum MusicCollectionLayout {
     }
 
     static func titleLeadingInset(wide: Bool, artwork: Bool, selecting: Bool) -> CGFloat {
-        horizontalInset(wide: wide)
+        let leadingWidth = artwork
+            ? (wide ? wideRowArtworkSize : rowArtworkSize) : indexColumnWidth
+        let titleSpacing = wide && artwork && !selecting
+            ? wideArtworkTitleSpacing : columnSpacing
+        return horizontalInset(wide: wide)
             + (selecting ? 24 + columnSpacing : 0)
-            + (artwork ? rowArtworkSize : indexColumnWidth) + columnSpacing
+            + leadingWidth + titleSpacing
     }
     static let wideLayoutBreakpoint = CGFloat(MusicCollectionWidthPolicy.wideLayoutBreakpoint)
     static let heroArtworkRatio: CGFloat = 0.28

@@ -1,10 +1,9 @@
 import SwiftUI
 
-/// The iPadOS 26 screen from 9d5d354. Its ideal size includes the complete
-/// measured column, so ViewThatFits rejects it before any controls are clipped.
 struct NowPlayingReferenceTabletView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(AppSettings.self) private var settings
+
     @Binding var page: NowPlayingPage
     let pageTransition: NowPlayingTransitionCoordinator
     let song: Song
@@ -12,28 +11,71 @@ struct NowPlayingReferenceTabletView: View {
     let lyricError: String?
     let highlightedLyricID: LyricLine.ID?
     let artworkNamespace: Namespace.ID
-    let layout: NowPlayingReferenceTabletLayout
     let onDismiss: () -> Void
     let onExpandLyrics: () -> Void
     let onLyricsContentPrepared: () -> Void
 
     var body: some View {
-        NowPlayingReferenceScreenLayout(layout: layout, centersColumn: page == .artwork) {
-            NowPlayingReferenceTabletColumn(song: song, layout: layout)
+        ZStack(alignment: .topLeading) {
+            if #available(iOS 27.1, *) {
+                NowPlayingReferenceAdaptiveView(
+                    page: $page,
+                    pageTransition: pageTransition,
+                    song: song,
+                    lyrics: lyrics,
+                    lyricError: lyricError,
+                    highlightedLyricID: highlightedLyricID,
+                    artworkNamespace: artworkNamespace,
+                    onDismiss: onDismiss,
+                    onExpandLyrics: onExpandLyrics,
+                    onLyricsContentPrepared: onLyricsContentPrepared
+                )
+            } else {
+                GeometryReader { proxy in
+                    let layout = NowPlayingReferenceTabletLayout(viewport: proxy.size)
+
+                    standardPlayer(layout: layout)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
+                }
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private func standardPlayer(layout: NowPlayingReferenceTabletLayout) -> some View {
+        ZStack(alignment: .topLeading) {
+            ScrollView {
+                NowPlayingReferenceTabletColumn(song: song, layout: layout)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+            .scrollIndicators(.hidden)
+            .scrollClipDisabled()
+            .frame(width: layout.playerWidth, height: layout.contentHeight)
+            .offset(
+                x: page == .artwork ? layout.centeredPlayerLeading : layout.playerLeading,
+                y: NowPlayingReferenceTabletLayout.chromeHeight
+            )
+            .animation(
+                accessibilityReduceMotion ? nil : NowPlayingPageTransition.motion.artworkResize.animation,
+                value: page
+            )
+
             NowPlayingTabletPanels(
-                pageTransition: pageTransition, song: song, lyrics: lyrics,
-                lyricError: lyricError, highlightedLyricID: highlightedLyricID,
+                pageTransition: pageTransition,
+                song: song,
+                lyrics: lyrics,
+                lyricError: lyricError,
+                highlightedLyricID: highlightedLyricID,
                 artworkNamespace: artworkNamespace,
                 focusAnchorOffset: layout.lyricsFocusAnchorOffset,
                 onLyricsContentPrepared: onLyricsContentPrepared
             )
+            .frame(width: layout.panelWidth, height: layout.contentHeight)
+            .offset(x: layout.panelLeading, y: NowPlayingReferenceTabletLayout.chromeHeight)
+
             chrome
         }
-        .animation(
-            accessibilityReduceMotion ? nil : NowPlayingPageTransition.motion.artworkResize.animation,
-            value: page
-        )
-        .clipped()
     }
 
     private var chrome: some View {
@@ -91,35 +133,5 @@ struct NowPlayingReferenceTabletView: View {
         }
         .padding(.horizontal, 20)
         .foregroundStyle(.white)
-    }
-}
-
-private struct NowPlayingReferenceScreenLayout: Layout {
-    let layout: NowPlayingReferenceTabletLayout
-    let centersColumn: Bool
-
-    private func columnSize(_ subviews: Subviews) -> CGSize {
-        subviews[0].sizeThatFits(ProposedViewSize(width: layout.playerWidth, height: nil))
-    }
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        layout.requiredSize(measuredColumnSize: columnSize(subviews))
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let column = columnSize(subviews)
-        subviews[0].place(
-            at: CGPoint(x: bounds.minX + (centersColumn ? layout.centeredPlayerLeading : layout.playerLeading),
-                        y: bounds.minY + NowPlayingReferenceTabletLayout.chromeHeight),
-            anchor: .topLeading,
-            proposal: ProposedViewSize(width: layout.playerWidth, height: column.height)
-        )
-        subviews[1].place(
-            at: CGPoint(x: bounds.minX + layout.panelLeading, y: bounds.minY + NowPlayingReferenceTabletLayout.chromeHeight),
-            anchor: .topLeading,
-            proposal: ProposedViewSize(width: layout.panelWidth, height: layout.contentHeight)
-        )
-        subviews[2].place(at: bounds.origin, anchor: .topLeading,
-                          proposal: ProposedViewSize(width: layout.viewport.width, height: layout.viewport.height))
     }
 }

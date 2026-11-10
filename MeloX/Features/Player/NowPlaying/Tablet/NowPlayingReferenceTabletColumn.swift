@@ -1,27 +1,37 @@
 import SwiftUI
 
 struct NowPlayingReferenceTabletColumn: View {
+    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(PlayerStore.self) private var player
+    @Environment(AppSettings.self) private var settings
+
     let song: Song
     let layout: NowPlayingReferenceTabletLayout
 
+    private var isArtworkExpanded: Bool {
+        player.isPlaying || !settings.shrinksPausedArtwork
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            NowPlayingPortraitArtwork(song: song, isArtworkPage: true, usesReferenceAppearance: true)
-                .frame(width: layout.playingArtworkSize, height: layout.playingArtworkSize)
-                .frame(width: layout.artworkSize, height: layout.artworkSize)
+            NowPlayingReferenceArtwork(song: song, artworkSize: layout.artworkSize)
                 .frame(maxWidth: .infinity)
                 .padding(.top, layout.artworkTopInset)
+                .animation(
+                    accessibilityReduceMotion ? nil : .smooth(duration: 0.48),
+                    value: isArtworkExpanded
+                )
 
             NowPlayingReferenceTabletMetadata(song: song)
                 .padding(.top, layout.metadataTopInset)
 
-            NowPlayingProgressControl(song: song, usesReferenceLayout: true)
+            NowPlayingReferenceProgressControl(song: song)
                 .padding(.top, 23 * layout.elementScale)
 
-            NowPlayingTransportControls(presentation: .referenceTablet)
+            NowPlayingReferenceTransportControls(presentation: .tablet)
                 .padding(.top, 22 * layout.elementScale)
 
-            NowPlayingVolumeControl(usesReferenceLayout: true)
+            NowPlayingReferenceVolumeControl()
                 .padding(.top, 12)
         }
         .padding(.bottom, 20)
@@ -51,8 +61,6 @@ private struct NowPlayingReferenceTabletMetadata: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
 
-                // Borrow hit space from passive metadata above, leaving the
-                // following 23pt gap available to the progress slider.
                 HStack(spacing: 8) {
                     HeartModeNowPlayingBadge(expandsTouchTarget: true)
                     ListenTogetherNowPlayingBadge(expandsTouchTarget: true)

@@ -14,7 +14,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
 PLAYER = ROOT / 'MeloX/Features/Player/NowPlaying'
-WINDOWS = [(1024,705),(705,1024),(1194,834),(834,1194),(375,486),
+WINDOWS = [(1408,970),(970,1408),(1024,768),(1210,834),(1024,705),(705,1024),(1194,834),(834,1194),(375,486),
            (375,682),(698,886),(698,590),(446,580),(1366,1024),(1024,1366)]
 
 
@@ -38,12 +38,7 @@ def block(source, start):
 
 
 # These hashes were generated from git 9d5d354, not from the restored views.
-GOLDEN = {'NowPlayingAutoMixStatus': '9b838935577e9f663e2d6355de6229a463001190e774a0637cd16a31ef560e72',
- 'NowPlayingProgressElapsedTime': 'fe457293969985bf1fb917ee691d1f5c58d1e97e46f7e4441ffc2d1ff6aacdda',
- 'NowPlayingProgressRemainingTime': '385ba6d3fdc3ce4fcea9c9f1a58edd3617f7f357db6582cbc010db196783706d',
- 'NowPlayingProgressSlider': '0c3b08e4b6037f4bb443cc4db0fa80fab576c0f056ab7f4fc8d3789571297605',
- 'NowPlayingQualityMenu': 'c1f80c61fb1cd249ed1a99dcf4c27eeb52875bc5bb86f7025e17c8b389d450fb',
- 'chrome': '1b85c926664e316e535511bc6111303c2bd08bfabb853243d497994e2f72e3d2',
+GOLDEN = {'chrome': '1b85c926664e316e535511bc6111303c2bd08bfabb853243d497994e2f72e3d2',
  'layout': 'ff3ed1a80d6efed89688a5317b50be0f894e047dc419210e850de413ddcec7da',
  'metadata': '24964dc2337b7b0a9d5aeab08b47e718a3500396a1ea8956ab77e2d3c68b29ad'}
 # Original 575068d route, extracted without changing its predicates or calls.
@@ -69,9 +64,33 @@ def reference(width, height):
                 maximum_control_band=content-section)
 
 
-def accepts(width, height, band):
+def previous_candidate_fits(width, height, band):
     g = reference(width,height)
     return width >= 520 and g['section']+band <= g['content']+1e-9
+
+
+def uses_reference(width, height, accessibility=False):
+    g = reference(width,height)
+    return (not accessibility and width >= 520
+            and g['section'] + 238 + 45*g['scale'] <= g['content'] + 1e-6)
+
+
+def renamed_old(source):
+    for old,new in {
+        'NowPlayingTabletPlayerColumn':'NowPlayingReferenceTabletColumn',
+        'NowPlayingTabletMetadata':'NowPlayingReferenceTabletMetadata',
+        'NowPlayingTabletLayout':'NowPlayingReferenceTabletLayout',
+        'NowPlayingTabletView':'NowPlayingReferenceTabletView',
+        'NowPlayingAdaptiveView':'NowPlayingReferenceAdaptiveView',
+        'NowPlayingProgressControl':'NowPlayingReferenceProgressControl',
+        'NowPlayingTransportControls':'NowPlayingReferenceTransportControls',
+        'NowPlayingVolumeControl':'NowPlayingReferenceVolumeControl',
+    }.items(): source=source.replace(old,new)
+    return source
+
+
+def original_fixture(name):
+    return (ROOT/'Tests/Player/Fixtures'/('9d5d354-'+name+'.swift.txt')).read_text()
 
 
 class FullscreenRestoreTests(unittest.TestCase):
@@ -79,9 +98,10 @@ class FullscreenRestoreTests(unittest.TestCase):
         frozen = (ROOT/'Tests/Player/Fixtures/NowPlayingTablet9d5d354.swift').read_text().split('\n',1)[1]
         frozen = frozen.replace('GoldenNowPlayingTabletLayout','NowPlayingTabletLayout')
         self.assertEqual(digest(frozen), GOLDEN['layout'])
-        actual = (PLAYER/'Tablet/NowPlayingReferenceTabletLayout.swift').read_text().split('\nextension ',1)[0]
+        actual = (PLAYER/'Tablet/NowPlayingReferenceTabletLayout.swift').read_text()
         actual = actual.replace('NowPlayingReferenceTabletLayout','NowPlayingTabletLayout')
         self.assertEqual(digest(actual), GOLDEN['layout'])
+        self.assertEqual(actual,frozen)
 
     def test_chrome_and_metadata_preserve_old_structure(self):
         source = (PLAYER/'Tablet/NowPlayingReferenceTabletView.swift').read_text()
@@ -98,33 +118,69 @@ class FullscreenRestoreTests(unittest.TestCase):
                       '22 * layout.elementScale','.padding(.top, 12)','.padding(.bottom, 20)']:
             self.assertIn(value,source)
         self.assertNotIn('.scaleEffect',source)
-        self.assertIn('.frame(width: layout.playingArtworkSize, height: layout.playingArtworkSize)',source)
+        self.assertIn('NowPlayingReferenceArtwork(song: song, artworkSize: layout.artworkSize)',source)
 
-    def test_reference_control_leaf_views_are_unchanged(self):
-        source = (PLAYER/'NowPlayingControls.swift').read_text()
-        for name in ('NowPlayingProgressSlider','NowPlayingProgressElapsedTime','NowPlayingProgressRemainingTime',
-                     'NowPlayingAutoMixStatus','NowPlayingQualityMenu'):
-            self.assertEqual(digest(block(source,'private struct '+name+':')),GOLDEN[name])
-        transport = block(source,'struct NowPlayingTransportControls:')
-        self.assertIn('if isReference { return 44 }',transport)
-        self.assertIn('isReference ? 24 :',transport)
-        self.assertIn('isReference ? 30 :',transport)
-        self.assertIn('.frame(height: isReference ? 52 :',transport)
-        self.assertIn('usesReferenceLayout ? 42 : 44',source)
-        self.assertIn('volumeView.showsRouteButton = usesReferenceLayout',source)
+    def test_complete_original_views_are_verbatim_after_type_renaming(self):
+        for old,new in [('NowPlayingTabletView','NowPlayingReferenceTabletView'),
+                        ('NowPlayingAdaptiveView','NowPlayingReferenceAdaptiveView')]:
+            self.assertEqual((PLAYER/'Tablet'/f'{new}.swift').read_text(),renamed_old(original_fixture(old)))
+        self.assertIn('ScrollView {',(PLAYER/'Tablet/NowPlayingReferenceTabletView.swift').read_text())
 
-    def test_fit_measures_the_whole_column_synchronously(self):
-        source = (PLAYER/'Tablet/NowPlayingReferenceTabletView.swift').read_text()
-        self.assertIn('subviews[0].sizeThatFits(ProposedViewSize(width: layout.playerWidth, height: nil))',source)
-        self.assertIn('layout.requiredSize(measuredColumnSize: columnSize(subviews))',source)
-        self.assertNotIn('GeometryReader',source)
-        self.assertNotIn('@State',source)
-        source = (PLAYER/'NowPlayingView.swift').read_text()
-        self.assertIn('ViewThatFits(in: [.horizontal, .vertical])',source)
+    def test_complete_original_column_has_only_explicit_feature_exceptions(self):
+        expected=renamed_old(original_fixture('NowPlayingTabletPlayerColumn'))
+        expected=expected.replace(
+            'NowPlayingPortraitArtwork(song: song, isArtworkPage: true)\n'
+            '                .frame(width: layout.artworkSize, height: layout.artworkSize)\n'
+            '                .scaleEffect(isArtworkExpanded ? 1 / NowPlayingArtworkPage.pausedArtworkScale : 1)',
+            'NowPlayingReferenceArtwork(song: song, artworkSize: layout.artworkSize)')
+        expected=expected.replace('HeartModeNowPlayingBadge()','HeartModeNowPlayingBadge(expandsTouchTarget: true)')
+        expected=expected.replace('ListenTogetherNowPlayingBadge()','ListenTogetherNowPlayingBadge(expandsTouchTarget: true)')
+        expected=expected.replace('NowPlayingSongActions(song: song)','NowPlayingSongActions(song: song, offersAirPlayMenu: true)')
+        self.assertEqual((PLAYER/'Tablet/NowPlayingReferenceTabletColumn.swift').read_text(),expected)
+
+    def test_complete_original_controls_have_only_hit_target_and_native_bridge_exceptions(self):
+        expected=original_fixture('NowPlayingControls').split('private final class AlignedSystemVolumeView:',1)[0]
+        expected=renamed_old(expected)
+        for old,new in {'NowPlayingProgressSlider':'NowPlayingReferenceProgressSlider',
+                        'NowPlayingProgressElapsedTime':'NowPlayingReferenceProgressElapsedTime',
+                        'NowPlayingProgressRemainingTime':'NowPlayingReferenceProgressRemainingTime',
+                        'NowPlayingAutoMixStatus':'NowPlayingReferenceAutoMixStatus',
+                        'NowPlayingQualityMenu':'NowPlayingReferenceQualityMenu',
+                        'formatPlaybackTime':'formatReferencePlaybackTime',
+                        'SystemVolumeSlider':'NowPlayingReferenceSystemVolumeSlider'}.items():
+            expected=expected.replace(old,new)
+        expected=expected.replace('        .sliderThumbVisibility(.hidden)\n        .tint(.white)',
+            '        .sliderThumbVisibility(.hidden)\n        .contentShape(NowPlayingVerticalHitShape(minimumHeight: 44, maximumBottomOutset: 6))\n        .tint(.white)',1)
+        expected=expected.replace('                    .frame(maxWidth: .infinity)\n                    .frame(height: 32)\n                    .layoutPriority(1)',
+            '                    .frame(maxWidth: .infinity)\n                    .frame(height: 44)\n                    .frame(height: 32)\n                    .contentShape(NowPlayingVerticalHitShape(minimumHeight: 44))\n                    .layoutPriority(1)',1)
+        self.assertEqual((PLAYER/'Tablet/NowPlayingReferenceControls.swift').read_text(),expected)
+
+    def test_frozen_complete_source_provenance(self):
+        manifest=json.loads((ROOT/'Tests/Player/Fixtures/9d5d354-source-manifest.json').read_text())
+        self.assertEqual(manifest['commit'],'9d5d354f3f2a914e80459fd4b7c9f407d41a713e')
+        self.assertEqual(len(manifest['files']),4)
+        for filename,sha256 in manifest['files'].items():
+            self.assertEqual(hashlib.sha256((ROOT/'Tests/Player/Fixtures'/filename).read_bytes()).hexdigest(),sha256)
+        for path,sha256 in manifest['unchanged_dependencies'].items():
+            self.assertEqual(hashlib.sha256((ROOT/path).read_bytes()).hexdigest(),sha256,path)
+
+    def test_selection_uses_original_budget_and_original_scroll_container(self):
+        source=(PLAYER/'Tablet/NowPlayingReferenceTabletView.swift').read_text()
+        self.assertIn('.scrollClipDisabled()',source)
+        self.assertIn('.scrollBounceBehavior(.basedOnSize)',source)
+        self.assertNotIn('NowPlayingReferenceScreenLayout',source)
+        self.assertNotIn('sizeThatFits',source)
+        policy=(PLAYER/'Tablet/NowPlayingReferenceLayoutPolicy.swift').read_text()
+        self.assertIn('238 + 45 * elementScale',policy)
+        for obsolete in ['measuredColumn','controlsHeight','playerVolumeControlMode','sizeThatFits']:
+            self.assertNotIn(obsolete,policy)
+        source=(PLAYER/'NowPlayingView.swift').read_text()
+        self.assertIn('NowPlayingReferenceLayoutPolicy.usesReference(',source)
+        self.assertIn('isAccessibilitySize: dynamicTypeSize.isAccessibilitySize',source)
+        self.assertNotIn('ViewThatFits(in: [.horizontal, .vertical])',source)
         self.assertIn('!hasDisplayDivision',source)
-        # Original adaptive if-chain is preserved, including TextPV priority.
-        adaptive = block(source,'private func adaptivePlayer(').split('{',1)[1][:-1]
-        adaptive = adaptive.replace('viewport.width','proxy.size.width').replace('viewport.height','proxy.size.height')
+        adaptive=block(source,'private func adaptivePlayer(').split('{',1)[1][:-1]
+        adaptive=adaptive.replace('viewport.width','proxy.size.width').replace('viewport.height','proxy.size.height')
         self.assertEqual(digest(adaptive),ADAPTIVE_ROUTE)
 
     def test_volume_settings_and_actions_remain_reachable(self):
@@ -158,34 +214,38 @@ class FullscreenRestoreTests(unittest.TestCase):
         self.assertIn('let radius = 12 / targetScale * appearanceScale',source)
         self.assertIn('pausedArtworkScale: CGFloat = 0.82',(PLAYER/'NowPlayingArtworkPage.swift').read_text())
         self.assertNotIn('.scaleEffect',source)
+        wrapper=block(source,'struct NowPlayingReferenceArtwork:')
+        self.assertIn('usesReferenceAppearance: true',wrapper)
+        self.assertIn('.frame(width: artworkSize / 0.74, height: artworkSize / 0.74)',wrapper)
+        self.assertIn('.frame(width: artworkSize, height: artworkSize)',wrapper)
 
-    def test_reference_examples_and_safe_area_thresholds(self):
-        self.assertAlmostEqual(reference(1024,705)['column'],383.75)
-        self.assertAlmostEqual(reference(834,1194)['playing_artwork'],377)
-        self.assertFalse(accepts(1024,705,297))
-        self.assertTrue(accepts(1024,705,255))
-        self.assertTrue(accepts(705,1024,297))
-        for width,height in WINDOWS:
-            for safe in (0,44,58):
-                g = reference(width,height-safe)
-                for band in (255,279,297,321,500):
-                    selected = accepts(width,height-safe,band)
-                    if selected:
-                        self.assertGreaterEqual(g['column'],220)
-                        self.assertLessEqual(g['section']+band,g['content']+1e-9)
-                    if width < 520:
-                        self.assertFalse(selected)
-                self.assertGreater(g['playing_artwork'],0)
-                self.assertLessEqual(g['playing_artwork'],g['column']+1e-9)
-        self.assertTrue(accepts(520,1200,279))
-        self.assertFalse(accepts(519.999,1200,279))
+    def test_device_golden_and_stable_reference_selection(self):
+        device=reference(1408,918)
+        self.assertAlmostEqual(device['column'],495.1466666667)
+        self.assertAlmostEqual(device['playing_artwork'],427.1605470012)
+        self.assertAlmostEqual(device['artwork_top']+32,141.4667384516)
+        self.assertTrue(uses_reference(1408,918))
+        # The old measured-column gate rejected this badge + system-volume
+        # fixture; the old source itself retained a scroll container instead.
+        band=72+78+52+42+45*device['scale']+32
+        self.assertFalse(previous_candidate_fits(1408,918,band))
+        self.assertTrue(uses_reference(1408,918))
+        for width,height in [(1408,970),(970,1408),(1024,768),(1210,834),
+                             (1024,705),(705,1024),(1194,834),(834,1194)]:
+            for safe in (0,44,52,58):
+                self.assertTrue(uses_reference(width,height-safe),(width,height,safe))
+                self.assertFalse(uses_reference(width,height-safe,accessibility=True))
+        for width,height in [(375,486),(375,682),(446,580),(698,590)]:
+            for safe in (0,44,52,58):
+                self.assertFalse(uses_reference(width,height-safe),(width,height,safe))
+        self.assertTrue(uses_reference(698,886-52))
 
     def test_normal_references_retain_complete_adaptive_default_volume(self):
         from test_nowplaying_reference_layout import portrait, tablet
         for width,height in [(375,486),(375,682),(446,580),(698,886),(698,590)]:
             for safe in (0,44,58):
-                # Baseline band 321 models active badge + system volume.
-                if not accepts(width,height-safe,321):
+                # Retain the measured 575 rows when the old budget cannot fit.
+                if not uses_reference(width,height-safe):
                     g = (portrait(width,height-safe,metadata=76) if width<520
                          else tablet(width,height-safe,metadata=96))
                     self.assertFalse(g['scroll'])
@@ -238,6 +298,7 @@ print("Reference hit geometry passed: 44pt targets, adjacent rows, unchanged vis
             subprocess.run(['swiftc','-swift-version','5',
                 str(ROOT/'Tests/Player/Fixtures/NowPlayingTablet9d5d354.swift'),
                 str(PLAYER/'Tablet/NowPlayingReferenceTabletLayout.swift'),
+                str(PLAYER/'Tablet/NowPlayingReferenceLayoutPolicy.swift'),
                 str(PLAYER/'Tablet/NowPlayingTabletLayout.swift'),
                 str(PLAYER/'NowPlayingPortraitLayout.swift'),
                 str(ROOT/'Tests/Player/NowPlayingFullscreenRestoreChecks.swift'),
@@ -246,25 +307,20 @@ print("Reference hit geometry passed: 44pt targets, adjacent rows, unchanged vis
 
 
 def write_report():
-    rows = []
+    rows=[]
     for width,height in WINDOWS:
-        for safe in (0,44,58):
-            g = reference(width,height-safe)
+        for safe in (0,44,52,58):
+            g=reference(width,height-safe)
             rows.append(dict(window=[width,height],safe_area=safe,**g,
-                             hidden_band255=accepts(width,height-safe,255),
-                             visible_band297=accepts(width,height-safe,297),
-                             badge_visible_band321=accepts(width,height-safe,321)))
-    destination = ROOT/'.out/fullscreen-restore/geometry.json'
+                reference_selected=uses_reference(width,height-safe),
+                own_control_budget=238+45*g['scale']))
+    destination=ROOT/'.out/branch-selection/geometry.json'
     destination.parent.mkdir(parents=True,exist_ok=True)
-    destination.write_text(json.dumps(dict(
-        units='conditional logical points; not measured screenshots or SwiftUI row heights',
-        control_band='metadata + progress + 52 transport + (42 volume or 0 hidden) + 45*scale + 32 padding',
-        rows=rows),ensure_ascii=False,indent=2)+'\n')
+    destination.write_text(json.dumps(dict(units='conditional logical pt, not rendered row measurements',rows=rows),indent=2)+'\n')
     print(destination)
     for row in rows:
-        if row['safe_area']==44:
-            print(f"{row['window']}: column={row['column']:.2f}, old-art={row['playing_artwork']:.2f}, "
-                  f"max-band={row['maximum_control_band']:.2f}, hidden255={row['hidden_band255']}, visible297={row['visible_band297']}")
+        if row['safe_area']==52:
+            print(row['window'],row['column'],row['playing_artwork'],row['reference_selected'])
 
 
 if __name__=='__main__':

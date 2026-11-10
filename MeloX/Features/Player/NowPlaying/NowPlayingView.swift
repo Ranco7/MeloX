@@ -66,23 +66,23 @@ struct NowPlayingView: View {
                         fullScreenLyrics(for: song)
                     } else if UIDevice.current.userInterfaceIdiom == .pad,
                               !hasDisplayDivision,
-                              !usesFullScreenTextPV || usesExpandedLayout {
-                        ViewThatFits(in: [.horizontal, .vertical]) {
-                            NowPlayingReferenceTabletView(
-                                page: pageSelection, pageTransition: pageTransition,
-                                song: song, lyrics: lyrics, lyricError: lyricError,
-                                highlightedLyricID: highlightedLyricID,
-                                artworkNamespace: pageArtworkNamespace,
-                                layout: NowPlayingReferenceTabletLayout(viewport: proxy.size),
-                                onDismiss: onDismiss,
-                                onExpandLyrics: {
-                                    showsLyricsControls = true
-                                    showsFullScreenLyrics = true
-                                },
-                                onLyricsContentPrepared: { markLyricsContentPrepared(for: song.id) }
-                            )
-                            adaptivePlayer(for: song, viewport: proxy.size)
-                        }
+                              !usesFullScreenTextPV || usesExpandedLayout,
+                              NowPlayingReferenceLayoutPolicy.usesReference(
+                                viewport: proxy.size,
+                                isAccessibilitySize: dynamicTypeSize.isAccessibilitySize
+                              ) {
+                        NowPlayingReferenceTabletView(
+                            page: pageSelection, pageTransition: pageTransition,
+                            song: song, lyrics: lyrics, lyricError: lyricError,
+                            highlightedLyricID: highlightedLyricID,
+                            artworkNamespace: pageArtworkNamespace,
+                            onDismiss: onDismiss,
+                            onExpandLyrics: {
+                                showsLyricsControls = true
+                                showsFullScreenLyrics = true
+                            },
+                            onLyricsContentPrepared: { markLyricsContentPrepared(for: song.id) }
+                        )
                     } else {
                         adaptivePlayer(for: song, viewport: proxy.size)
                     }

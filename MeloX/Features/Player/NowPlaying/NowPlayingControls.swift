@@ -688,3 +688,11 @@ struct NowPlayingVerticalHitShape: Shape {
                            width: rect.width, height: rect.height + growth))
     }
 }
+
+/// Keep the current 32pt native drawing / 44pt hit host behind the old volume
+/// view without changing that view's visible row, bindings or route behavior.
+struct NowPlayingReferenceSystemVolumeSlider: View {
+    var body: some View {
+        SystemVolumeSlider(usesReferenceLayout: true)
+    }
+}

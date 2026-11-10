@@ -41,6 +41,9 @@ struct TrackRowView: View {
                 Text(song.name)
                     .font(.body)
                     .lineLimit(usesLargeText ? nil : 1)
+                    .alignmentGuide(.listRowSeparatorLeading) { dimensions in
+                        dimensions[.leading]
+                    }
                 Text(subtitleText)
                     .font(.caption)
                     .foregroundStyle(.secondary)

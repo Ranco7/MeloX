@@ -1,0 +1,15 @@
+{
+  "commit": "9d5d354f3f2a914e80459fd4b7c9f407d41a713e",
+  "files": {
+    "9d5d354-NowPlayingTabletView.swift.txt": "5559a70ebfe51ec7efb0b91916812334d3b61853a44a3144e5b4ea6c505485db",
+    "9d5d354-NowPlayingTabletPlayerColumn.swift.txt": "b89012871bd728da47c5b41b3b998a4a7057cf4adbbb7fed98ad08747212a841",
+    "9d5d354-NowPlayingAdaptiveView.swift.txt": "fdf07ccacec522330354c59a38cf76bc6ecdd1598b9d514aa647fb9a0a42f540",
+    "9d5d354-NowPlayingControls.swift.txt": "fe51a4642b77e8a3c5d441885af9af19378c72d94fd311097cc3a01769317121"
+  },
+  "unchanged_dependencies": {
+    "MeloX/Features/Player/NowPlaying/Tablet/NowPlayingTabletPageSwitcher.swift": "65edfd5db2a784d42e0037b7f9d1d59bedacb15637b97150cc9c46cf86254bc6",
+    "MeloX/Features/Player/NowPlaying/Tablet/NowPlayingTabletPanels.swift": "049122a4221554dca9e1a91508b50870dd18a181d13e9addd9545d5f580e62b3",
+    "MeloX/Features/FloatingLyrics/FloatingLyricsButton.swift": "8549db869dd000410b08db0f71964f462cd001615ec41bfd49c37f79e9916ffa",
+    "MeloX/Features/Player/NowPlaying/NowPlayingTransportButtonStyle.swift": "76d452062bf7811071f592ffee3bbba727f6b2bfa7d51cd55dd065ce14911824"
+  }
+}

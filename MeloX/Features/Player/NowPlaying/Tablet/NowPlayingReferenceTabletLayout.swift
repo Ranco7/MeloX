@@ -131,22 +131,3 @@ struct NowPlayingReferenceTabletLayout {
         artworkTopInset + artworkSize * 0.5 - Self.lyricsTopPadding
     }
 }
-
-extension NowPlayingReferenceTabletLayout {
-    /// 9d5d354 expanded the playing surface by 1 / 0.74 outside this slot.
-    /// Reserve that same slot and feed its visible square to the native layer;
-    /// paused scaling is the explicit current 0.82 exception.
-    var playingArtworkSize: CGFloat { artworkSize / 0.74 }
-    var columnArtworkSectionHeight: CGFloat { artworkTopInset + artworkSize + metadataTopInset }
-    var minimumViewportWidth: CGFloat { fillsRegion ? 220 + 48 : 2 * (220 + 40) }
-
-    func requiredSize(measuredColumnSize: CGSize) -> CGSize {
-        // Fixed-size badges and actions may ask for more than the old column.
-        // Reject that candidate rather than widening the baseline endpoint.
-        let widthOverflow = max(measuredColumnSize.width - playerWidth, 0)
-        return CGSize(
-            width: max(viewport.width + widthOverflow, minimumViewportWidth),
-            height: max(viewport.height, measuredColumnSize.height + (fillsRegion ? 0 : Self.chromeHeight + Self.bottomBarHeight))
-        )
-    }
-}
