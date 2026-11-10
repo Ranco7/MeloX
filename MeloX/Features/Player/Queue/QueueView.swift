@@ -17,7 +17,7 @@ struct QueueView: View {
                     }
                 }
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.automatic)
         }
         .listStyle(.plain)
         .navigationTitle("ui.player.up_next")

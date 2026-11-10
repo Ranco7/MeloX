@@ -198,7 +198,7 @@ struct SongRecognitionView: View {
                 showsArtwork: true
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.automatic)
         .swipeActions(edge: .trailing) {
             Button {
                 library.toggle(song: result.song)

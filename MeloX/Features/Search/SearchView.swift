@@ -150,7 +150,7 @@ struct SearchView: View {
                     } label: {
                         TrackRowView(song: song, showsArtwork: true)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.automatic)
                     .swipeActions(edge: .trailing) {
                         Button {
                             library.toggle(song: song)

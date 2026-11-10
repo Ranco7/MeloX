@@ -108,7 +108,7 @@ struct DownloadsView: View {
                                 .foregroundStyle(.secondary)
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.automatic)
                         .swipeActions {
                             Button(role: .destructive) {
                                 downloads.remove(songID: download.id)

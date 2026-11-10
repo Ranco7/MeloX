@@ -27,7 +27,7 @@ struct LibraryHistoryView: View {
                 } label: {
                     TrackRowView(song: song, showsArtwork: true)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.automatic)
             }
         }
         .listStyle(.plain)

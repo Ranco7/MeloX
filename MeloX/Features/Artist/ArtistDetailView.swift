@@ -93,7 +93,7 @@ struct ArtistDetailView: View {
                     } label: {
                         TrackRowView(song: song, index: index)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.automatic)
                     .swipeActions(edge: .trailing) {
                         Button {
                             library.toggle(song: song)

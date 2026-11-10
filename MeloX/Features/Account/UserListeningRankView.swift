@@ -100,7 +100,7 @@ struct UserListeningRankView: View {
                                 L10n.format("ui.common.play_count", record.playCount)
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.automatic)
                     .listRowInsets(rowInsets)
                 }
             }

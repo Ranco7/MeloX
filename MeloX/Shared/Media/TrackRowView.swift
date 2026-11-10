@@ -54,6 +54,7 @@ struct TrackRowView: View {
             playbackMetadata
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(.primary)
         .contentShape(.rect)
         .musicMatchedTransitionSource(for: .song(song))
         .contextMenu {
