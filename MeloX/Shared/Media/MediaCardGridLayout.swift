@@ -87,9 +87,27 @@ enum MusicCollectionLayout {
             + (controlMinimumSize - moreButtonOverhang) + accessorySpacing
     }
 
-    /// The artist column starts at the horizontal middle of the row.
-    static func wideArtistColumnWidth(rowWidth: CGFloat) -> CGFloat {
-        max(0, rowWidth / 2 - wideTrailingAccessoryWidth)
+    // Hero action row (shuffle, play, download) on wide layouts.
+    static let heroControlSize: CGFloat = 40
+    static let heroPlayButtonWidth: CGFloat = 136
+    static let heroControlSpacing: CGFloat = 12
+    static let minimumArtistColumnWidth: CGFloat = 96
+
+    /// Distance from the content's leading edge to the right edge of the hero
+    /// play button: artwork, column gap, shuffle button, gap, play button.
+    static func heroPlayButtonTrailingEdge(artworkSize: CGFloat) -> CGFloat {
+        artworkSize + heroColumnSpacing
+            + heroControlSize + heroControlSpacing + heroPlayButtonWidth
+    }
+
+    /// The artist column starts on the same vertical line as the right edge
+    /// of the hero play button, like Apple Music. Both come from the
+    /// constants above, so they stay aligned at every window width.
+    static func wideArtistColumnWidth(rowWidth: CGFloat, artworkSize: CGFloat) -> CGFloat {
+        max(
+            minimumArtistColumnWidth,
+            rowWidth - heroPlayButtonTrailingEdge(artworkSize: artworkSize) - wideTrailingAccessoryWidth
+        )
     }
 
     static func titleLeadingInset(wide: Bool, artwork: Bool, selecting: Bool) -> CGFloat {

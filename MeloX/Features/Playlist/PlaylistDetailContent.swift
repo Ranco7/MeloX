@@ -149,24 +149,27 @@ struct MusicCollectionDetailLayout<Hero: View, Tracks: View>: View {
         let wideWidth = UIDevice.current.userInterfaceIdiom == .pad
             && !dynamicTypeSize.isAccessibilitySize ? measuredWideWidth : nil
 
-        LazyVStack(spacing: 0) {
-            hero(
-                wideWidth.map {
-                    min(
-                        $0 * MusicCollectionLayout.heroArtworkRatio,
-                        MusicCollectionLayout.maximumHeroArtworkSize
-                    )
-                }
+        let artworkSize = wideWidth.map {
+            min(
+                $0 * MusicCollectionLayout.heroArtworkRatio,
+                MusicCollectionLayout.maximumHeroArtworkSize
             )
+        }
+
+        LazyVStack(spacing: 0) {
+            hero(artworkSize)
             if wideWidth != nil {
                 Divider()
                     .padding(.horizontal, MusicCollectionLayout.wideInset)
             }
             tracks(
-                wideWidth.map {
-                    MusicCollectionLayout.wideArtistColumnWidth(
-                        rowWidth: $0 - 2 * MusicCollectionLayout.wideInset
-                    )
+                wideWidth.flatMap { width in
+                    artworkSize.map {
+                        MusicCollectionLayout.wideArtistColumnWidth(
+                            rowWidth: width - 2 * MusicCollectionLayout.wideInset,
+                            artworkSize: $0
+                        )
+                    }
                 }
             )
         }
@@ -469,8 +472,8 @@ struct MusicCollectionPrimaryActions: View {
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        GlassEffectContainer(spacing: 14) {
-            HStack(spacing: 14) {
+        GlassEffectContainer(spacing: controlSpacing) {
+            HStack(spacing: controlSpacing) {
                 roundControl(
                     Button {
                         Task {
@@ -559,9 +562,15 @@ struct MusicCollectionPrimaryActions: View {
             .font(usesWideControls ? .subheadline.weight(.semibold) : .title3.weight(.bold))
             .lineLimit(usesWideControls ? 1 : nil)
             .minimumScaleFactor(usesWideControls ? 0.75 : 1)
-            .frame(minWidth: usesWideControls ? 160 : 116)
-            .frame(minHeight: usesWideControls ? 48 : 0)
+            .frame(
+                minWidth: usesWideControls ? MusicCollectionLayout.heroPlayButtonWidth : 116,
+                maxWidth: usesWideControls ? MusicCollectionLayout.heroPlayButtonWidth : nil
+            )
+            .frame(minHeight: usesWideControls ? MusicCollectionLayout.heroControlSize : 0)
+            // Keep at least a 44pt touch target around the 40pt capsule.
+            .padding(.vertical, usesWideControls ? hitSlop : 0)
             .contentShape(.capsule)
+            .padding(.vertical, usesWideControls ? -hitSlop : 0)
         }
         .foregroundStyle(primaryActionForeground)
     }
@@ -583,8 +592,23 @@ struct MusicCollectionPrimaryActions: View {
     private func actionIcon(_ icon: String) -> some View {
         Image(systemName: icon)
             .font(usesWideControls ? .body.weight(.semibold) : .title2.weight(.semibold))
-            .frame(width: usesWideControls ? 48 : 30, height: usesWideControls ? 48 : 30)
+            .frame(
+                width: usesWideControls ? MusicCollectionLayout.heroControlSize : 30,
+                height: usesWideControls ? MusicCollectionLayout.heroControlSize : 30
+            )
+            .padding(usesWideControls ? hitSlop : 0)
             .contentShape(.circle)
+            .padding(usesWideControls ? -hitSlop : 0)
+    }
+
+    private var controlSpacing: CGFloat {
+        usesWideControls ? MusicCollectionLayout.heroControlSpacing : 14
+    }
+
+    /// Visible wide controls are 40pt like Apple Music; the hit area grows to
+    /// the 44pt minimum without changing layout.
+    private var hitSlop: CGFloat {
+        (MusicCollectionLayout.controlMinimumSize - MusicCollectionLayout.heroControlSize) / 2
     }
 
     private var primaryActionBackground: Color {
