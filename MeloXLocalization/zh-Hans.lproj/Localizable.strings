@@ -2159,3 +2159,7 @@
 "ui.settings.general.cache_page_content" = "自动缓存首页与音乐库";
 "ui.settings.general.compact_home_actions" = "紧凑首页快捷入口";
 "ui.settings.general.cache_page_content.footer" = "保存最近加载成功的推荐、音乐库和歌单信息。再次打开时先显示缓存，再联网更新；可在储存空间中清理。";
+
+"ui.playlists.add_gateway_uncertain" = "网易云暂时无法确认歌曲是否已添加（502）。请先刷新歌单确认；若未生效，稍后重试。私密歌单也可先在网易云 App 中检查状态。";
+"ui.playlists.remove_gateway_uncertain" = "网易云暂时无法确认歌曲是否已移除（502）。请先刷新歌单确认；若未生效，稍后重试。";
+"ui.playlists.removed_refresh_failed" = "歌曲已移除，但歌单封面刷新失败，请下拉刷新。";

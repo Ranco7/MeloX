@@ -64,16 +64,15 @@ private struct PlaylistCreationResponse: Decodable {
     let message: String?
 }
 
-private enum PlaylistTrackMutationError: LocalizedError {
+enum PlaylistTrackMutationError: LocalizedError {
     case gateway(operation: String)
 
     var errorDescription: String? {
         switch self {
         case .gateway(let operation):
-            let action = operation == "add" ? "添加" : "移除"
-            // A gateway failure can occur after the upstream accepted the write.
-            // Never claim that it failed definitively or automatically duplicate it.
-            return "网易云暂时无法确认歌曲是否已\(action)（502）。请先刷新歌单确认；若未生效，稍后重试。私密歌单也可先在网易云 App 中检查状态。"
+            return L10n.string(operation == "add"
+                ? "ui.playlists.add_gateway_uncertain"
+                : "ui.playlists.remove_gateway_uncertain")
         }
     }
 }

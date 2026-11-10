@@ -175,6 +175,15 @@ struct ContentView: View {
             .task {
                 await floatingLyrics.monitor()
             }
+            .onChange(of: settings.cookie) { _, _ in
+                navigationPaths = [:]
+                tabletCollectionChrome = [:]
+                contentColumnFrames = [:]
+                sidebarArtwork = [:]
+                if case .playlist = selectedTab {
+                    selectedTab = .page(settings.fallbackNavigationTab)
+                }
+            }
             .task(id: settings.cookie) {
                 await library.refresh()
             }
@@ -614,6 +623,7 @@ struct ContentView: View {
             return true
         }
         tabletCollectionChrome = tabletCollectionChrome.filter { activeTabs.contains($0.key) }
+        contentColumnFrames = contentColumnFrames.filter { activeTabs.contains($0.key) }
         guard !activeTabs.contains(selectedTab) else { return }
         switch selectedTab {
         case .page(let page) where settings.homeTabs.contains(page) && activeTabs.contains(.page(.home)):
@@ -670,6 +680,7 @@ struct ContentView: View {
                 }
                 .musicDestinations(in: musicNavigationNamespace)
         }
+        .id(settings.cookie)
         .onGeometryChange(for: CGRect.self) { proxy in
             proxy.frame(in: .global)
         } action: { frame in

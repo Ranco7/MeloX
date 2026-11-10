@@ -18,7 +18,9 @@ struct PlaylistDetailView: View {
     private var setTabViewBottomAccessorySuppressed
 
     @State private var playlist: Playlist?
-    @State private var contentAccountToken: Int?
+    @State private var contentAccountToken: String?
+    @State private var contentRevision: Int?
+    @State private var contentLoadID = UUID()
     @State private var pendingRemoval: Song?
     @State private var isRemovingTrack = false
     @State private var removalError: String?
@@ -207,6 +209,8 @@ struct PlaylistDetailView: View {
                 fallbackPrefersDarkAppearance: systemColorScheme == .dark
             )
             guard !Task.isCancelled else { return }
+            // A transient new-cover download failure should retain resolved art.
+            guard artworkURL == nil || ArtworkAccentColorProvider.cachedDetailAssets(for: artworkURL) != nil else { return }
             do {
                 try await transitionDelay.value
             } catch {
@@ -517,7 +521,10 @@ struct PlaylistDetailView: View {
     private func load(
         waitingForNavigationTransition: Bool = false
     ) async {
-        let accountToken = settings.cookie.hashValue
+        let accountToken = settings.cookie
+        let revision = library.playlistContentRevisions[id, default: 0]
+        let loadID = UUID()
+        contentLoadID = loadID
         songToLocate = nil
         trackLocator.reset()
         locateErrorMessage = nil
@@ -530,7 +537,10 @@ struct PlaylistDetailView: View {
            let snapshot: PlaylistContentSnapshot = await api.pageContentCache.value(
                for: PlaylistContentSnapshot.cacheKey(id: id)
            ) {
+            guard contentLoadID == loadID, accountToken == settings.cookie,
+                  revision == library.playlistContentRevisions[id, default: 0] else { return }
             playlist = snapshot.playlist
+            contentRevision = revision
             contentAccountToken = accountToken
             loadedTrackOffset = snapshot.loadedTrackOffset
             phase = .loaded
@@ -549,8 +559,10 @@ struct PlaylistDetailView: View {
                 throw APIError.invalidResponse
             }
             try await transitionDelay.value
-            guard accountToken == settings.cookie.hashValue else { return }
+            guard contentLoadID == loadID, accountToken == settings.cookie,
+                  revision == library.playlistContentRevisions[id, default: 0] else { return }
             playlist = loadedPlaylist
+            contentRevision = revision
             contentAccountToken = accountToken
             loadedTrackOffset = min(
                 requestedTrackLimit,
@@ -561,6 +573,8 @@ struct PlaylistDetailView: View {
         } catch is CancellationError {
             return
         } catch {
+            guard contentLoadID == loadID, accountToken == settings.cookie,
+                  revision == library.playlistContentRevisions[id, default: 0] else { return }
             if playlist == nil {
                 phase = .failed(error.localizedDescription)
             } else {
@@ -576,10 +590,24 @@ struct PlaylistDetailView: View {
         defer { isRemovingTrack = false }
         do {
             try await library.remove(song: song, from: playlist)
-            // Reload server-owned cover and tracks together; do not decrement
-            // the count or persist the old cover a second time.
+            // This detail is a value copy, independent of the sidebar summary.
+            // Remove once locally even if the following detail request fails.
+            if var updated = self.playlist,
+               updated.tracks.contains(where: { $0.id == song.id }) || updated.trackIDs.contains(where: { $0.id == song.id }) {
+                if let index = updated.removeSong(id: song.id), index < loadedTrackOffset {
+                    loadedTrackOffset = max(0, loadedTrackOffset - 1)
+                }
+                self.playlist = updated
+                contentRevision = nil // never persist old artwork after a write
+            }
             await load()
+            if loadMoreTracksError != nil {
+                removalError = L10n.string("ui.playlists.removed_refresh_failed")
+            }
         } catch {
+            if error is PlaylistTrackMutationError {
+                await load() // reconcile an uncertain gateway outcome, never repeat the write
+            }
             removalError = error.localizedDescription
         }
     }
@@ -631,7 +659,8 @@ struct PlaylistDetailView: View {
     }
 
     private func persistContent() async {
-        guard let playlist, contentAccountToken == settings.cookie.hashValue else { return }
+        guard let playlist, contentAccountToken == settings.cookie,
+              contentRevision == library.playlistContentRevisions[id, default: 0] else { return }
         await api.pageContentCache.store(
             PlaylistContentSnapshot(playlist: playlist, loadedTrackOffset: loadedTrackOffset),
             for: PlaylistContentSnapshot.cacheKey(id: id)

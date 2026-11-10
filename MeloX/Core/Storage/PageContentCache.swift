@@ -30,8 +30,8 @@ final class PageContentCache {
         await storage.store(data, scope: Self.scope(for: settings.cookie), key: key)
     }
 
-    func remove(for key: String) async {
-        await storage.remove(scope: Self.scope(for: settings.cookie), key: key)
+    func remove(for key: String, cookie: String? = nil) async {
+        await storage.remove(scope: Self.scope(for: cookie ?? settings.cookie), key: key)
     }
 
     func removeAccount(cookie: String) async {

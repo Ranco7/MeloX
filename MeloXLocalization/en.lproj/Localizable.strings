@@ -2159,3 +2159,7 @@
 "ui.settings.general.cache_page_content" = "Cache Home and Library";
 "ui.settings.general.compact_home_actions" = "Compact Home Shortcuts";
 "ui.settings.general.cache_page_content.footer" = "Save successfully loaded recommendations, library lists, and playlist details. Show cached content first, then refresh online. Clear it in Storage.";
+
+"ui.playlists.add_gateway_uncertain" = "NetEase could not confirm whether the song was added (502). Refresh the playlist before trying again. For private playlists, also check its status in the NetEase app.";
+"ui.playlists.remove_gateway_uncertain" = "NetEase could not confirm whether the song was removed (502). Refresh the playlist before trying again.";
+"ui.playlists.removed_refresh_failed" = "The song was removed, but the playlist artwork could not be refreshed. Pull to refresh.";

@@ -547,15 +547,15 @@ final class LibraryStore {
         }
 
         let cookie = settings.cookie
+        let likedPlaylist = likedPlaylistID
         let wasLiked = contains(song: song)
         setLocalSong(song, isLiked: !wasLiked)
 
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, cookie == self.settings.cookie else { return }
             do {
                 try await self.api.setSongLiked(id: song.id, isLiked: !wasLiked)
-                guard cookie == self.settings.cookie else { return }
-                if let id = self.likedPlaylistID {
+                if let id = likedPlaylist {
                     await self.refreshPlaylistAfterMutation(id: id, cookie: cookie)
                 }
             } catch {
@@ -660,8 +660,8 @@ final class LibraryStore {
         guard canDelete(playlist) else { throw LibraryOperationError.playlistIsNotOwned }
         let cookie = settings.cookie
         try await api.deletePlaylist(id: playlist.id)
+        await api.pageContentCache.remove(for: PlaylistContentSnapshot.cacheKey(id: playlist.id), cookie: cookie)
         guard cookie == settings.cookie else { return }
-        await api.pageContentCache.remove(for: PlaylistContentSnapshot.cacheKey(id: playlist.id))
         favoritePlaylists.removeAll { $0.id == playlist.id }
         await persistContent()
     }
@@ -683,9 +683,13 @@ final class LibraryStore {
         guard isLoggedIn else { throw APIError.notLoggedIn }
         guard canDelete(playlist) else { throw LibraryOperationError.playlistIsNotOwned }
         let cookie = settings.cookie
-        try await api.removeSong(id: song.id, fromPlaylistID: playlist.id)
-        guard cookie == settings.cookie else { return }
-        if let index = favoritePlaylists.firstIndex(where: { $0.id == playlist.id }) {
+        do {
+            try await api.removeSong(id: song.id, fromPlaylistID: playlist.id)
+        } catch let error as PlaylistTrackMutationError {
+            await refreshPlaylistAfterMutation(id: playlist.id, cookie: cookie)
+            throw error
+        }
+        if cookie == settings.cookie, let index = favoritePlaylists.firstIndex(where: { $0.id == playlist.id }) {
             favoritePlaylists[index].removeSong(id: song.id)
         }
         await refreshPlaylistAfterMutation(id: playlist.id, cookie: cookie)
@@ -697,28 +701,40 @@ final class LibraryStore {
             throw LibraryOperationError.playlistIsNotOwned
         }
         let cookie = settings.cookie
-        try await api.addSong(id: song.id, toPlaylistID: playlist.id)
-        guard cookie == settings.cookie else { return }
+        do {
+            try await api.addSong(id: song.id, toPlaylistID: playlist.id)
+        } catch let error as PlaylistTrackMutationError {
+            await refreshPlaylistAfterMutation(id: playlist.id, cookie: cookie)
+            throw error
+        }
         await refreshPlaylistAfterMutation(id: playlist.id, cookie: cookie)
     }
 
     // A successful write must not leave an old offline detail snapshot behind.
     // Summary refresh failure is not reported as a failed write (avoid duplicate retries).
     private func refreshPlaylistAfterMutation(id: Int, cookie: String) async {
+        // Invalidate the account that performed the write, even after a switch.
+        // Advance revision before suspension so in-flight detail reads are obsolete.
+        if cookie == settings.cookie {
+            playlistContentRevisions[id, default: 0] += 1
+        }
+        await api.pageContentCache.remove(for: PlaylistContentSnapshot.cacheKey(id: id), cookie: cookie)
         guard cookie == settings.cookie else { return }
-        await api.pageContentCache.remove(for: PlaylistContentSnapshot.cacheKey(id: id))
-        do {
-            let summary = try await api.playlist(id: id, trackLimit: 0)
-            guard cookie == settings.cookie else { return }
-            if let index = favoritePlaylists.firstIndex(where: { $0.id == id }) {
-                favoritePlaylists[index] = summary
+        // Liked songs have no image summary in the sidebar; avoid an unused
+        // potentially huge trackIds response for every heart toggle.
+        if id != likedPlaylistID {
+            do {
+                let summary = try await api.playlist(id: id, trackLimit: 0)
+                guard cookie == settings.cookie else { return }
+                if let index = favoritePlaylists.firstIndex(where: { $0.id == id }) {
+                    favoritePlaylists[index] = summary
+                }
+            } catch {
+                // The write succeeded; do not invite a duplicate write by
+                // reporting a summary fetch failure as a mutation failure.
             }
-        } catch {
-            guard cookie == settings.cookie else { return }
-            errorMessage = "歌单已更新，但封面刷新失败，请下拉刷新。"
         }
         guard cookie == settings.cookie else { return }
-        playlistContentRevisions[id, default: 0] += 1
         await persistContent()
     }
 

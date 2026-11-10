@@ -27,11 +27,11 @@ class PlaylistPolishTests(unittest.TestCase):
         source = read("MeloX/Features/Playlist/PlaylistDetailView.swift")
         method = source.split("private func removeSong", 1)[1].split("private func loadMoreTracks", 1)[0]
         self.assertIn("await load()", method)
-        self.assertNotIn("updated.removeSong", method)
+        self.assertIn("contentRevision = nil", method)
     def test_502_outcome_is_uncertain_and_not_retried(self):
         source = read("MeloX/Core/Networking/NeteaseAPI+PlaylistManagement.swift")
         self.assertIn("catch APIError.server(let statusCode, _) where statusCode == 502", source)
-        self.assertIn("请先刷新歌单确认", source)
+        self.assertIn("ui.playlists.add_gateway_uncertain", source)
         self.assertNotIn("Task.sleep", source)
     def test_scrollview_row_pressed_style(self):
         self.assertIn(".buttonStyle(MusicTrackPressStyle())", read("MeloX/Features/Playlist/PlaylistTrackList.swift"))
