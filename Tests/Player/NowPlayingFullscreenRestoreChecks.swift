@@ -88,8 +88,8 @@ struct NowPlayingFullscreenRestoreChecks {
                 check(NowPlayingReferenceLayoutPolicy.usesReference(viewport: viewport) == originalBudgetCanFit(viewport), "Resize policy diverged from frozen source")
             }
         }
-        for invalid in [CGSize.zero, CGSize(width: .infinity, height: 918),
-                        CGSize(width: 1408, height: .nan), CGSize(width: -1, height: 918)] {
+        for invalid in [CGSize.zero, CGSize(width: CGFloat.infinity, height: 918),
+                        CGSize(width: 1408, height: CGFloat.nan), CGSize(width: -1, height: 918)] {
             check(!NowPlayingReferenceLayoutPolicy.usesReference(viewport: invalid), "Transient invalid geometry entered reference")
         }
         print("Original fullscreen selection passed: \(count) content/settings fixtures, calibrated golden, source geometry, zoom/portrait/split/safe areas, accessibility and fit seams")
