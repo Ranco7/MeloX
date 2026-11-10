@@ -45,9 +45,13 @@ struct PlaylistTrackList: View {
                             .overlay(Color.primary.opacity(0.12))
                             .padding(
                                 .leading,
-                                MusicCollectionLayout.titleLeadingInset(
-                                    wide: usesWideRows, artwork: showsArtwork, selecting: isSelectingDownloads
-                                )
+                                // Wide rows: the separator starts on the same
+                                // edge as the hero artwork and the thumbnails.
+                                usesWideRows
+                                    ? MusicCollectionLayout.wideInset
+                                    : MusicCollectionLayout.titleLeadingInset(
+                                        wide: false, artwork: showsArtwork, selecting: isSelectingDownloads
+                                    )
                             )
                             .padding(.trailing, MusicCollectionLayout.horizontalInset(wide: usesWideRows))
                     }
@@ -102,7 +106,7 @@ private struct PlaylistTrackRow: View {
     private var downloadsEnabled: Bool { settings.isContentFeatureEnabled(.downloads) }
 
     var body: some View {
-        HStack(spacing: 4) {
+        HStack(spacing: MusicCollectionLayout.accessorySpacing) {
             Button(action: primaryAction) {
                 HStack(spacing: MusicCollectionLayout.columnSpacing) {
                     if isSelectingDownloads {
@@ -121,16 +125,23 @@ private struct PlaylistTrackRow: View {
                         .accessibilityHidden(true)
                     }
 
-                    if usesWideRows && showsArtwork && !isSelectingDownloads {
-                        Image(systemName: "heart.fill")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .opacity(library.contains(song: song) ? 1 : 0)
-                            .frame(width: MusicCollectionLayout.favoriteColumnWidth)
-                            .accessibilityHidden(true)
+                    if showsWideFavoriteColumn {
+                        HStack(spacing: MusicCollectionLayout.favoriteArtworkSpacing) {
+                            Image(systemName: "heart.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .opacity(library.contains(song: song) ? 1 : 0)
+                                .frame(width: MusicCollectionLayout.favoriteColumnWidth)
+                                .accessibilityHidden(true)
+                            leadingContent
+                        }
+                        .padding(
+                            .trailing,
+                            MusicCollectionLayout.wideArtworkTitleSpacing - MusicCollectionLayout.columnSpacing
+                        )
+                    } else {
+                        leadingContent
                     }
-
-                    leadingContent
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(song.name)
@@ -154,7 +165,7 @@ private struct PlaylistTrackRow: View {
                             .frame(width: wideArtistColumnWidth, alignment: .leading)
                     }
                 }
-                .frame(minHeight: usesWideRows ? 44 : 0)
+                .frame(minHeight: usesWideRows ? MusicCollectionLayout.wideRowHeight : 0)
                 .contentShape(.rect)
             }
             .buttonStyle(MusicTrackPressStyle())
@@ -164,7 +175,7 @@ private struct PlaylistTrackRow: View {
 
             if downloadsEnabled || usesWideRows {
                 downloadStatus
-                    .frame(width: usesWideRows ? 18 : nil)
+                    .frame(width: usesWideRows ? MusicCollectionLayout.downloadStatusColumnWidth : nil)
             }
 
             if usesWideRows {
@@ -262,8 +273,17 @@ private struct PlaylistTrackRow: View {
                 .accessibilityLabel(L10n.format("ui.song.more_actions", song.name))
             }
         }
-        .padding(.horizontal, MusicCollectionLayout.horizontalInset(wide: usesWideRows))
-        .padding(.vertical, usesWideRows ? 4 : (showsArtwork ? 8 : 11))
+        .padding(
+            .leading,
+            usesWideRows
+                ? MusicCollectionLayout.wideRowLeadingPadding(showsFavorite: showsWideFavoriteColumn)
+                : MusicCollectionLayout.compactInset
+        )
+        .padding(
+            .trailing,
+            usesWideRows ? MusicCollectionLayout.wideRowTrailingPadding : MusicCollectionLayout.compactInset
+        )
+        .padding(.vertical, usesWideRows ? 0 : (showsArtwork ? 8 : 11))
         .background(
             isHighlighted ? Color.accentColor.opacity(0.16)
                 : isCurrentSong ? Color.primary.opacity(0.10) : .clear
@@ -280,6 +300,14 @@ private struct PlaylistTrackRow: View {
                     .presentationDragIndicator(.visible)
             }
         }
+    }
+
+    private var showsWideFavoriteColumn: Bool {
+        usesWideRows && showsArtwork && !isSelectingDownloads
+    }
+
+    private var artworkSize: CGFloat {
+        usesWideRows ? MusicCollectionLayout.wideRowArtworkSize : MusicCollectionLayout.rowArtworkSize
     }
 
     @ViewBuilder
@@ -312,7 +340,7 @@ private struct PlaylistTrackRow: View {
                         .background(.quaternary, in: .rect(cornerRadius: 6))
                 }
             }
-            .frame(width: MusicCollectionLayout.rowArtworkSize, height: MusicCollectionLayout.rowArtworkSize)
+            .frame(width: artworkSize, height: artworkSize)
             .overlay {
                 if usesWideRows && isCurrentSong && !isSelectingDownloads {
                     Image(systemName: player.isPlaying ? "waveform" : "pause.fill")

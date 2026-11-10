@@ -164,10 +164,8 @@ struct MusicCollectionDetailLayout<Hero: View, Tracks: View>: View {
             }
             tracks(
                 wideWidth.map {
-                    min(
-                        ($0 - 2 * MusicCollectionLayout.wideInset)
-                            * MusicCollectionLayout.trackArtistColumnRatio,
-                        MusicCollectionLayout.maximumTrackArtistColumnWidth
+                    MusicCollectionLayout.wideArtistColumnWidth(
+                        rowWidth: $0 - 2 * MusicCollectionLayout.wideInset
                     )
                 }
             )
@@ -180,9 +178,10 @@ struct MusicCollectionDetailLayout<Hero: View, Tracks: View>: View {
                 return nil
             }
             // Continuous Stage Manager resizing otherwise rebuilds the whole
-            // hero and track layout for every pixel. An 8pt step keeps the
-            // adaptive layout while cutting the update rate.
-            return (width / 8).rounded(.down) * 8
+            // hero and track layout for every pixel. A 2pt step cuts the
+            // update rate while keeping the artist column within 1pt of the
+            // middle of the row.
+            return (width / 2).rounded(.down) * 2
         } action: { measuredWideWidth = $0 }
     }
 }
