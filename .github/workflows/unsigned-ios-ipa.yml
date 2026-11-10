@@ -4,8 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - codex/listen-together-sync-9
-      - codex/ipad-adaptive-layout
+      - codex/hide-volume-airplay-fix-2e4e1e1
 
 permissions:
   contents: read
@@ -119,39 +118,34 @@ jobs:
             exit 1
           fi
 
-      - name: Upload IPA artifact / 上传 IPA
-        if: github.ref != 'refs/heads/codex/ipad-adaptive-layout'
-        uses: actions/upload-artifact@v7
-        with:
-          name: MeloX-iOS-unsigned
-          path: build/MeloX-iOS-unsigned.ipa
-          if-no-files-found: error
-          retention-days: 14
-
-      - name: Publish verified IPA / 发布已校验的 IPA
-        if: github.repository == 'Ranco7/MeloX' && github.ref == 'refs/heads/codex/ipad-adaptive-layout'
+      - name: Replace only the requested release attachment
+        if: github.repository == 'Ranco7/MeloX' && github.ref == 'refs/heads/codex/hide-volume-airplay-fix-2e4e1e1'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          IPA=build/MeloX-iOS-unsigned.ipa
-          TAG="unsigned-ipad-layout-${GITHUB_SHA:0:7}"
-          SHA256="$(shasum -a 256 "$IPA" | cut -d ' ' -f 1)"
-          cat > "$RUNNER_TEMP/release.md" <<EOF
-          iPad 侧栏可直接打开常用歌单。宽屏歌单和专辑把封面、资料与播放按钮排在页头，曲目在下方通栏显示。底部浮动播放器提供切歌、随机、循环、歌词和队列入口。
-
-          修复已登录的音乐库生成侧栏歌单时可能导致的启动闪退，沿用原有应用标识和本地数据格式。
-
-          按 iPad 截图校准歌单搜索、页边距、曲目列、侧栏封面尺寸和底部播放器间距。
-
-          此 IPA 未签名，安装前需要自行签名。包含 iOS 主应用、歌词组件和 Apple Watch 应用。
-
-          - 构建提交：\`${GITHUB_SHA}\`
-          - [构建记录](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})
-          - SHA-256：\`${SHA256}\`
-          EOF
-          gh release create "$TAG" "$IPA" --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" --prerelease --latest=false \
-            --title 'MeloX iPad 自适应布局 · 未签名 IPA' \
-            --notes-file "$RUNNER_TEMP/release.md"
+          TAG=fix-2e4e1e1
+          ASSET=MeloX-2.0-unsigned-2e4e1e1.ipa
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$RUNNER_TEMP/release-before.json"
+          python3 - "$RUNNER_TEMP/release-before.json" <<'PYVERIFY'
+          import json, sys
+          r = json.load(open(sys.argv[1]))
+          assert r['id'] == 441011829 and r['tag_name'] == 'fix-2e4e1e1'
+          assert [a['name'] for a in r['assets']] == ['MeloX-2.0-unsigned-2e4e1e1.ipa']
+          PYVERIFY
+          cp build/MeloX-iOS-unsigned.ipa "$RUNNER_TEMP/$ASSET"
+          gh release upload "$TAG" "$RUNNER_TEMP/$ASSET" --repo "$GITHUB_REPOSITORY" --clobber
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG" > "$RUNNER_TEMP/release-after.json"
+          python3 - "$RUNNER_TEMP/release-before.json" "$RUNNER_TEMP/release-after.json" "$RUNNER_TEMP/$ASSET" <<'PYVERIFY'
+          import hashlib, json, sys
+          before, after = [json.load(open(p)) for p in sys.argv[1:3]]
+          for key in ('id', 'tag_name', 'target_commitish', 'name', 'body', 'draft', 'prerelease'):
+              assert before[key] == after[key], key
+          assert [a['name'] for a in after['assets']] == ['MeloX-2.0-unsigned-2e4e1e1.ipa']
+          asset = after['assets'][0]
+          digest = hashlib.sha256(open(sys.argv[3], 'rb').read()).hexdigest()
+          assert asset['state'] == 'uploaded'
+          assert asset['digest'] == 'sha256:' + digest
+          print('Verified attachment replacement:', asset['browser_download_url'], digest)
+          PYVERIFY

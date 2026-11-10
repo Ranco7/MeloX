@@ -497,7 +497,7 @@ private final class SystemVolumeHostView: UIView {
     func configure(usesReferenceLayout: Bool = false) {
         volumeView.backgroundColor = .clear
         volumeView.showsVolumeSlider = true
-        volumeView.showsRouteButton = usesReferenceLayout
+        volumeView.showsRouteButton = false
         volumeView.tintColor = .white
     }
 
