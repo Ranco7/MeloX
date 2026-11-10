@@ -15,6 +15,9 @@ struct NowPlayingTabletLayout {
 
     let viewport: CGSize
     var fillsRegion = false
+    /// Replaced by the control band's intrinsic height during SwiftUI layout.
+    /// Includes metadata, every inter-row gap, the volume row and bottom inset.
+    var controlsHeight: CGFloat? = nil
 
     static let chromeHeight: CGFloat = 48
     static let lyricsTopPadding: CGFloat = 40
@@ -48,7 +51,7 @@ struct NowPlayingTabletLayout {
             * elementScale
     }
 
-    var playerWidth: CGFloat {
+    var playerContainerWidth: CGFloat {
         if fillsRegion {
             return max(
                 min(
@@ -73,11 +76,11 @@ struct NowPlayingTabletLayout {
     }
 
     var playerLeading: CGFloat {
-        viewport.width * 0.25 - playerWidth * 0.5
+        viewport.width * 0.25 - playerContainerWidth * 0.5
     }
 
     var centeredPlayerLeading: CGFloat {
-        (viewport.width - playerWidth) * 0.5
+        (viewport.width - playerContainerWidth) * 0.5
     }
 
     var panelLeading: CGFloat {
@@ -92,27 +95,31 @@ struct NowPlayingTabletLayout {
         )
     }
 
-    private var referenceArtworkSize: CGFloat {
-        playerWidth
+    var progressTopInset: CGFloat { 24 * elementScale }
+    var transportTopInset: CGFloat { 24 * elementScale }
+    static let volumeTopInset: CGFloat = 12
+    static let playerBottomInset: CGFloat = 20
+
+    /// Initial budget only. The view measures the complete band, including
+    /// Dynamic Type and optional badges, before placing either subview.
+    var estimatedControlsHeight: CGFloat {
+        metadataTopInset + 64 + progressTopInset + 78
+            + transportTopInset + 52 + Self.volumeTopInset + 44
+            + Self.playerBottomInset
     }
 
-    private var referenceArtworkTopInset: CGFloat {
-        let compression = min(max(600 - viewport.height, 0), 50)
-        return (54 - compression + heightProgress * 60) * elementScale
+    var resolvedControlsHeight: CGFloat {
+        max(controlsHeight ?? estimatedControlsHeight, 0)
     }
 
-    private var referenceMetadataTopInset: CGFloat {
-        (70 + heightProgress * 10) * elementScale
+    var playerWidth: CGFloat {
+        max(min(playerContainerWidth, contentHeight - artworkTopInset - resolvedControlsHeight), 1)
     }
 
-    private var verticalCompressionScale: CGFloat {
-        // Reserve space for the native touch controls before sizing the
-        // artwork and desktop-style whitespace. Short windows can scroll.
-        let controlsHeight = 238 + 45 * elementScale
-        let artworkSectionHeight = referenceArtworkTopInset
-            + referenceArtworkSize
-            + referenceMetadataTopInset
-        return min(max((contentHeight - controlsHeight) / artworkSectionHeight, 0.6), 1)
+    func fitting(controlsHeight: CGFloat) -> Self {
+        var result = self
+        result.controlsHeight = controlsHeight
+        return result
     }
 
     var artworkSize: CGFloat {
@@ -120,12 +127,26 @@ struct NowPlayingTabletLayout {
     }
 
     var artworkTopInset: CGFloat {
-        max(16, referenceArtworkTopInset * verticalCompressionScale)
+        16
     }
 
     var metadataTopInset: CGFloat {
-        referenceMetadataTopInset * verticalCompressionScale
+        24
     }
+
+    var playerStackHeight: CGFloat {
+        artworkTopInset + artworkSize + resolvedControlsHeight
+    }
+
+    /// Share surplus height between all five group boundaries, rather than
+    /// leaving one empty band above the bottom toolbar.
+    var extraVerticalSpace: CGFloat {
+        max(contentHeight - playerStackHeight, 0)
+    }
+
+    var distributedGap: CGFloat { extraVerticalSpace / 5 }
+
+    var renderedStackHeight: CGFloat { playerStackHeight + extraVerticalSpace }
 
     var lyricsFocusAnchorOffset: CGFloat {
         artworkTopInset + artworkSize * 0.5 - Self.lyricsTopPadding

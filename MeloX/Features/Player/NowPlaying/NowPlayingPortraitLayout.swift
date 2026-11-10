@@ -3,9 +3,8 @@ import CoreGraphics
 /// Deterministic geometry for the portrait Now Playing screen.
 ///
 /// The content column and the control band are stacked vertically instead of
-/// overlapping. Artwork sizing uses a conservative metadata budget; the page
-/// always sits in a size-based scroll view so real two-line titles, badges and
-/// Dynamic Type never get clipped by that estimate.
+/// overlapping. Short windows reserve the full-width controls and metadata
+/// first, then shrink only the centered artwork to the remaining height.
 struct NowPlayingPortraitLayout {
     static let minimumHorizontalMargin: CGFloat = 16
     static let maximumHorizontalMargin: CGFloat = 32
@@ -16,11 +15,11 @@ struct NowPlayingPortraitLayout {
     /// time labels share one 44pt touch-height row, so the section is the
     /// slider, the row gap and that row.
     static let baseProgressHeight: CGFloat = 78
-    static let baseProgressTransportGap: CGFloat = 19
-    static let baseTransportHeight: CGFloat = 82
-    static let baseTransportVolumeGap: CGFloat = 31
+    static let baseProgressTransportGap: CGFloat = 24
+    static let baseTransportHeight: CGFloat = 80
+    static let baseTransportVolumeGap: CGFloat = 24
     static let baseVolumeHeight: CGFloat = minimumTouchTarget
-    static let baseVolumeSelectorGap: CGFloat = 3
+    static let baseVolumeSelectorGap: CGFloat = 8
     static let basePageSelectorHeight: CGFloat = 50
     static let baseUtilityHeight: CGFloat = 62
 
@@ -37,22 +36,21 @@ struct NowPlayingPortraitLayout {
         + basePageSelectorHeight
     static let baseOverlayHeight = baseUtilityHeight + baseCoreHeight
 
-    private static let baseArtworkTopSpacing: CGFloat = 16
-    private static let baseArtworkBottomSpacing: CGFloat = 22
-    /// Conservative budget used only for artwork sizing — never for deciding
-    /// whether text remains reachable (the page always size-based-scrolls).
+    /// First-pass budget; the artwork page reports its actual metadata height.
+    /// Text and controls retain their full content width as artwork shrinks.
     private static let baseMetadataHeight: CGFloat = 110
-    private static let minimumGapCompression: CGFloat = 0.4
 
     /// Collapse handle reserves a full 44pt hit target even though the capsule
     /// itself stays visually thin.
     static let dismissalHandleHeight: CGFloat = minimumTouchTarget
-    static let bottomSafeAreaPadding: CGFloat = 3
+    static let bottomSafeAreaPadding: CGFloat = 4
 
     let viewport: CGSize
     var textScale: CGFloat = 1
     var showsUtilityRow = false
     var showsArtworkPage = true
+    var measuredMetadataHeight: CGFloat? = nil
+    var measuredProgressHeight: CGFloat? = nil
 
     private var clampedTextScale: CGFloat {
         min(max(textScale, 1), 1.35)
@@ -76,73 +74,53 @@ struct NowPlayingPortraitLayout {
         max(viewport.width - horizontalMargin * 2, 1)
     }
 
-    /// Shrinks whitespace gaps on short windows so the transport band and a
-    /// minimum artwork still share the viewport before whole-player scrolling.
-    /// Computed only from base constants so it cannot recurse through the
-    /// compressed gap properties.
-    var gapCompression: CGFloat {
-        let fixedBand =
-            scaled(Self.baseProgressHeight)
-            + scaled(Self.baseTransportHeight)
-            + scaled(Self.baseVolumeHeight)
-            + scaled(Self.basePageSelectorHeight)
-            + (showsUtilityRow ? scaled(Self.baseUtilityHeight) : 0)
-        let fullGaps =
-            scaled(Self.baseProgressTransportGap)
-            + scaled(Self.baseTransportVolumeGap)
-            + scaled(Self.baseVolumeSelectorGap)
-        let minimumPage =
-            scaled(Self.baseArtworkTopSpacing)
-            + Self.minimumArtworkSide
-            + scaled(Self.baseArtworkBottomSpacing)
-            + scaled(Self.baseMetadataHeight)
-        let reserved =
-            Self.dismissalHandleHeight
-            + Self.bottomSafeAreaPadding
-            + fixedBand
-            + minimumPage
-        let leftover = viewport.height - reserved
-        if fullGaps <= 0.5 {
-            return 1
-        }
-        if leftover >= fullGaps {
-            return 1
-        }
-        if leftover <= 0 {
-            return Self.minimumGapCompression
-        }
-        return max(Self.minimumGapCompression, leftover / fullGaps)
+    /// Continuous interpolation between compact and generous 4/8pt endpoints.
+    /// Resizing through 700pt does not switch layouts or move the cover abruptly.
+    private var spacingProgress: CGFloat {
+        min(max((viewport.height - 480) / 420, 0), 1)
+    }
+
+    private var baseTopGap: CGFloat { 8 + 8 * spacingProgress }
+    private var baseGroupGap: CGFloat { 8 + 16 * spacingProgress }
+    private var baseToolbarGap: CGFloat { 4 + 4 * spacingProgress }
+
+    /// Once the square reaches its width limit, distribute excess height
+    /// across the groups instead of leaving one empty band above the artwork.
+    private var extraGapUnit: CGFloat {
+        let rows = Self.dismissalHandleHeight + Self.bottomSafeAreaPadding
+            + metadataEstimatedHeight + progressHeight + transportHeight
+            + volumeHeight + pageSelectorHeight
+            + (showsUtilityRow ? utilityHeight : 0)
+        let gaps = baseTopGap + 4 * baseGroupGap + baseToolbarGap
+        return max(viewport.height - rows - gaps - contentWidth, 0) / 9
     }
 
     var progressHeight: CGFloat {
-        scaled(Self.baseProgressHeight)
+        max(scaled(Self.baseProgressHeight), measuredProgressHeight ?? 0)
     }
 
     var progressTransportGap: CGFloat {
-        (scaled(Self.baseProgressTransportGap) * gapCompression)
-            .rounded(.up)
+        baseGroupGap + 2 * extraGapUnit
     }
 
     var transportHeight: CGFloat {
-        scaled(Self.baseTransportHeight)
+        64 + 16 * spacingProgress
     }
 
     var transportVolumeGap: CGFloat {
-        (scaled(Self.baseTransportVolumeGap) * gapCompression)
-            .rounded(.up)
+        baseGroupGap + 2 * extraGapUnit
     }
 
     var volumeHeight: CGFloat {
-        scaled(Self.baseVolumeHeight)
+        Self.minimumTouchTarget
     }
 
     var volumeSelectorGap: CGFloat {
-        (scaled(Self.baseVolumeSelectorGap) * gapCompression)
-            .rounded(.up)
+        baseToolbarGap + extraGapUnit
     }
 
     var pageSelectorHeight: CGFloat {
-        scaled(Self.basePageSelectorHeight)
+        Self.basePageSelectorHeight
     }
 
     var utilityHeight: CGFloat {
@@ -161,25 +139,29 @@ struct NowPlayingPortraitLayout {
     }
 
     var artworkTopSpacing: CGFloat {
-        scaled(Self.baseArtworkTopSpacing)
+        baseTopGap + extraGapUnit
     }
 
     var artworkBottomSpacing: CGFloat {
-        scaled(Self.baseArtworkBottomSpacing)
+        baseGroupGap + 2 * extraGapUnit
+    }
+
+    var metadataBottomSpacing: CGFloat {
+        baseGroupGap + extraGapUnit
     }
 
     var metadataEstimatedHeight: CGFloat {
-        scaled(Self.baseMetadataHeight)
+        max(measuredMetadataHeight ?? scaled(Self.baseMetadataHeight), 1)
     }
 
-    /// Natural height of the artwork page using the conservative metadata
-    /// budget. Real rendered metadata may be taller; the page scroll view
-    /// absorbs that without clipping.
+    /// Includes every gap and the current measured metadata height. The initial
+    /// budget is replaced without narrowing the title or controls.
     var naturalContentHeight: CGFloat {
         artworkTopSpacing
             + artworkSide
             + artworkBottomSpacing
             + metadataEstimatedHeight
+            + metadataBottomSpacing
     }
 
     /// Smallest page column worth showing: floor artwork, its gaps and the
@@ -190,6 +172,7 @@ struct NowPlayingPortraitLayout {
             + Self.minimumArtworkSide
             + artworkBottomSpacing
             + metadataEstimatedHeight
+            + metadataBottomSpacing
     }
 
     /// Space above the control band if the pages were allowed to shrink.
@@ -204,9 +187,17 @@ struct NowPlayingPortraitLayout {
     }
 
     var artworkSide: CGFloat {
-        // The playing cover and controls share one column at every width.
-        // Short windows scroll instead of narrowing only the artwork.
-        contentWidth
+        // Reserve every control, toolbar and metadata row before allocating
+        // the square. Controls and text retain the full content width.
+        max(
+            min(
+                contentWidth,
+                pageContentHeight - artworkTopSpacing
+                    - artworkBottomSpacing - metadataEstimatedHeight
+                    - metadataBottomSpacing
+            ),
+            1
+        )
     }
 
     /// Height given to the page column inside the portrait stack. Matches the

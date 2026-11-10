@@ -233,6 +233,7 @@ struct NowPlayingTransportControls: View {
     @Environment(PlayerStore.self) private var player
 
     var presentation: Presentation = .standard
+    var rowHeight: CGFloat? = nil
 
     private var isTablet: Bool { presentation == .tablet }
     private var controlDiameter: CGFloat { isTablet ? 44 : 64 }
@@ -351,7 +352,7 @@ struct NowPlayingTransportControls: View {
                 .accessibilityAddTraits(player.repeatMode == .off ? [] : .isSelected)
             }
         }
-        .frame(height: isTablet ? 52 : 82)
+        .frame(height: max(rowHeight ?? (isTablet ? 52 : 82), controlDiameter))
     }
 }
 

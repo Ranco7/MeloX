@@ -372,6 +372,9 @@ struct NowPlayingView: View {
         }
     }
 
+    @State private var portraitMetadataHeight: CGFloat? = nil
+    @State private var portraitProgressHeight: CGFloat? = nil
+
     private func portraitLayout(
         for size: CGSize
     ) -> NowPlayingPortraitLayout {
@@ -379,7 +382,9 @@ struct NowPlayingView: View {
             viewport: size,
             textScale: portraitTextScale,
             showsUtilityRow: usesExpandedAppleMusicLyricsLayout,
-            showsArtworkPage: page == .artwork
+            showsArtworkPage: page == .artwork,
+            measuredMetadataHeight: portraitMetadataHeight,
+            measuredProgressHeight: portraitProgressHeight
         )
     }
 
@@ -437,8 +442,15 @@ struct NowPlayingView: View {
                 usesExpandedAppleMusicLyricsLayout,
             hasLyricsTranslations: hasLyricsTranslations,
             hasLyricsRomanizations: hasLyricsRomanizations,
-            isInterfaceHidden: hidesLyricsControls
+            isInterfaceHidden: hidesLyricsControls,
+            onProgressHeightChange: recordPortraitProgressHeight
         )
+    }
+
+    private func recordPortraitProgressHeight(_ height: CGFloat) {
+        guard height.isFinite, height > 0,
+              abs(height - (portraitProgressHeight ?? 0)) > 0.5 else { return }
+        portraitProgressHeight = height
     }
 
     private var pageSelection: Binding<NowPlayingPage> {
@@ -622,7 +634,8 @@ struct NowPlayingView: View {
                 usesArtworkTransition: false,
                 showsArtwork: false,
                 onArtworkFrameChange:
-                    recordPresentedArtworkPageFrame
+                    recordPresentedArtworkPageFrame,
+                onMetadataHeightChange: recordPortraitMetadataHeight
             )
             .transition(
                 pageContentTransition(for: .artwork)
@@ -640,11 +653,18 @@ struct NowPlayingView: View {
             artworkNamespace: pageArtworkNamespace,
             usesArtworkTransition: false,
             showsArtwork: false,
-            onArtworkFrameChange: recordArtworkPageFrame
+            onArtworkFrameChange: recordArtworkPageFrame,
+            onMetadataHeightChange: recordPortraitMetadataHeight
         )
         .hidden()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+
+    private func recordPortraitMetadataHeight(_ height: CGFloat) {
+        guard height.isFinite, height > 0,
+              abs(height - (portraitMetadataHeight ?? 0)) > 0.5 else { return }
+        portraitMetadataHeight = height
     }
 
     private var keepsStableArtworkFrameMeasurement: Bool {

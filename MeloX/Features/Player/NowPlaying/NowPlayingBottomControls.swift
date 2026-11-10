@@ -11,6 +11,7 @@ struct NowPlayingBottomControls: View {
     let hasLyricsTranslations: Bool
     let hasLyricsRomanizations: Bool
     let isInterfaceHidden: Bool
+    let onProgressHeightChange: (CGFloat) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -35,6 +36,10 @@ struct NowPlayingBottomControls: View {
         VStack(spacing: 0) {
             interfaceLayer(.progress) {
                 NowPlayingProgressControl(song: song)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                        onProgressHeightChange(height)
+                    }
                     .frame(minHeight: layout.progressHeight)
             }
 
@@ -42,7 +47,7 @@ struct NowPlayingBottomControls: View {
                 .frame(height: layout.progressTransportGap)
 
             interfaceLayer(.transport) {
-                NowPlayingTransportControls()
+                NowPlayingTransportControls(rowHeight: layout.transportHeight)
                     .frame(height: layout.transportHeight)
             }
 

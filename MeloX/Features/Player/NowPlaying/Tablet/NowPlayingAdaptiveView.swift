@@ -4,6 +4,7 @@ import SwiftUI
 struct NowPlayingAdaptiveView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(AppSettings.self) private var settings
+    @State private var fittedArtworkSize: CGFloat?
 
     @Binding var page: NowPlayingPage
     let pageTransition: NowPlayingTransitionCoordinator
@@ -39,8 +40,10 @@ struct NowPlayingAdaptiveView: View {
             let layout = NowPlayingTabletLayout(viewport: proxy.size, fillsRegion: true)
 
             ScrollView {
-                NowPlayingTabletPlayerColumn(song: song, layout: layout)
-                    .frame(width: layout.playerWidth)
+                NowPlayingTabletPlayerColumn(song: song, layout: layout) { size in
+                    if size.isFinite && size > 0 { fittedArtworkSize = size }
+                }
+                    .frame(width: layout.playerContainerWidth)
                     .frame(maxWidth: .infinity)
             }
             .scrollBounceBehavior(.basedOnSize)
@@ -60,7 +63,9 @@ struct NowPlayingAdaptiveView: View {
                 lyricError: lyricError,
                 highlightedLyricID: highlightedLyricID,
                 artworkNamespace: artworkNamespace,
-                focusAnchorOffset: layout.lyricsFocusAnchorOffset,
+                focusAnchorOffset: layout.artworkTopInset
+                    + (fittedArtworkSize ?? layout.artworkSize) * 0.5
+                    - NowPlayingTabletLayout.lyricsTopPadding,
                 onLyricsContentPrepared: onLyricsContentPrepared
             )
             .padding(.horizontal, 24)

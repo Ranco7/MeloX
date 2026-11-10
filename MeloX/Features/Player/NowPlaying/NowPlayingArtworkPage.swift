@@ -9,6 +9,7 @@ struct NowPlayingArtworkPage: View {
     let usesArtworkTransition: Bool
     let showsArtwork: Bool
     let onArtworkFrameChange: (CGRect) -> Void
+    let onMetadataHeightChange: (CGFloat) -> Void
 
     init(
         song: Song,
@@ -17,7 +18,8 @@ struct NowPlayingArtworkPage: View {
         usesArtworkTransition: Bool = true,
         showsArtwork: Bool = true,
         onArtworkFrameChange:
-            @escaping (CGRect) -> Void = { _ in }
+            @escaping (CGRect) -> Void = { _ in },
+        onMetadataHeightChange: @escaping (CGFloat) -> Void = { _ in }
     ) {
         self.song = song
         self.layout = layout
@@ -25,14 +27,14 @@ struct NowPlayingArtworkPage: View {
         self.usesArtworkTransition = usesArtworkTransition
         self.showsArtwork = showsArtwork
         self.onArtworkFrameChange = onArtworkFrameChange
+        self.onMetadataHeightChange = onMetadataHeightChange
     }
 
     var body: some View {
         GeometryReader { proxy in
-            // Always size-based scroll: real two-line titles, active badges and
-            // large Dynamic Type can exceed the conservative metadata budget
-            // used for artwork sizing. basedOnSize keeps bounce off when the
-            // content already fits, and avoids swapping view trees on resize.
+            // Keep the existing page identity while resizing. Metadata reports
+            // its full-width intrinsic height so artwork yields space first;
+            // basedOnSize leaves fitted windows static.
             ScrollView {
                 content(availableHeight: proxy.size.height)
             }
@@ -43,13 +45,19 @@ struct NowPlayingArtworkPage: View {
 
     private func content(availableHeight: CGFloat) -> some View {
         VStack(spacing: 0) {
-            Spacer(minLength: layout.artworkTopSpacing)
+            Color.clear.frame(height: layout.artworkTopSpacing)
 
             artwork
 
-            Spacer(minLength: layout.artworkBottomSpacing)
+            Color.clear.frame(height: layout.artworkBottomSpacing)
 
             metadata
+                .fixedSize(horizontal: false, vertical: true)
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                    onMetadataHeightChange(height)
+                }
+
+            Color.clear.frame(height: layout.metadataBottomSpacing)
         }
         .frame(
             maxWidth: .infinity,

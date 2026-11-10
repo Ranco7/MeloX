@@ -3,6 +3,7 @@ import SwiftUI
 struct NowPlayingTabletView: View {
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(AppSettings.self) private var settings
+    @State private var fittedArtworkSize: CGFloat?
 
     @Binding var page: NowPlayingPage
     let pageTransition: NowPlayingTransitionCoordinator
@@ -46,12 +47,14 @@ struct NowPlayingTabletView: View {
     private func standardPlayer(layout: NowPlayingTabletLayout) -> some View {
         ZStack(alignment: .topLeading) {
             ScrollView {
-                NowPlayingTabletPlayerColumn(song: song, layout: layout)
+                NowPlayingTabletPlayerColumn(song: song, layout: layout) { size in
+                    if size.isFinite && size > 0 { fittedArtworkSize = size }
+                }
             }
             .scrollBounceBehavior(.basedOnSize)
             .scrollIndicators(.hidden)
             .scrollClipDisabled()
-            .frame(width: layout.playerWidth, height: layout.contentHeight)
+            .frame(width: layout.playerContainerWidth, height: layout.contentHeight)
             .offset(
                 x: page == .artwork ? layout.centeredPlayerLeading : layout.playerLeading,
                 y: NowPlayingTabletLayout.chromeHeight
@@ -68,7 +71,9 @@ struct NowPlayingTabletView: View {
                 lyricError: lyricError,
                 highlightedLyricID: highlightedLyricID,
                 artworkNamespace: artworkNamespace,
-                focusAnchorOffset: layout.lyricsFocusAnchorOffset,
+                focusAnchorOffset: layout.artworkTopInset
+                    + (fittedArtworkSize ?? layout.artworkSize) * 0.5
+                    - NowPlayingTabletLayout.lyricsTopPadding,
                 onLyricsContentPrepared: onLyricsContentPrepared
             )
             .frame(width: layout.panelWidth, height: layout.contentHeight)

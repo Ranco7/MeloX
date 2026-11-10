@@ -267,7 +267,7 @@ print("Shared offset policy passed: release derivative and corner continuity")
         self.assertNotIn("TimelineView", surface)
         tablet = (folder / "Tablet/NowPlayingTabletPlayerColumn.swift").read_text()
         self.assertNotIn(".scaleEffect", tablet)
-        self.assertIn(".frame(width: layout.artworkSize, height: layout.artworkSize)", tablet)
+        self.assertIn("NowPlayingTabletColumnLayout(layout: layout)", tablet)
         player = (folder / "NowPlayingView.swift").read_text()
         self.assertNotIn("displayedArtworkPageFrame", player)
         self.assertIn("return artworkPageFrame", player)
@@ -282,6 +282,18 @@ print("Shared offset policy passed: release derivative and corner continuity")
                 str(ROOT / "MeloX/Features/Player/NowPlaying/NowPlayingPortraitLayout.swift"),
                 str(ROOT / "MeloX/Features/Player/NowPlaying/Tablet/NowPlayingTabletLayout.swift"),
                 str(ROOT / "Tests/Player/NowPlayingPortraitLayoutChecks.swift"),
+                "-o", str(executable),
+            ], check=True)
+            subprocess.run([str(executable)], check=True)
+
+    @unittest.skipUnless(shutil.which("swiftc"), "Swift compiler unavailable")
+    def test_tablet_volume_stack_fits(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / "tablet-volume-fit-checks"
+            subprocess.run([
+                "swiftc", "-swift-version", "5",
+                str(ROOT / "MeloX/Features/Player/NowPlaying/Tablet/NowPlayingTabletLayout.swift"),
+                str(ROOT / "Tests/Player/NowPlayingTabletVolumeFitChecks.swift"),
                 "-o", str(executable),
             ], check=True)
             subprocess.run([str(executable)], check=True)
