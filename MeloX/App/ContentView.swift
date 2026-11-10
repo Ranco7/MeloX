@@ -37,8 +37,8 @@ private struct HeartModeLaunchReadiness: Equatable {
 
 struct ContentView: View {
     private static let sidebarArtworkSize = CGSize(width: 24, height: 24)
-    private static let floatingMiniPlayerClearance: CGFloat = 76
-    private static let floatingMiniPlayerOuterPadding: CGFloat = 14
+    private static let floatingMiniPlayerClearance = MusicCollectionLayout.miniPlayerClearance
+    private static let floatingMiniPlayerOuterPadding = MusicCollectionLayout.miniPlayerInset
     private static let floatingMiniPlayerWideContentPadding: CGFloat = 16
 
     @Environment(\.scenePhase) private var scenePhase
@@ -54,6 +54,7 @@ struct ContentView: View {
     @State private var selectedTab: ContentTab
     @State private var navigationPaths: [ContentTab: NavigationPath] = [:]
     @State private var tabletCollectionChrome: [ContentTab: TabletCollectionChrome] = [:]
+    @State private var contentColumnFrames: [ContentTab: CGRect] = [:]
     @State private var sidebarArtwork: [SidebarArtworkRequest: UIImage] = [:]
     @State private var presentedSheet: ContentSheet?
     @State private var playerPresentation: PlayerPresentation?
@@ -363,6 +364,11 @@ struct ContentView: View {
         .overlay(alignment: .bottom) {
             if usesFloatingMiniPlayer && showsMiniPlayer {
                 GeometryReader { proxy in
+                    let rootFrame = proxy.frame(in: .global)
+                    let measuredFrame = contentColumnFrames[selectedTab] ?? rootFrame
+                    let leading = max(0, min(measuredFrame.minX - rootFrame.minX, proxy.size.width))
+                    let trailing = max(0, min(rootFrame.maxX - measuredFrame.maxX, proxy.size.width - leading))
+                    let columnWidth = max(0, proxy.size.width - leading - trailing)
                     TabletMiniPlayerView(
                         artworkTransitionID: playerTransitionID,
                         artworkTransitionNamespace:
@@ -370,20 +376,18 @@ struct ContentView: View {
                         collectionPalette:
                             tabletCollectionChrome[selectedTab]?.palette,
                         usesWideLayout:
-                            proxy.size.width
+                            columnWidth
                             - Self.floatingMiniPlayerOuterPadding * 2
                             - Self.floatingMiniPlayerWideContentPadding
                             >= TabletMiniPlayerView
                                 .minimumControlsWidth,
                         onOpen: openPlayer
                     )
-                    .padding(
-                        .horizontal,
-                        Self.floatingMiniPlayerOuterPadding
-                    )
+                    .padding(.leading, leading + Self.floatingMiniPlayerOuterPadding)
+                    .padding(.trailing, trailing + Self.floatingMiniPlayerOuterPadding)
                     .padding(
                         .bottom,
-                        max(proxy.safeAreaInsets.bottom, 0) + 8
+                        MusicCollectionLayout.miniPlayerBottomInset
                     )
                     .frame(
                         maxWidth: .infinity,
@@ -665,6 +669,11 @@ struct ContentView: View {
                     contentDestination(for: route)
                 }
                 .musicDestinations(in: musicNavigationNamespace)
+        }
+        .onGeometryChange(for: CGRect.self) { proxy in
+            proxy.frame(in: .global)
+        } action: { frame in
+            contentColumnFrames[tab] = frame
         }
         .environment(
             \.tabletCollectionChrome,

@@ -37,7 +37,7 @@ struct TabletMiniPlayerView: View {
                     .padding(.vertical, 2)
                 }
             }
-            .frame(maxWidth: 690)
+            .frame(maxWidth: MusicCollectionLayout.miniPlayerMaximumWidth)
             .glassEffect(glass, in: .capsule)
             .overlay {
                 if let collectionPalette {

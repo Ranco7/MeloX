@@ -269,7 +269,7 @@ struct StandardMusicCollectionDetailHero: View {
 
     var body: some View {
         if let wideArtworkSize {
-            HStack(alignment: .bottom, spacing: 34) {
+            HStack(alignment: .bottom, spacing: MusicCollectionLayout.heroColumnSpacing) {
                 artwork
                     .frame(width: wideArtworkSize, height: wideArtworkSize)
                 VStack(alignment: .leading, spacing: 16) {
@@ -282,8 +282,8 @@ struct StandardMusicCollectionDetailHero: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, MusicCollectionLayout.wideInset)
-            .padding(.top, 28)
-            .padding(.bottom, 36)
+            .padding(.top, MusicCollectionLayout.heroTopInset)
+            .padding(.bottom, MusicCollectionLayout.heroBottomInset)
         } else {
             VStack(spacing: 0) {
                 artwork
@@ -292,7 +292,7 @@ struct StandardMusicCollectionDetailHero: View {
                     }
                 information
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
+                    .padding(.horizontal, MusicCollectionLayout.compactInset)
                     .padding(.top, 24)
                 actions
                     .padding(.top, 17)
@@ -372,7 +372,7 @@ private struct ToplistDetailHero: View {
                 .font(.title2.weight(.bold))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
-                .padding(.horizontal, 24)
+                .padding(.horizontal, MusicCollectionLayout.compactInset)
                 .padding(.top, 17)
 
             Text(creatorName)
@@ -416,7 +416,7 @@ private struct ToplistDetailHero: View {
                 .frame(maxWidth: 420)
                 .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
                 .padding(.horizontal, MusicCollectionLayout.wideInset)
-                .padding(.top, 28)
+                .padding(.top, MusicCollectionLayout.heroTopInset)
         } else {
             ArtworkImage(url: artworkURL, cornerRadius: 0)
                 .containerRelativeFrame(.horizontal)

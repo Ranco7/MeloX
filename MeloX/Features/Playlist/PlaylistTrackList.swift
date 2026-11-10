@@ -45,10 +45,11 @@ struct PlaylistTrackList: View {
                             .overlay(Color.primary.opacity(0.12))
                             .padding(
                                 .leading,
-                                (usesWideRows ? (showsArtwork ? 96 : 86) : (showsArtwork ? 80 : 66))
-                                    + (isSelectingDownloads ? 36 : 0)
+                                MusicCollectionLayout.titleLeadingInset(
+                                    wide: usesWideRows, artwork: showsArtwork, selecting: isSelectingDownloads
+                                )
                             )
-                            .padding(.trailing, usesWideRows ? 26 : 20)
+                            .padding(.trailing, MusicCollectionLayout.horizontalInset(wide: usesWideRows))
                     }
                 }
             }
@@ -103,7 +104,7 @@ private struct PlaylistTrackRow: View {
     var body: some View {
         HStack(spacing: 4) {
             Button(action: primaryAction) {
-                HStack(spacing: 12) {
+                HStack(spacing: MusicCollectionLayout.columnSpacing) {
                     if isSelectingDownloads {
                         Image(
                             systemName: isSelectedForDownload
@@ -125,8 +126,7 @@ private struct PlaylistTrackRow: View {
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                             .opacity(library.contains(song: song) ? 1 : 0)
-                            .frame(width: 12)
-                            .padding(.trailing, -8)
+                            .frame(width: MusicCollectionLayout.favoriteColumnWidth)
                             .accessibilityHidden(true)
                     }
 
@@ -157,7 +157,7 @@ private struct PlaylistTrackRow: View {
                 .frame(minHeight: usesWideRows ? 44 : 0)
                 .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MusicTrackPressStyle())
             .disabled(isSelectingDownloads && !canSelectForDownload)
             .accessibilityLabel(primaryActionAccessibilityLabel)
             .accessibilityValue(primaryActionAccessibilityValue)
@@ -171,7 +171,7 @@ private struct PlaylistTrackRow: View {
                 Text(song.durationText)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .frame(width: 54, alignment: .trailing)
+                    .frame(width: MusicCollectionLayout.durationColumnWidth, alignment: .trailing)
             }
 
             if !isSelectingDownloads {
@@ -256,14 +256,13 @@ private struct PlaylistTrackRow: View {
                 } label: {
                     Image(systemName: "ellipsis")
                         .font(.body.weight(.semibold))
-                        .frame(width: 42, height: 44)
+                        .frame(width: MusicCollectionLayout.controlMinimumSize, height: MusicCollectionLayout.controlMinimumSize)
                         .contentShape(.rect)
                 }
                 .accessibilityLabel(L10n.format("ui.song.more_actions", song.name))
             }
         }
-        .padding(.leading, usesWideRows ? (showsArtwork ? 18 : MusicCollectionLayout.wideInset) : 20)
-        .padding(.trailing, usesWideRows ? 26 : 8)
+        .padding(.horizontal, MusicCollectionLayout.horizontalInset(wide: usesWideRows))
         .padding(.vertical, usesWideRows ? 4 : (showsArtwork ? 8 : 11))
         .background(
             isHighlighted ? Color.accentColor.opacity(0.16)
@@ -313,7 +312,7 @@ private struct PlaylistTrackRow: View {
                         .background(.quaternary, in: .rect(cornerRadius: 6))
                 }
             }
-            .frame(width: 48, height: 48)
+            .frame(width: MusicCollectionLayout.rowArtworkSize, height: MusicCollectionLayout.rowArtworkSize)
             .overlay {
                 if usesWideRows && isCurrentSong && !isSelectingDownloads {
                     Image(systemName: player.isPlaying ? "waveform" : "pause.fill")
@@ -337,7 +336,7 @@ private struct PlaylistTrackRow: View {
                 }
             }
             .frame(width: 32, height: 32)
-            .frame(width: 40)
+            .frame(width: MusicCollectionLayout.indexColumnWidth)
         } else {
             Text(
                 (index + 1).formatted(
@@ -349,7 +348,7 @@ private struct PlaylistTrackRow: View {
                 .monospacedDigit()
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
-                .frame(width: 40, alignment: .center)
+                .frame(width: MusicCollectionLayout.indexColumnWidth, alignment: .center)
         }
     }
 
