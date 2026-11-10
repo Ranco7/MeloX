@@ -572,6 +572,7 @@ final class LibraryStore {
             return
         }
 
+        let cookie = settings.cookie
         let wasSubscribed = contains(playlist: playlist)
         guard !wasSubscribed || canUnsubscribe(playlist) else { return }
         if wasSubscribed {
@@ -583,13 +584,14 @@ final class LibraryStore {
         }
 
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, cookie == self.settings.cookie else { return }
             do {
                 try await self.api.setPlaylistSubscribed(
                     id: playlist.id,
                     isSubscribed: !wasSubscribed
                 )
             } catch {
+                guard cookie == self.settings.cookie else { return }
                 if wasSubscribed {
                     self.favoritePlaylists.insert(playlist, at: 0)
                 } else {
@@ -597,6 +599,7 @@ final class LibraryStore {
                 }
                 self.errorMessage = error.localizedDescription
             }
+            guard cookie == self.settings.cookie else { return }
             await self.persistContent()
         }
     }
@@ -607,9 +610,10 @@ final class LibraryStore {
             return
         }
 
+        let cookie = settings.cookie
         let desiredState = !contains(podcast: podcast)
         Task { @MainActor [weak self] in
-            guard let self else { return }
+            guard let self, cookie == self.settings.cookie else { return }
             do {
                 try await self.setPodcastSubscribed(
                     podcast,
@@ -618,6 +622,7 @@ final class LibraryStore {
             } catch is CancellationError {
                 return
             } catch {
+                guard cookie == self.settings.cookie else { return }
                 self.errorMessage = error.localizedDescription
             }
         }
@@ -629,6 +634,7 @@ final class LibraryStore {
     ) async throws {
         guard isLoggedIn else { throw APIError.notLoggedIn }
 
+        let cookie = settings.cookie
         let previousPodcasts = subscribedPodcasts
         let previousTotalCount = subscribedPodcastTotalCount
         let previousNextOffset = subscribedPodcastsNextOffset
@@ -641,6 +647,7 @@ final class LibraryStore {
                 isSubscribed: isSubscribed
             )
         } catch {
+            guard cookie == settings.cookie else { return }
             subscribedPodcasts = previousPodcasts
             subscribedPodcastTotalCount = previousTotalCount
             subscribedPodcastsNextOffset = previousNextOffset
@@ -668,7 +675,9 @@ final class LibraryStore {
 
     func createPlaylist(name: String, isPrivate: Bool) async throws {
         guard isLoggedIn, let profile else { throw APIError.notLoggedIn }
+        let cookie = settings.cookie
         let created = try await api.createPlaylist(name: name, isPrivate: isPrivate)
+        guard cookie == settings.cookie else { return }
         let summary = Playlist(
             id: created.id,
             name: created.name,

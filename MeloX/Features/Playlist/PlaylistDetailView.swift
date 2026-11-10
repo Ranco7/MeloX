@@ -586,10 +586,12 @@ struct PlaylistDetailView: View {
 
     private func removeSong(_ song: Song) async {
         guard let playlist, !isLoadingMoreTracks, songToLocate == nil else { return }
+        let accountToken = settings.cookie
         isRemovingTrack = true
         defer { isRemovingTrack = false }
         do {
             try await library.remove(song: song, from: playlist)
+            guard accountToken == settings.cookie else { return }
             // This detail is a value copy, independent of the sidebar summary.
             // Remove once locally even if the following detail request fails.
             if var updated = self.playlist,
@@ -605,6 +607,7 @@ struct PlaylistDetailView: View {
                 removalError = L10n.string("ui.playlists.removed_refresh_failed")
             }
         } catch {
+            guard accountToken == settings.cookie else { return }
             if error is PlaylistTrackMutationError {
                 await load() // reconcile an uncertain gateway outcome, never repeat the write
             }
