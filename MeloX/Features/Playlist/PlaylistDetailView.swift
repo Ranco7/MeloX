@@ -194,6 +194,10 @@ struct PlaylistDetailView: View {
             guard playlist == nil else { return }
             await load(waitingForNavigationTransition: true)
         }
+        .onChange(of: library.playlistContentRevisions[id, default: 0]) { _, _ in
+            guard !isRemovingTrack else { return }
+            Task { await load() }
+        }
         .task(id: artworkURL) {
             let transitionDelay = navigationTransitionDelay()
             defer { transitionDelay.cancel() }
@@ -203,12 +207,6 @@ struct PlaylistDetailView: View {
                 fallbackPrefersDarkAppearance: systemColorScheme == .dark
             )
             guard !Task.isCancelled else { return }
-            let backdropAlreadyResolved = blurredBackdropImage != nil
-                || loadedAssets.blurredBackdropImage == nil
-            if artworkPalette == loadedAssets.palette,
-               backdropAlreadyResolved {
-                return
-            }
             do {
                 try await transitionDelay.value
             } catch {
@@ -287,7 +285,8 @@ struct PlaylistDetailView: View {
     }
 
     private var artworkURL: URL? {
-        displayedPlaylist.artworkURL ?? initialPlaylist.artworkURL
+        // A refreshed empty cover must not fall back to the route's stale image.
+        playlist.map { $0.artworkURL } ?? initialPlaylist.artworkURL
     }
 
     private var collectionTitle: String {
@@ -577,12 +576,9 @@ struct PlaylistDetailView: View {
         defer { isRemovingTrack = false }
         do {
             try await library.remove(song: song, from: playlist)
-            guard var updated = self.playlist else { return }
-            if let index = updated.removeSong(id: song.id), index < loadedTrackOffset {
-                loadedTrackOffset -= 1
-            }
-            self.playlist = updated
-            await persistContent()
+            // Reload server-owned cover and tracks together; do not decrement
+            // the count or persist the old cover a second time.
+            await load()
         } catch {
             removalError = error.localizedDescription
         }

@@ -30,6 +30,10 @@ final class PageContentCache {
         await storage.store(data, scope: Self.scope(for: settings.cookie), key: key)
     }
 
+    func remove(for key: String) async {
+        await storage.remove(scope: Self.scope(for: settings.cookie), key: key)
+    }
+
     func removeAccount(cookie: String) async {
         await storage.remove(scope: Self.scope(for: cookie))
     }
@@ -121,6 +125,17 @@ private actor PageContentCacheStorage {
             }
         } catch {
             report(error, operation: "write")
+        }
+    }
+
+    func remove(scope: String, key: String) {
+        guard let database else { return }
+        do {
+            try database.write { db in
+                try db.execute(sql: "DELETE FROM pageContent WHERE scope = ? AND cacheKey = ?", arguments: [scope, key])
+            }
+        } catch {
+            report(error, operation: "removeKey")
         }
     }
 

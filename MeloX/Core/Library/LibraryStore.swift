@@ -7,6 +7,7 @@ final class LibraryStore {
     private(set) var profile: AccountProfile?
     private(set) var accountDetail: AccountDetail?
     private(set) var favoriteSongs: [Song] = []
+    private(set) var playlistContentRevisions: [Int: Int] = [:]
     private(set) var favoritePlaylists: [Playlist] = []
     private(set) var favoriteAlbums: [Album] = []
     private(set) var favoriteArtists: [Artist] = []
@@ -545,6 +546,7 @@ final class LibraryStore {
             return
         }
 
+        let cookie = settings.cookie
         let wasLiked = contains(song: song)
         setLocalSong(song, isLiked: !wasLiked)
 
@@ -552,7 +554,12 @@ final class LibraryStore {
             guard let self else { return }
             do {
                 try await self.api.setSongLiked(id: song.id, isLiked: !wasLiked)
+                guard cookie == self.settings.cookie else { return }
+                if let id = self.likedPlaylistID {
+                    await self.refreshPlaylistAfterMutation(id: id, cookie: cookie)
+                }
             } catch {
+                guard cookie == self.settings.cookie else { return }
                 self.setLocalSong(song, isLiked: wasLiked)
                 self.errorMessage = error.localizedDescription
             }
@@ -651,7 +658,10 @@ final class LibraryStore {
     func deletePlaylist(_ playlist: Playlist) async throws {
         guard isLoggedIn else { throw APIError.notLoggedIn }
         guard canDelete(playlist) else { throw LibraryOperationError.playlistIsNotOwned }
+        let cookie = settings.cookie
         try await api.deletePlaylist(id: playlist.id)
+        guard cookie == settings.cookie else { return }
+        await api.pageContentCache.remove(for: PlaylistContentSnapshot.cacheKey(id: playlist.id))
         favoritePlaylists.removeAll { $0.id == playlist.id }
         await persistContent()
     }
@@ -672,11 +682,13 @@ final class LibraryStore {
     func remove(song: Song, from playlist: Playlist) async throws {
         guard isLoggedIn else { throw APIError.notLoggedIn }
         guard canDelete(playlist) else { throw LibraryOperationError.playlistIsNotOwned }
+        let cookie = settings.cookie
         try await api.removeSong(id: song.id, fromPlaylistID: playlist.id)
+        guard cookie == settings.cookie else { return }
         if let index = favoritePlaylists.firstIndex(where: { $0.id == playlist.id }) {
             favoritePlaylists[index].removeSong(id: song.id)
         }
-        await persistContent()
+        await refreshPlaylistAfterMutation(id: playlist.id, cookie: cookie)
     }
 
     func add(song: Song, to playlist: Playlist) async throws {
@@ -684,7 +696,30 @@ final class LibraryStore {
         guard playlist.creator?.userID == profile?.id else {
             throw LibraryOperationError.playlistIsNotOwned
         }
+        let cookie = settings.cookie
         try await api.addSong(id: song.id, toPlaylistID: playlist.id)
+        guard cookie == settings.cookie else { return }
+        await refreshPlaylistAfterMutation(id: playlist.id, cookie: cookie)
+    }
+
+    // A successful write must not leave an old offline detail snapshot behind.
+    // Summary refresh failure is not reported as a failed write (avoid duplicate retries).
+    private func refreshPlaylistAfterMutation(id: Int, cookie: String) async {
+        guard cookie == settings.cookie else { return }
+        await api.pageContentCache.remove(for: PlaylistContentSnapshot.cacheKey(id: id))
+        do {
+            let summary = try await api.playlist(id: id, trackLimit: 0)
+            guard cookie == settings.cookie else { return }
+            if let index = favoritePlaylists.firstIndex(where: { $0.id == id }) {
+                favoritePlaylists[index] = summary
+            }
+        } catch {
+            guard cookie == settings.cookie else { return }
+            errorMessage = "歌单已更新，但封面刷新失败，请下拉刷新。"
+        }
+        guard cookie == settings.cookie else { return }
+        playlistContentRevisions[id, default: 0] += 1
+        await persistContent()
     }
 
     func clearAccountData() {
@@ -714,6 +749,7 @@ final class LibraryStore {
         accountDetail = nil
         favoriteSongs = []
         favoritePlaylists = []
+        playlistContentRevisions = [:]
         favoriteAlbums = []
         favoriteArtists = []
         subscribedPodcasts = []
