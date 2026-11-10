@@ -4,6 +4,7 @@ struct HeartModeNowPlayingBadge: View {
     @Environment(PlayerStore.self) private var player
 
     var minimumTouchHeight: CGFloat = 0
+    var expandsTouchTarget = false
 
     @State private var showsActions = false
 
@@ -20,7 +21,9 @@ struct HeartModeNowPlayingBadge: View {
                     .foregroundStyle(.white)
                     .background(.white.opacity(0.14), in: .capsule)
                     .frame(minHeight: minimumTouchHeight)
-                    .contentShape(.rect)
+                    .contentShape(NowPlayingVerticalHitShape(
+                        minimumHeight: expandsTouchTarget ? 44 : 0, maximumBottomOutset: 0
+                    ))
             }
             .buttonStyle(.plain)
             .fixedSize()

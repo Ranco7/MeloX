@@ -64,60 +64,27 @@ struct NowPlayingView: View {
                 if let song = player.currentSong {
                     if showsFullScreenLyrics, page == .lyrics {
                         fullScreenLyrics(for: song)
-                    } else if usesExpandedLayout {
-                        NowPlayingTabletView(
-                            page: pageSelection,
-                            pageTransition: pageTransition,
-                            song: song,
-                            lyrics: lyrics,
-                            lyricError: lyricError,
-                            highlightedLyricID: highlightedLyricID,
-                            artworkNamespace: pageArtworkNamespace,
-                            onDismiss: onDismiss,
-                            onExpandLyrics: {
-                                showsLyricsControls = true
-                                showsFullScreenLyrics = true
-                            },
-                            onLyricsContentPrepared: {
-                                markLyricsContentPrepared(for: song.id)
-                            }
-                        )
-                    } else if usesFullScreenTextPV {
-                        TextPVFullScreenPlayerView(
-                            page: pageSelection,
-                            showsControls: $showsLyricsControls,
-                            song: song,
-                            lyrics: lyrics,
-                            errorMessage: lyricError,
-                            highlightedLyricID: highlightedLyricID,
-                            onDismiss: onDismiss,
-                            onToggleInterface:
-                                toggleLyricsControls
-                        )
-                        .transition(.opacity)
-                    } else if proxy.size.width > proxy.size.height {
-                        NowPlayingLandscapeView(
-                            page: pageSelection,
-                            pageTransition: pageTransition,
-                            showsLyricsControls: showsLyricsControls,
-                            song: song,
-                            lyrics: lyrics,
-                            lyricError: lyricError,
-                            highlightedLyricID: highlightedLyricID,
-                            artworkNamespace: pageArtworkNamespace,
-                            onDismiss: onDismiss,
-                            onInterfaceInteraction:
-                                handleLyricsInterfaceInteraction,
-                            onInterfaceVisibilityChange:
-                                setAppleMusicLyricsControlsVisible,
-                            onLyricsContentPrepared: {
-                                markLyricsContentPrepared(
-                                    for: song.id
-                                )
-                            }
-                        )
+                    } else if UIDevice.current.userInterfaceIdiom == .pad,
+                              !hasDisplayDivision,
+                              !usesFullScreenTextPV || usesExpandedLayout {
+                        ViewThatFits(in: [.horizontal, .vertical]) {
+                            NowPlayingReferenceTabletView(
+                                page: pageSelection, pageTransition: pageTransition,
+                                song: song, lyrics: lyrics, lyricError: lyricError,
+                                highlightedLyricID: highlightedLyricID,
+                                artworkNamespace: pageArtworkNamespace,
+                                layout: NowPlayingReferenceTabletLayout(viewport: proxy.size),
+                                onDismiss: onDismiss,
+                                onExpandLyrics: {
+                                    showsLyricsControls = true
+                                    showsFullScreenLyrics = true
+                                },
+                                onLyricsContentPrepared: { markLyricsContentPrepared(for: song.id) }
+                            )
+                            adaptivePlayer(for: song, viewport: proxy.size)
+                        }
                     } else {
-                        portraitContent(for: song)
+                        adaptivePlayer(for: song, viewport: proxy.size)
                     }
                 } else {
                     ContentUnavailableView("ui.player.no_current_song", systemImage: "music.note")
@@ -324,6 +291,65 @@ struct NowPlayingView: View {
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             pageTransition.reset(to: .artwork)
+        }
+    }
+
+    @ViewBuilder
+    private func adaptivePlayer(for song: Song, viewport: CGSize) -> some View {
+        if usesExpandedLayout {
+            NowPlayingTabletView(
+                page: pageSelection,
+                pageTransition: pageTransition,
+                song: song,
+                lyrics: lyrics,
+                lyricError: lyricError,
+                highlightedLyricID: highlightedLyricID,
+                artworkNamespace: pageArtworkNamespace,
+                onDismiss: onDismiss,
+                onExpandLyrics: {
+                    showsLyricsControls = true
+                    showsFullScreenLyrics = true
+                },
+                onLyricsContentPrepared: {
+                    markLyricsContentPrepared(for: song.id)
+                }
+            )
+        } else if usesFullScreenTextPV {
+            TextPVFullScreenPlayerView(
+                page: pageSelection,
+                showsControls: $showsLyricsControls,
+                song: song,
+                lyrics: lyrics,
+                errorMessage: lyricError,
+                highlightedLyricID: highlightedLyricID,
+                onDismiss: onDismiss,
+                onToggleInterface:
+                    toggleLyricsControls
+            )
+            .transition(.opacity)
+        } else if viewport.width > viewport.height {
+            NowPlayingLandscapeView(
+                page: pageSelection,
+                pageTransition: pageTransition,
+                showsLyricsControls: showsLyricsControls,
+                song: song,
+                lyrics: lyrics,
+                lyricError: lyricError,
+                highlightedLyricID: highlightedLyricID,
+                artworkNamespace: pageArtworkNamespace,
+                onDismiss: onDismiss,
+                onInterfaceInteraction:
+                    handleLyricsInterfaceInteraction,
+                onInterfaceVisibilityChange:
+                    setAppleMusicLyricsControlsVisible,
+                onLyricsContentPrepared: {
+                    markLyricsContentPrepared(
+                        for: song.id
+                    )
+                }
+            )
+        } else {
+            portraitContent(for: song)
         }
     }
 

@@ -14,6 +14,7 @@ struct NowPlayingPortraitArtwork: View {
 
     let song: Song
     let isArtworkPage: Bool
+    var usesReferenceAppearance = false
 
     var body: some View {
         NowPlayingArtworkSurface(
@@ -21,6 +22,7 @@ struct NowPlayingPortraitArtwork: View {
             scale: isArtworkPage && !player.isPlaying && settings.shrinksPausedArtwork
                 ? NowPlayingArtworkPage.pausedArtworkScale : 1,
             showsShadow: isArtworkPage,
+            appearanceScale: usesReferenceAppearance && (player.isPlaying || !settings.shrinksPausedArtwork) ? 1 / 0.74 : 1,
             isPlaying: player.isPlaying,
             reducesMotion: reducesMotion
         )
@@ -33,18 +35,19 @@ private struct NowPlayingArtworkSurface: UIViewControllerRepresentable {
     let url: URL?
     let scale: CGFloat
     let showsShadow: Bool
+    let appearanceScale: CGFloat
     let isPlaying: Bool
     let reducesMotion: Bool
 
     func makeUIViewController(context: Context) -> NowPlayingArtworkSurfaceController {
         NowPlayingArtworkSurfaceController(
-            url: url, scale: scale, showsShadow: showsShadow,
+            url: url, scale: scale, showsShadow: showsShadow, appearanceScale: appearanceScale,
             isPlaying: isPlaying, reducesMotion: reducesMotion
         )
     }
 
     func updateUIViewController(_ controller: NowPlayingArtworkSurfaceController, context: Context) {
-        controller.update(url: url, scale: scale, showsShadow: showsShadow,
+        controller.update(url: url, scale: scale, showsShadow: showsShadow, appearanceScale: appearanceScale,
                           isPlaying: isPlaying, reducesMotion: reducesMotion)
     }
 
@@ -61,13 +64,15 @@ private final class NowPlayingArtworkSurfaceController: UIViewController {
     private var url: URL?
     private var targetScale: CGFloat
     private var showsShadow: Bool
+    private var appearanceScale: CGFloat
     private var isPlaying: Bool
     private var reducesMotion: Bool
 
-    init(url: URL?, scale: CGFloat, showsShadow: Bool, isPlaying: Bool, reducesMotion: Bool) {
+    init(url: URL?, scale: CGFloat, showsShadow: Bool, appearanceScale: CGFloat, isPlaying: Bool, reducesMotion: Bool) {
         self.url = url
         self.targetScale = scale
         self.showsShadow = showsShadow
+        self.appearanceScale = appearanceScale
         self.isPlaying = isPlaying
         self.reducesMotion = reducesMotion
         super.init(nibName: nil, bundle: nil)
@@ -109,14 +114,15 @@ private final class NowPlayingArtworkSurfaceController: UIViewController {
         updateCornersAndShadowPath()
     }
 
-    func update(url: URL?, scale: CGFloat, showsShadow: Bool, isPlaying: Bool, reducesMotion: Bool) {
+    func update(url: URL?, scale: CGFloat, showsShadow: Bool, appearanceScale: CGFloat, isPlaying: Bool, reducesMotion: Bool) {
         if self.url != url {
             self.url = url
             host?.rootView = ArtworkImage(url: url, cornerRadius: 0)
         }
-        let changed = targetScale != scale || self.showsShadow != showsShadow || self.isPlaying != isPlaying || self.reducesMotion != reducesMotion
+        let changed = self.appearanceScale != appearanceScale || targetScale != scale || self.showsShadow != showsShadow || self.isPlaying != isPlaying || self.reducesMotion != reducesMotion
         self.targetScale = scale
         self.showsShadow = showsShadow
+        self.appearanceScale = appearanceScale
         self.isPlaying = isPlaying
         self.reducesMotion = reducesMotion
         guard changed, isViewLoaded else { return }
@@ -145,15 +151,16 @@ private final class NowPlayingArtworkSurfaceController: UIViewController {
         surface.transform = CGAffineTransform(scaleX: targetScale, y: targetScale)
         surface.layer.shadowColor = UIColor.black.cgColor
         surface.layer.shadowOpacity = showsShadow ? (isPlaying ? 0.34 : 0.18) : 0
-        surface.layer.shadowRadius = (isPlaying ? 26 : 14) / targetScale
-        surface.layer.shadowOffset = CGSize(width: 0, height: (isPlaying ? 15 : 8) / targetScale)
+        surface.layer.shadowRadius = (isPlaying ? 26 : 14) / targetScale * appearanceScale
+        surface.layer.shadowOffset = CGSize(width: 0, height: (isPlaying ? 15 : 8) / targetScale * appearanceScale)
         updateCornersAndShadowPath()
     }
 
     private func updateCornersAndShadowPath() {
         // Compensate the transform so both endpoint states retain a visible
-        // 12pt radius and the original shadow footprint in screen points.
-        let radius = 12 / targetScale
+        // radius and shadow footprint in screen points. The reference tablet
+        // retains the old playing appearance that was scaled by 1 / 0.74.
+        let radius = 12 / targetScale * appearanceScale
         imageClipView.layer.cornerRadius = radius
         surface.layer.shadowPath = UIBezierPath(roundedRect: surface.bounds, cornerRadius: radius).cgPath
     }

@@ -8,6 +8,7 @@ struct NowPlayingProgressControl: View {
     let song: Song
 
     var usesCompactTimeRow = false
+    var usesReferenceLayout = false
 
     var body: some View {
         if usesCompactTimeRow {
@@ -22,12 +23,32 @@ struct NowPlayingProgressControl: View {
             .frame(minHeight: NowPlayingPortraitLayout.baseProgressHeight)
         } else {
             VStack(spacing: 6) {
-                NowPlayingProgressSlider(maximum: progressMaximum)
+                Group {
+                    if usesReferenceLayout {
+                        NowPlayingProgressSlider(maximum: progressMaximum)
+                            .contentShape(NowPlayingVerticalHitShape(minimumHeight: 44, maximumBottomOutset: 6))
+                    } else {
+                        NowPlayingProgressSlider(maximum: progressMaximum)
+                    }
+                }
                 HStack(spacing: 10) {
                     NowPlayingProgressElapsedTime()
                         .frame(maxWidth: .infinity, alignment: .leading)
-                    NowPlayingQualityControl()
-                        .layoutPriority(1)
+                    Group {
+                        if usesReferenceLayout {
+                            Group {
+                                if player.isAutoMixTransitioning {
+                                    NowPlayingAutoMixStatus()
+                                } else {
+                                    NowPlayingQualityMenu()
+                                }
+                            }
+                            .animation(.smooth(duration: 0.25), value: player.isAutoMixTransitioning)
+                        } else {
+                            NowPlayingQualityControl()
+                        }
+                    }
+                    .layoutPriority(1)
                     NowPlayingProgressRemainingTime()
                         .frame(maxWidth: .infinity, alignment: .trailing)
                 }
@@ -252,6 +273,7 @@ struct NowPlayingTransportControls: View {
     enum Presentation {
         case standard
         case tablet
+        case referenceTablet
     }
 
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
@@ -261,18 +283,20 @@ struct NowPlayingTransportControls: View {
     var rowHeight: CGFloat? = nil
     var availableWidth: CGFloat? = nil
 
-    private var isTablet: Bool { presentation == .tablet }
+    private var isTablet: Bool { presentation != .standard }
+    private var isReference: Bool { presentation == .referenceTablet }
     private var controlDiameter: CGFloat {
-        isTablet ? min(64, max(rowHeight ?? 64, 44), max(44, ((availableWidth ?? 320) - 88) / 3))
+        if isReference { return 44 }
+        return isTablet ? min(64, max(rowHeight ?? 64, 44), max(44, ((availableWidth ?? 320) - 88) / 3))
             : min(64, max(rowHeight ?? 64, 44))
     }
 
     private var skipSymbolSize: CGFloat {
-        NowPlayingPortraitLayout.skipSymbolSize(controlDiameter: controlDiameter)
+        isReference ? 24 : NowPlayingPortraitLayout.skipSymbolSize(controlDiameter: controlDiameter)
     }
 
     private var playSymbolSize: CGFloat {
-        NowPlayingPortraitLayout.playSymbolSize(
+        isReference ? 30 : NowPlayingPortraitLayout.playSymbolSize(
             controlDiameter: controlDiameter,
             isTablet: isTablet
         )
@@ -392,13 +416,15 @@ struct NowPlayingTransportControls: View {
                 .accessibilityAddTraits(player.repeatMode == .off ? [] : .isSelected)
             }
         }
-        .frame(height: max(rowHeight ?? (isTablet ? 64 : 82), controlDiameter))
+        .frame(height: isReference ? 52 : max(rowHeight ?? (isTablet ? 64 : 82), controlDiameter))
     }
 }
 
 struct NowPlayingVolumeControl: View {
     @Environment(PlayerStore.self) private var player
     @Environment(AppSettings.self) private var settings
+
+    var usesReferenceLayout = false
 
     @ViewBuilder
     var body: some View {
@@ -410,13 +436,15 @@ struct NowPlayingVolumeControl: View {
                 volumeSlider
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
+                    .frame(height: usesReferenceLayout ? 32 : 44)
+                    .contentShape(NowPlayingVerticalHitShape(minimumHeight: 44))
                     .layoutPriority(1)
 
                 Image(systemName: "speaker.wave.3.fill")
                     .font(.caption)
             }
             .foregroundStyle(.white.opacity(0.62))
-            .frame(height: 44)
+            .frame(height: usesReferenceLayout ? 42 : 44)
         }
     }
 
@@ -436,7 +464,7 @@ struct NowPlayingVolumeControl: View {
             .tint(.white)
             .accessibilityLabel("ui.player.volume")
         case .system:
-            SystemVolumeSlider()
+            SystemVolumeSlider(usesReferenceLayout: usesReferenceLayout)
                 .accessibilityLabel("ui.player.system_volume")
         }
     }
@@ -466,10 +494,10 @@ private final class SystemVolumeHostView: UIView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    func configure() {
+    func configure(usesReferenceLayout: Bool = false) {
         volumeView.backgroundColor = .clear
         volumeView.showsVolumeSlider = true
-        volumeView.showsRouteButton = false
+        volumeView.showsRouteButton = usesReferenceLayout
         volumeView.tintColor = .white
     }
 
@@ -489,12 +517,16 @@ private final class SystemVolumeHostView: UIView {
 }
 
 private struct SystemVolumeSlider: UIViewRepresentable {
+    var usesReferenceLayout = false
+
     func makeUIView(context: Context) -> SystemVolumeHostView {
-        SystemVolumeHostView(frame: CGRect(origin: .zero, size: NowPlayingVolumeGeometry.size(proposedWidth: nil)))
+        let view = SystemVolumeHostView(frame: CGRect(origin: .zero, size: NowPlayingVolumeGeometry.size(proposedWidth: nil)))
+        view.configure(usesReferenceLayout: usesReferenceLayout)
+        return view
     }
 
     func updateUIView(_ volumeView: SystemVolumeHostView, context: Context) {
-        volumeView.configure()
+        volumeView.configure(usesReferenceLayout: usesReferenceLayout)
     }
 
     func sizeThatFits(
@@ -641,5 +673,18 @@ struct NowPlayingAirPlayControl: UIViewRepresentable {
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: AVRoutePickerView, context: Context) -> CGSize? {
         CGSize(width: 44, height: 44)
+    }
+}
+
+/// Enlarge only vertical hit geometry, leaving baseline visible bounds intact.
+struct NowPlayingVerticalHitShape: Shape {
+    var minimumHeight: CGFloat = 0
+    var maximumBottomOutset: CGFloat = .infinity
+
+    func path(in rect: CGRect) -> Path {
+        let growth = max(minimumHeight - rect.height, 0)
+        let top = growth - min(growth / 2, maximumBottomOutset)
+        return Path(CGRect(x: rect.minX, y: rect.minY - top,
+                           width: rect.width, height: rect.height + growth))
     }
 }

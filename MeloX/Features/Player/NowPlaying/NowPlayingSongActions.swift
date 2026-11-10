@@ -11,6 +11,7 @@ struct NowPlayingSongActions: View {
     let song: Song
     var showsFavoriteButton = true
     var usesCompactMenu = false
+    var offersAirPlayMenu = false
 
     @State private var presentedSheet: NowPlayingSongSheet?
     var body: some View {
@@ -22,6 +23,15 @@ struct NowPlayingSongActions: View {
         }
         .sheet(item: $presentedSheet) { sheet in
             switch sheet {
+            case .airPlay:
+                HStack {
+                    Text("AirPlay")
+                    Spacer()
+                    NowPlayingAirPlayControl().frame(width: 44, height: 44)
+                }
+                .padding(24)
+                .presentationDetents([.height(160)])
+                .presentationDragIndicator(.visible)
             case .addToPlaylist(let selectedSong):
                 AddToPlaylistSheet(song: selectedSong)
                     .presentationDetents([.medium, .large])
@@ -69,6 +79,12 @@ struct NowPlayingSongActions: View {
     private var songMenu: some View {
         Menu {
             lyricsSourceMenu
+
+            if offersAirPlayMenu {
+                Button { presentedSheet = .airPlay } label: {
+                    Label("AirPlay", systemImage: "airplay.audio")
+                }
+            }
 
             Button {
                 floatingLyrics.toggle()
@@ -262,6 +278,7 @@ struct NowPlayingSongActions: View {
     }
 }
 private enum NowPlayingSongSheet: Identifiable {
+    case airPlay
     case addToPlaylist(Song)
     case comments(Song)
     case songWiki(Song)
@@ -270,6 +287,7 @@ private enum NowPlayingSongSheet: Identifiable {
     case beatNetDebug
     var id: String {
         switch self {
+        case .airPlay: "airPlay"
         case .addToPlaylist(let song):
             "add-to-playlist-\(song.id)"
         case .comments(let song):
