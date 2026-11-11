@@ -144,7 +144,7 @@ struct PodcastProgramListRow: View {
                 .frame(width: 36, height: 44)
                 .contentShape(.rect)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MusicTrackPressStyle())
             .disabled(program.playbackSong == nil)
             .accessibilityLabel(
                 isCurrent && isPlaying

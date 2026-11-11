@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct LyricPressInteraction<Content: View>: View {
-    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
-
     let isSelected: Bool
     let allowsTap: Bool
     let allowsLongPress: Bool
@@ -37,8 +35,7 @@ struct LyricPressInteraction<Content: View>: View {
         }
         .buttonStyle(
             LyricPressButtonStyle(
-                isSelected: isSelected,
-                reducesMotion: accessibilityReduceMotion
+                isSelected: isSelected
             )
         )
         .simultaneousGesture(
@@ -50,6 +47,11 @@ struct LyricPressInteraction<Content: View>: View {
             },
             isEnabled: allowsLongPress
         )
+        .accessibilityActions {
+            if allowsLongPress {
+                Button("ui.lyrics.share.title") { onLongPress() }
+            }
+        }
         .onChange(of: isSelected) { _, isSelected in
             if !isSelected {
                 suppressesTap = false
@@ -81,134 +83,10 @@ private struct LyricPressLabel<Content: View>: View {
 
 private struct LyricPressButtonStyle: ButtonStyle {
     let isSelected: Bool
-    let reducesMotion: Bool
 
     func makeBody(configuration: Configuration) -> some View {
-        LyricPressButtonStyleBody(
-            label: configuration.label,
-            isPressed: configuration.isPressed,
-            isSelected: isSelected,
-            reducesMotion: reducesMotion
-        )
+        configuration.label.environment(\.lyricPressBackgroundProgress, configuration.isPressed || isSelected ? 1 : 0)
     }
-}
-
-private struct LyricPressButtonStyleBody<Label: View>: View {
-    let label: Label
-    let isPressed: Bool
-    let isSelected: Bool
-    let reducesMotion: Bool
-
-    @State private var scale: CGFloat = 1
-    @State private var backgroundProgress = 0.0
-
-    var body: some View {
-        label
-            .environment(
-                \.lyricPressBackgroundProgress,
-                isSelected ? 1 : backgroundProgress
-            )
-            .scaleEffect(scale, anchor: .center)
-            .onAppear {
-                updatePressedState(isPressed, animated: false)
-            }
-            .onChange(of: isPressed) { _, isPressed in
-                updatePressedState(isPressed, animated: true)
-            }
-            .onChange(of: isSelected) { _, isSelected in
-                updateSelectedState(isSelected)
-            }
-    }
-
-    private func updatePressedState(
-        _ isPressed: Bool,
-        animated: Bool
-    ) {
-        guard animated, !reducesMotion else {
-            var transaction = Transaction(animation: nil)
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                scale =
-                    isPressed
-                        ? LyricPressAnimation.pressedScale
-                        : 1
-                backgroundProgress =
-                    isPressed || isSelected
-                        ? 1
-                        : 0
-            }
-            return
-        }
-
-        if isPressed {
-            var transaction = Transaction(animation: nil)
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                backgroundProgress = 1
-            }
-            withAnimation(
-                .easeInOut(
-                    duration: LyricPressAnimation.pressDuration
-                )
-            ) {
-                scale = LyricPressAnimation.pressedScale
-            }
-        } else {
-            withAnimation(
-                .easeInOut(
-                    duration: LyricPressAnimation.releaseDuration
-                )
-            ) {
-                scale = 1
-            }
-            guard !isSelected else { return }
-            withAnimation(
-                .easeIn(
-                    duration: LyricPressAnimation
-                        .backgroundReleaseDuration
-                )
-            ) {
-                backgroundProgress = 0
-            }
-        }
-    }
-
-    private func updateSelectedState(_ isSelected: Bool) {
-        if isSelected {
-            var transaction = Transaction(animation: nil)
-            transaction.disablesAnimations = true
-            withTransaction(transaction) {
-                backgroundProgress = 1
-            }
-        } else {
-            withAnimation(
-                reducesMotion
-                    ? nil
-                    : .easeInOut(
-                        duration: LyricPressAnimation.releaseDuration
-                    )
-            ) {
-                scale = 1
-            }
-            withAnimation(
-                reducesMotion
-                    ? nil
-                    : .easeIn(
-                        duration: LyricPressAnimation
-                            .backgroundReleaseDuration
-                    )
-            ) {
-                backgroundProgress = 0
-            }
-        }
-    }
-}
-
-private enum LyricPressAnimation {
-    static let pressedScale: CGFloat = 0.96
-    static let pressDuration: TimeInterval = 0.10
-    static let releaseDuration: TimeInterval = 0.38
-    static let backgroundReleaseDuration: TimeInterval = 0.28
 }
 
 private struct LyricPressBackgroundProgressKey: EnvironmentKey {

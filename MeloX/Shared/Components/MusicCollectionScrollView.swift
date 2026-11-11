@@ -4,6 +4,7 @@ import SwiftUI
 /// or write a new offset into the album/playlist data owner on every frame.
 struct MusicCollectionScrollView<Content: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @Binding var query: String
     let prompt: String
     let usesInlineSearch: Bool
@@ -11,17 +12,16 @@ struct MusicCollectionScrollView<Content: View>: View {
     let heroTopInset: CGFloat
     @ViewBuilder let content: () -> Content
 
-    @ScaledMetric(relativeTo: .subheadline) private var searchFontSize: CGFloat = 14
+    @ScaledMetric(relativeTo: .body) private var searchFontSize: CGFloat = 17
     @State private var scroll: Double = 0
     @FocusState private var searchFocused: Bool
 
     private var keepsSearchExpanded: Bool {
-        searchFocused || !query.isEmpty || dynamicTypeSize.isAccessibilitySize
+        searchFocused || !query.isEmpty || dynamicTypeSize.isAccessibilitySize || voiceOverEnabled
     }
 
     private var expandedHeight: CGFloat {
-        if dynamicTypeSize.isAccessibilitySize { return max(44, searchFontSize + 24) }
-        return searchFocused || !query.isEmpty ? 44 : 38
+        CGFloat(MusicCollectionSearchLayout.expandedHeight(fontSize: Double(searchFontSize)))
     }
 
     var body: some View {
@@ -29,10 +29,10 @@ struct MusicCollectionScrollView<Content: View>: View {
             content()
                 // A fixed inset is intentional: reducing it as well as moving
                 // the scroll content would count the collapse distance twice.
-                .padding(.top, usesInlineSearch ? MusicCollectionSearchLayout.contentTopInset - heroTopInset + expandedHeight - 38 : 0)
+                .padding(.top, usesInlineSearch ? MusicCollectionSearchLayout.topInset + expandedHeight + MusicCollectionSearchLayout.artworkGap - heroTopInset : 0)
         }
         .onScrollGeometryChange(for: Double.self) { geometry in
-            usesInlineSearch ? min(max(Double(geometry.contentOffset.y + geometry.contentInsets.top), 0), 38) : 0
+            usesInlineSearch ? min(max(Double(geometry.contentOffset.y + geometry.contentInsets.top), 0), Double(expandedHeight)) : 0
         } action: { _, value in
             scroll = value
         }
@@ -48,14 +48,14 @@ struct MusicCollectionScrollView<Content: View>: View {
 
     private var searchField: some View {
         let offset = keepsSearchExpanded ? 0 : scroll
-        let height = keepsSearchExpanded ? Double(expandedHeight) : MusicCollectionSearchLayout.height(scroll: offset)
+        let height = keepsSearchExpanded ? Double(expandedHeight) : MusicCollectionSearchLayout.height(scroll: offset, expandedHeight: Double(expandedHeight))
         let opacity = MusicCollectionSearchLayout.glyphOpacity(scroll: offset)
-        return HStack(spacing: 9) {
+        return HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: searchFontSize))
+                .font(.body)
                 .accessibilityHidden(true)
             TextField(prompt, text: $query)
-                .font(.system(size: searchFontSize))
+                .font(.body)
                 .focused($searchFocused)
                 .submitLabel(.search)
                 .onSubmit { searchFocused = false }
@@ -72,14 +72,13 @@ struct MusicCollectionScrollView<Content: View>: View {
                 .accessibilityLabel("ui.common.clear")
             }
         }
-        .padding(.leading, 14)
-        .padding(.trailing, query.isEmpty ? 14 : 0)
+        .padding(.leading, 16)
+        .padding(.trailing, query.isEmpty ? 16 : 0)
         .opacity(opacity)
         .frame(height: CGFloat(height))
         .background(.ultraThinMaterial, in: .capsule)
         .clipShape(.capsule)
-        // Expand the hit region to 44pt without changing the measured outline.
-        .contentShape(Rectangle().inset(by: -3))
+        .contentShape(.capsule)
         .allowsHitTesting(height > 0 && opacity > 0)
         .accessibilityHidden(height == 0 || opacity == 0)
         .transaction { $0.animation = nil }

@@ -19,11 +19,6 @@ enum NeteaseAudioFingerprintError: LocalizedError {
 }
 
 @MainActor
-protocol AudioFingerprintGenerating: AnyObject {
-    func generate(from samples: [Float]) async throws -> String
-}
-
-@MainActor
 final class NeteaseAudioFingerprintGenerator:
     NSObject,
     WKNavigationDelegate,

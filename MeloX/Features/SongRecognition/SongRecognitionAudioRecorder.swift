@@ -1,62 +1,6 @@
 @preconcurrency import AVFoundation
 import Foundation
 
-enum SongRecognitionRecordingError: LocalizedError {
-    case microphonePermissionDenied
-    case microphoneUnavailable
-    case recordingFailed(String)
-    case recordingTimedOut
-    case conversionFailed
-    case captureUnavailable
-    case captureTimedOut
-
-    var errorDescription: String? {
-        switch self {
-        case .microphonePermissionDenied:
-            L10n.string("ui.recognition.error.microphone_permission")
-        case .microphoneUnavailable:
-            L10n.string("ui.recognition.error.microphone_unavailable")
-        case .recordingFailed(let message):
-            L10n.format("ui.recognition.error.recording_failed", message)
-        case .recordingTimedOut:
-            L10n.string("ui.recognition.error.recording_timed_out")
-        case .conversionFailed:
-            L10n.string("ui.recognition.error.conversion_failed")
-        case .captureUnavailable:
-            L10n.string("ui.recognition.error.capture_unavailable")
-        case .captureTimedOut:
-            L10n.string("ui.recognition.error.capture_timed_out")
-        }
-    }
-
-    var opensSystemSettings: Bool {
-        if case .microphonePermissionDenied = self {
-            true
-        } else {
-            false
-        }
-    }
-}
-
-struct SongRecognitionAudioSnapshot {
-    let samples: [Float]
-    let duration: Int
-    let totalDuration: Int
-    let reachedLimit: Bool
-}
-
-@MainActor
-protocol SongRecognitionRecording: AnyObject {
-    func start(
-        maximumDuration: Int?,
-        source: SongRecognitionAudioSource
-    ) async throws
-    func snapshot() throws -> SongRecognitionAudioSnapshot?
-    func prepareForConcurrentPlayback()
-    func cancel()
-    func stop()
-}
-
 @MainActor
 final class SongRecognitionAudioRecorder: SongRecognitionRecording {
     static let fingerprintSampleRate = 8_000.0
@@ -70,7 +14,7 @@ final class SongRecognitionAudioRecorder: SongRecognitionRecording {
     private var shouldPreservePlaybackSession = false
     private var audioCapture: (any SongRecognitionAudioCapture)?
 
-    func start(maximumDuration: Int?, source: SongRecognitionAudioSource) async throws {
+    func start(maximumDuration: Int?, source: SongRecognitionAudioSource, playbackAudio: PlaybackAudioCapture?) async throws {
         stop()
         resetCapture()
         shouldPreservePlaybackSession = false
@@ -86,7 +30,11 @@ final class SongRecognitionAudioRecorder: SongRecognitionRecording {
                 maximumDuration: maximumDuration
             )
             let buffer = SongRecognitionCapturedAudioBuffer(recordingBuffer: recordingBuffer)
-            let capture = try makeAudioCapture(source: source, buffer: buffer)
+            guard source == .appAudio, let playbackAudio else {
+                resetCapture()
+                throw SongRecognitionRecordingError.captureUnavailable
+            }
+            let capture = SongRecognitionAppAudioCapture(buffer: buffer, playbackAudio: playbackAudio)
             audioCapture = capture
             do { try await capture.start() }
             catch {
@@ -277,19 +225,6 @@ final class SongRecognitionAudioRecorder: SongRecognitionRecording {
         sourceSampleRate = sampleRate
         sampleBuffer = buffer
         return buffer
-    }
-
-    private func makeAudioCapture(
-        source: SongRecognitionAudioSource,
-        buffer: SongRecognitionCapturedAudioBuffer
-    ) throws -> any SongRecognitionAudioCapture {
-        #if canImport(ScreenCaptureKit)
-        if #available(iOS 27, *) {
-            return SongRecognitionSystemAudioCapture(buffer: buffer, capturesSystemAudio: source == .systemAudio)
-        }
-        #endif
-        guard source == .appAudio else { throw SongRecognitionRecordingError.captureUnavailable }
-        return SongRecognitionAppAudioCapture(buffer: buffer)
     }
 
     private func ensureMicrophonePermission() async throws {

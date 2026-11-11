@@ -23,17 +23,28 @@ struct MusicCollectionSearchLayoutChecks {
         for scroll in stride(from: -50.0, through: 100, by: 0.25) {
             let height = MusicCollectionSearchLayout.height(scroll: scroll)
             let opacity = MusicCollectionSearchLayout.glyphOpacity(scroll: scroll)
-            precondition((0...38).contains(height) && (0...1).contains(opacity))
-            if (0...38).contains(scroll) {
-                precondition(abs(height + scroll - 38) < 0.0001)
+            precondition((0...44).contains(height) && (0...1).contains(opacity))
+            if (0...44).contains(scroll) {
+                precondition(abs(height + scroll - 44) < 0.0001)
                 // Content moves once; it stays 29pt below the shrinking search.
                 let artworkTop = MusicCollectionSearchLayout.contentTopInset - scroll
                 precondition(abs(artworkTop - (11 + height) - 29) < 0.0001)
             }
             if scroll >= 7 { precondition(opacity == 0) }
         }
-        precondition(MusicCollectionSearchLayout.height(scroll: 38) == 0)
-        precondition(MusicCollectionSearchLayout.height(scroll: -20) == 38)
+        precondition(MusicCollectionSearchLayout.height(scroll: 44) == 0)
+        precondition(MusicCollectionSearchLayout.height(scroll: -20) == 44)
+        for fontSize in [17.0, 20, 23, 28, 34, 44, 53, 64] {
+            let expanded = MusicCollectionSearchLayout.expandedHeight(fontSize: fontSize)
+            precondition(expanded >= 44 && expanded >= fontSize * 1.3 + 16)
+            precondition(MusicCollectionSearchLayout.height(scroll: -20, expandedHeight: expanded) == expanded)
+            precondition(MusicCollectionSearchLayout.height(scroll: expanded, expandedHeight: expanded) == 0)
+        }
+        precondition(PressFeedbackPolicy.lyricInternalInset < 16, "Leave the existing clip gutter intact")
+        precondition(PressFeedbackPolicy.rowOpacity < 0.1 && PressFeedbackPolicy.lyricOpacity < 0.1)
+        precondition(PressFeedbackPolicy.animationDuration(isActive: true, reducesMotion: false) == 0)
+        precondition(PressFeedbackPolicy.animationDuration(isActive: false, reducesMotion: true) == 0)
+        precondition(PressFeedbackPolicy.animationDuration(isActive: false, reducesMotion: false) <= 0.2)
         print("Search collapse/gap and visible-by-default volume preference checks passed")
     }
 }

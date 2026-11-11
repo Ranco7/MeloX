@@ -1,6 +1,8 @@
 import Foundation
 import Observation
+#if canImport(UIKit)
 import UIKit
+#endif
 
 enum SongRecognitionPhase: Equatable {
     case ready
@@ -65,7 +67,8 @@ final class SongRecognitionStore {
     func start(
         api: NeteaseAPI,
         duration: SongRecognitionDuration,
-        source: SongRecognitionAudioSource
+        source: SongRecognitionAudioSource,
+        playbackAudio: PlaybackAudioCapture? = nil
     ) {
         guard !phase.isWorking else { return }
 
@@ -88,6 +91,7 @@ final class SongRecognitionStore {
                 api: api,
                 duration: duration,
                 source: source,
+                playbackAudio: playbackAudio,
                 generation: currentGeneration
             )
         }
@@ -121,6 +125,7 @@ final class SongRecognitionStore {
         api: NeteaseAPI,
         duration: SongRecognitionDuration,
         source: SongRecognitionAudioSource,
+        playbackAudio: PlaybackAudioCapture?,
         generation currentGeneration: Int
     ) async {
         defer {
@@ -132,7 +137,8 @@ final class SongRecognitionStore {
         do {
             try await recorder.start(
                 maximumDuration: duration.maximumDuration,
-                source: source
+                source: source,
+                playbackAudio: playbackAudio
             )
             defer {
                 if generation == currentGeneration { recorder.stop() }
@@ -155,10 +161,13 @@ final class SongRecognitionStore {
                 guard generation == currentGeneration else { return }
 
                 if source != .microphone {
-                    // Keep capture active in other apps; run the WebKit fingerprint runtime in the foreground.
+                    // WebKit's fingerprint runtime needs the foreground. Own-app
+                    // playback capture does not grant access to other apps.
+                    #if canImport(UIKit)
                     while UIApplication.shared.applicationState != .active {
                         try await Task.sleep(for: .milliseconds(500))
                     }
+                    #endif
                     try Task.checkCancellation()
                     if let latest = try recorder.snapshot() { snapshot = latest }
                 }

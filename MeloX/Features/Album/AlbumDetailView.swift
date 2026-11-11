@@ -20,8 +20,6 @@ struct AlbumDetailView: View {
     @State private var songs: [Song] = []
     @State private var phase: LoadingPhase = .loading
     @State private var reloadToken = 0
-    @State private var isSubscribed = false
-    @State private var isUpdatingSubscription = false
     @State private var operationError: String?
     @State private var artworkPalette: ArtworkDetailPalette?
     @State private var blurredBackdropImage: CGImage?
@@ -53,7 +51,7 @@ struct AlbumDetailView: View {
                 searchQuery: $searchQuery,
                 isLoading: isInitialLoading,
                 failureMessage: initialFailureMessage,
-                isSubscribed: isSubscribed,
+                isSubscribed: library.contains(album: displayedAlbum),
                 downloadCoordinator:
                     downloadsEnabled
                         ? downloadCoordinator
@@ -345,27 +343,7 @@ struct AlbumDetailView: View {
     }
 
     private func toggleSubscription() {
-        guard !isUpdatingSubscription else { return }
-        guard library.isLoggedIn else {
-            operationError = APIError.notLoggedIn.localizedDescription
-            return
-        }
-
-        let targetState = !isSubscribed
-        isSubscribed = targetState
-        isUpdatingSubscription = true
-        Task {
-            defer { isUpdatingSubscription = false }
-            do {
-                try await library.setAlbumSubscribed(
-                    displayedAlbum,
-                    isSubscribed: targetState
-                )
-            } catch {
-                isSubscribed.toggle()
-                operationError = error.localizedDescription
-            }
-        }
+        library.toggle(album: displayedAlbum)
     }
 
     private var currentSongID: Int? {
@@ -386,6 +364,7 @@ struct AlbumDetailView: View {
         defer { transitionDelay.cancel() }
 
         phase = .loading
+        let favoriteRead = library.favoriteRead()
         do {
             let (loadedAlbum, loadedSongs) = try await api.album(id: id)
             try await transitionDelay.value
@@ -393,10 +372,9 @@ struct AlbumDetailView: View {
             songs = loadedSongs
             phase = .loaded
 
-            isSubscribed = library.contains(album: loadedAlbum)
             if library.isLoggedIn,
                let loadedSubscription = try? await api.albumSubscriptionStatus(id: id) {
-                isSubscribed = loadedSubscription
+                library.acceptAlbumStatus(loadedAlbum, isSubscribed: loadedSubscription, read: favoriteRead)
             }
         } catch is CancellationError {
             return

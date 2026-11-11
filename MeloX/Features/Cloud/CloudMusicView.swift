@@ -147,7 +147,7 @@ struct CloudMusicView: View {
                 } label: {
                     TrackRowView(song: item.simpleSong, showsArtwork: true)
                 }
-                .buttonStyle(.automatic)
+                .buttonStyle(MusicTrackPressStyle())
                 .disabled(cloud.isDeleting(item))
                 .swipeActions(edge: .trailing) {
                     Button(role: .destructive) {

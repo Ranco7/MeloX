@@ -120,6 +120,7 @@ struct ContentView: View {
 
     private var mainExperience: some View {
         playerAwareTabView
+            .modifier(FavoriteFailureFeedback())
             .environment(
                 \.openMusicRoute,
                 OpenMusicRouteAction(action: openMusicRoute)
@@ -166,6 +167,7 @@ struct ContentView: View {
                             NeteaseShareSheet(presentation: presentation)
                         }
                         .presentationBackground(.clear)
+                        .modifier(FavoriteFailureFeedback())
                 }
             }
             .sheet(item: $neteaseSharePresentation) { presentation in

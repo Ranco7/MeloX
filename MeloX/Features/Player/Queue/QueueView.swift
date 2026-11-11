@@ -17,7 +17,7 @@ struct QueueView: View {
                     }
                 }
             }
-            .buttonStyle(.automatic)
+            .buttonStyle(MusicTrackPressStyle())
         }
         .listStyle(.plain)
         .navigationTitle("ui.player.up_next")

@@ -69,7 +69,7 @@ struct DailySongsView: View {
                         } label: {
                             TrackRowView(song: song, showsArtwork: true)
                         }
-                        .buttonStyle(.automatic)
+                        .buttonStyle(MusicTrackPressStyle())
                         .swipeActions(edge: .trailing) {
                             Button {
                                 library.toggle(song: song)

@@ -8,9 +8,7 @@ enum SongRecognitionAudioSource: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static var availableCases: [Self] {
-        #if canImport(ScreenCaptureKit)
-        if #available(iOS 27, *) { return allCases }
-        #endif
+        // Cross-app recording is not a supported source in the sideloadable app.
         return [.microphone, .appAudio]
     }
 
@@ -31,8 +29,10 @@ enum SongRecognitionAudioSource: String, CaseIterable, Identifiable {
     }
 
     var permissionMessage: String {
-        L10n.string(self == .microphone
-            ? "ui.recognition.microphone_permission_message"
-            : "ui.recognition.capture_permission_message")
+        switch self {
+        case .microphone: L10n.string("ui.recognition.microphone_permission_message")
+        case .appAudio: detail
+        case .systemAudio: L10n.string("ui.recognition.capture_permission_message")
+        }
     }
 }

@@ -305,6 +305,7 @@ print("Shared offset policy passed: release derivative and corner continuity")
             subprocess.run([
                 "swiftc", "-swift-version", "5",
                 str(ROOT / "MeloX/Shared/Media/MusicCollectionSearchLayout.swift"),
+                str(ROOT / "MeloX/Shared/Components/PressFeedbackPolicy.swift"),
                 str(ROOT / "MeloX/Shared/Media/MusicCollectionWidthPolicy.swift"),
                 str(ROOT / "MeloX/Core/Settings/Playback/PlayerVolumeControlMode.swift"),
                 str(ROOT / "Tests/Player/MusicCollectionSearchLayoutChecks.swift"),

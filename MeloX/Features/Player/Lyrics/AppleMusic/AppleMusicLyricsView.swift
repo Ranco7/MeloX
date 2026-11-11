@@ -626,7 +626,7 @@ struct AppleMusicLyricsView: View {
                             focusScaleAnimation: focusScaleAnimation
                         ),
                     interactionBackgroundOpacity:
-                        0.12 * interactionBackgroundProgress,
+                        PressFeedbackPolicy.lyricOpacity * interactionBackgroundProgress,
                     visualScale: lyricVisualScale(
                         isFocused: isVisualScaleFocusLine,
                         focusedScale: context.currentLineScale,

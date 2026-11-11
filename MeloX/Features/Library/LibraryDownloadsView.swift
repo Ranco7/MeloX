@@ -63,7 +63,7 @@ struct LibraryDownloadsView: View {
                 } label: {
                     TrackRowView(song: download.song, showsArtwork: true)
                 }
-                .buttonStyle(.automatic)
+                .buttonStyle(MusicTrackPressStyle())
                 .swipeActions {
                     Button(role: .destructive) {
                         downloads.remove(songID: download.id)

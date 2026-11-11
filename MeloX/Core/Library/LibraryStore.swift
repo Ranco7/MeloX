@@ -25,6 +25,7 @@ final class LibraryStore {
     private(set) var subscribedPodcastsLoadMoreError: String?
     private(set) var phase: LoadingPhase = .loaded
     private(set) var errorMessage: String?
+    private(set) var favoriteFailureID: UUID?
 
     @ObservationIgnored
     private let api: NeteaseAPI
@@ -44,7 +45,6 @@ final class LibraryStore {
     @ObservationIgnored
     private var favoriteSongIDs: [Int] = []
 
-    @ObservationIgnored
     private var favoriteSongIDSet: Set<Int> = []
 
     @ObservationIgnored
@@ -65,9 +65,20 @@ final class LibraryStore {
     @ObservationIgnored
     private var subscribedPodcastPageLoadID: UUID?
 
+    @ObservationIgnored
+    private let favoriteActions = OptimisticFavoriteActions<LibraryFavoriteKey>()
+
+    @ObservationIgnored
+    private var favoriteAccountCookie: String?
+
+    @ObservationIgnored
+    private var favoriteAccountGeneration = UUID()
+
     init(api: NeteaseAPI, settings: AppSettings) {
         self.api = api
         self.settings = settings
+        favoriteAccountCookie = settings.cookie
+        favoriteActions.onFailure = { [weak self] _ in self?.favoriteFailureID = UUID() }
     }
 
     var isLoggedIn: Bool {
@@ -107,29 +118,6 @@ final class LibraryStore {
         favoriteAlbums.contains { $0.id == album.id }
     }
 
-    func setArtistFollowed(_ artist: Artist, isFollowed: Bool) async throws {
-        guard isLoggedIn else { throw APIError.notLoggedIn }
-        try await api.setArtistFollowed(id: artist.id, isFollowed: isFollowed)
-        favoriteArtists.removeAll { $0.id == artist.id }
-        if isFollowed {
-            favoriteArtists.insert(artist, at: 0)
-        }
-        await persistContent()
-    }
-
-    func setAlbumSubscribed(
-        _ album: Album,
-        isSubscribed: Bool
-    ) async throws {
-        guard isLoggedIn else { throw APIError.notLoggedIn }
-        try await api.setAlbumSubscribed(id: album.id, isSubscribed: isSubscribed)
-        favoriteAlbums.removeAll { $0.id == album.id }
-        if isSubscribed {
-            favoriteAlbums.insert(album, at: 0)
-        }
-        await persistContent()
-    }
-
     func contains(podcast: Podcast) -> Bool {
         subscribedPodcasts.contains { $0.id == podcast.id }
     }
@@ -167,11 +155,13 @@ final class LibraryStore {
             clearAccountData()
             return
         }
+        synchronizeFavoriteAccount()
         guard refreshingCookie != cookie else { return }
         let isFresh = lastSuccessfulRefresh.map {
             Date().timeIntervalSince($0) < 300
         } ?? false
         guard force || loadedCookie != cookie || phase != .loaded || !isFresh else { return }
+        let favoriteReadRevision = favoriteActions.revision
         refreshingCookie = cookie
         defer {
             if refreshingCookie == cookie {
@@ -185,7 +175,9 @@ final class LibraryStore {
             if let snapshot: LibraryContentSnapshot = await api.pageContentCache.value(
                 for: LibraryContentSnapshot.cacheKey
             ) {
+                guard isCurrentRefresh(cookie) else { return }
                 restoreContent(snapshot)
+                reapplyFavoriteActions(readRevision: favoriteReadRevision) { _ in true }
             }
             guard isCurrentRefresh(cookie) else { return }
         }
@@ -224,6 +216,7 @@ final class LibraryStore {
                 // 同样在歌单页隐藏这一项，歌曲页单独展示其中的歌曲。
                 likedPlaylistID = loadedPlaylists.first?.id
                 favoritePlaylists = Array(loadedPlaylists.dropFirst())
+                reapplyFavoriteActions(readRevision: favoriteReadRevision) { if case .playlist = $0 { true } else { false } }
             } catch is CancellationError {
                 return
             } catch {
@@ -234,6 +227,7 @@ final class LibraryStore {
                 let albums = try await api.subscribedAlbums()
                 guard isCurrentRefresh(cookie) else { return }
                 favoriteAlbums = albums
+                reapplyFavoriteActions(readRevision: favoriteReadRevision) { if case .album = $0 { true } else { false } }
             } catch is CancellationError {
                 return
             } catch {
@@ -246,6 +240,7 @@ final class LibraryStore {
                 let artists = try await api.subscribedArtists()
                 guard isCurrentRefresh(cookie) else { return }
                 favoriteArtists = artists
+                reapplyFavoriteActions(readRevision: favoriteReadRevision) { if case .artist = $0 { true } else { false } }
             } catch is CancellationError {
                 return
             } catch {
@@ -270,6 +265,7 @@ final class LibraryStore {
                     subscribedPodcastsNextOffset = page.podcasts.count
                     hasMoreSubscribedPodcasts = page.hasMore
                     subscribedPodcastsLoadMoreError = nil
+                    reapplyFavoriteActions(readRevision: favoriteReadRevision) { if case .podcast = $0 { true } else { false } }
                 } catch is CancellationError {
                     return
                 } catch {
@@ -299,6 +295,7 @@ final class LibraryStore {
                 favoriteSongs = firstPage.songs
                 favoriteSongsNextOffset = firstPage.nextOffset
                 favoriteSongsLoadMoreError = nil
+                reapplyFavoriteActions(readRevision: favoriteReadRevision) { if case .song = $0 { true } else { false } }
             } catch is CancellationError {
                 return
             } catch {
@@ -501,6 +498,8 @@ final class LibraryStore {
     private func loadSubscribedPodcastPage(
         offset requestedOffset: Int
     ) async {
+        let favoriteReadRevision = favoriteActions.revision
+        let accountRead = favoriteRead()
         isLoadingMoreSubscribedPodcasts = true
         subscribedPodcastsLoadMoreError = nil
         defer { isLoadingMoreSubscribedPodcasts = false }
@@ -511,7 +510,7 @@ final class LibraryStore {
                 limit: subscribedPodcastPageSize
             )
             try Task.checkCancellation()
-            guard subscribedPodcastsNextOffset == requestedOffset else {
+            guard isCurrentFavoriteRead(accountRead), subscribedPodcastsNextOffset == requestedOffset else {
                 return
             }
 
@@ -531,6 +530,7 @@ final class LibraryStore {
             )
             hasMoreSubscribedPodcasts =
                 page.hasMore && !page.podcasts.isEmpty
+            reapplyFavoriteActions(readRevision: favoriteReadRevision) { if case .podcast = $0 { true } else { false } }
             await persistContent()
         } catch is CancellationError {
             return
@@ -540,120 +540,161 @@ final class LibraryStore {
         }
     }
 
+    func favoriteRead() -> LibraryFavoriteRead {
+        synchronizeFavoriteAccount()
+        return LibraryFavoriteRead(cookie: settings.cookie, revision: favoriteActions.revision,
+                            accountGeneration: favoriteAccountGeneration)
+    }
+
+    func acceptAlbumStatus(_ album: Album, isSubscribed: Bool, read: LibraryFavoriteRead) {
+        guard isCurrentFavoriteRead(read) else { return }
+        let value = favoriteActions.resolvedValue(for: .album(album.id), remoteValue: isSubscribed, readRevision: read.revision)
+        setLocalAlbum(album, isSubscribed: value)
+    }
+
+    func acceptArtistStatus(_ artist: Artist, read: LibraryFavoriteRead) {
+        guard isCurrentFavoriteRead(read) else { return }
+        // Artist details may omit `followed`; the decoder defaults it to false.
+        // Preserve membership known from the subscription list in that case.
+        let value = favoriteActions.resolvedValue(for: .artist(artist.id), remoteValue: artist.isFollowed || contains(artist: artist), readRevision: read.revision)
+        setLocalArtist(artist, isFollowed: value)
+    }
+
+    func acceptPodcastStatus(_ podcast: Podcast, read: LibraryFavoriteRead) {
+        guard isCurrentFavoriteRead(read) else { return }
+        let value = favoriteActions.resolvedValue(for: .podcast(podcast.id), remoteValue: podcast.isSubscribed, readRevision: read.revision)
+        setLocalPodcast(podcast, isSubscribed: value, updatesTotalCount: false)
+    }
+
     func toggle(song: Song) {
-        guard isLoggedIn else {
-            errorMessage = APIError.notLoggedIn.localizedDescription
-            return
-        }
-
+        guard prepareFavoriteAction() else { return }
         let cookie = settings.cookie
+        let generation = favoriteAccountGeneration
         let likedPlaylist = likedPlaylistID
-        let wasLiked = contains(song: song)
-        setLocalSong(song, isLiked: !wasLiked)
-
-        Task { @MainActor [weak self] in
-            guard let self, cookie == self.settings.cookie else { return }
-            do {
-                try await self.api.setSongLiked(id: song.id, isLiked: !wasLiked)
-                if let id = likedPlaylist {
-                    await self.refreshPlaylistAfterMutation(id: id, cookie: cookie)
-                }
-            } catch {
-                guard cookie == self.settings.cookie else { return }
-                self.setLocalSong(song, isLiked: wasLiked)
-                self.errorMessage = error.localizedDescription
+        favoriteActions.toggle(.song(song.id), currentValue: contains(song: song)) { [weak self] value in
+            guard let self, isCurrentFavoriteAccount(cookie, generation: generation) else { return }
+            setLocalSong(song, isLiked: value)
+        } write: { [weak self] value in
+            guard let self, isCurrentFavoriteAccount(cookie, generation: generation) else { throw CancellationError() }
+            try await api.setSongLiked(id: song.id, isLiked: value)
+            if let id = likedPlaylist, isCurrentFavoriteAccount(cookie, generation: generation) {
+                await self.refreshPlaylistAfterMutation(id: id, cookie: cookie)
             }
         }
     }
 
     func toggle(playlist: Playlist) {
-        guard isLoggedIn else {
-            errorMessage = APIError.notLoggedIn.localizedDescription
-            return
-        }
-
+        guard prepareFavoriteAction(), canToggleSaved(playlist) else { return }
         let cookie = settings.cookie
-        let wasSubscribed = contains(playlist: playlist)
-        guard !wasSubscribed || canUnsubscribe(playlist) else { return }
-        if wasSubscribed {
-            favoritePlaylists.removeAll { $0.id == playlist.id }
-        } else {
-            var summary = playlist
-            summary.tracks = []
-            favoritePlaylists.insert(summary, at: 0)
+        let generation = favoriteAccountGeneration
+        favoriteActions.toggle(.playlist(playlist.id), currentValue: contains(playlist: playlist)) { [weak self] value in
+            guard let self, isCurrentFavoriteAccount(cookie, generation: generation) else { return }
+            setLocalPlaylist(playlist, isSubscribed: value)
+        } write: { [weak self] value in
+            guard let self, isCurrentFavoriteAccount(cookie, generation: generation) else { throw CancellationError() }
+            try await api.setPlaylistSubscribed(id: playlist.id, isSubscribed: value)
         }
+    }
 
-        Task { @MainActor [weak self] in
-            guard let self, cookie == self.settings.cookie else { return }
-            do {
-                try await self.api.setPlaylistSubscribed(
-                    id: playlist.id,
-                    isSubscribed: !wasSubscribed
-                )
-            } catch {
-                guard cookie == self.settings.cookie else { return }
-                if wasSubscribed {
-                    self.favoritePlaylists.insert(playlist, at: 0)
-                } else {
-                    self.favoritePlaylists.removeAll { $0.id == playlist.id }
-                }
-                self.errorMessage = error.localizedDescription
-            }
-            guard cookie == self.settings.cookie else { return }
-            await self.persistContent()
+    func toggle(album: Album) {
+        guard prepareFavoriteAction() else { return }
+        let cookie = settings.cookie
+        let generation = favoriteAccountGeneration
+        favoriteActions.toggle(.album(album.id), currentValue: contains(album: album)) { [weak self] value in
+            guard let self, isCurrentFavoriteAccount(cookie, generation: generation) else { return }
+            setLocalAlbum(album, isSubscribed: value)
+        } write: { [weak self] value in
+            guard let self, isCurrentFavoriteAccount(cookie, generation: generation) else { throw CancellationError() }
+            try await api.setAlbumSubscribed(id: album.id, isSubscribed: value)
+        }
+    }
+
+    func toggle(artist: Artist) {
+        guard prepareFavoriteAction() else { return }
+        let cookie = settings.cookie
+        let generation = favoriteAccountGeneration
+        favoriteActions.toggle(.artist(artist.id), currentValue: contains(artist: artist)) { [weak self] value in
+            guard let self, isCurrentFavoriteAccount(cookie, generation: generation) else { return }
+            setLocalArtist(artist, isFollowed: value)
+        } write: { [weak self] value in
+            guard let self, isCurrentFavoriteAccount(cookie, generation: generation) else { throw CancellationError() }
+            try await api.setArtistFollowed(id: artist.id, isFollowed: value)
         }
     }
 
     func toggle(podcast: Podcast) {
-        guard isLoggedIn else {
-            errorMessage = APIError.notLoggedIn.localizedDescription
-            return
-        }
-
+        guard prepareFavoriteAction() else { return }
         let cookie = settings.cookie
-        let desiredState = !contains(podcast: podcast)
-        Task { @MainActor [weak self] in
-            guard let self, cookie == self.settings.cookie else { return }
-            do {
-                try await self.setPodcastSubscribed(
-                    podcast,
-                    isSubscribed: desiredState
-                )
-            } catch is CancellationError {
-                return
-            } catch {
-                guard cookie == self.settings.cookie else { return }
-                self.errorMessage = error.localizedDescription
-            }
+        let generation = favoriteAccountGeneration
+        favoriteActions.toggle(.podcast(podcast.id), currentValue: contains(podcast: podcast)) { [weak self] value in
+            guard let self, isCurrentFavoriteAccount(cookie, generation: generation) else { return }
+            setLocalPodcast(podcast, isSubscribed: value)
+        } write: { [weak self] value in
+            guard let self, isCurrentFavoriteAccount(cookie, generation: generation) else { throw CancellationError() }
+            try await api.setPodcastSubscribed(id: podcast.id, isSubscribed: value)
         }
     }
 
-    func setPodcastSubscribed(
-        _ podcast: Podcast,
-        isSubscribed: Bool
-    ) async throws {
-        guard isLoggedIn else { throw APIError.notLoggedIn }
+    private func prepareFavoriteAction() -> Bool {
+        guard isLoggedIn else {
+            errorMessage = APIError.notLoggedIn.localizedDescription
+            return false
+        }
+        synchronizeFavoriteAccount()
+        return true
+    }
 
-        let cookie = settings.cookie
-        let previousPodcasts = subscribedPodcasts
-        let previousTotalCount = subscribedPodcastTotalCount
-        let previousNextOffset = subscribedPodcastsNextOffset
-        let previousHasMore = hasMoreSubscribedPodcasts
-        setLocalPodcast(podcast, isSubscribed: isSubscribed)
+    private func synchronizeFavoriteAccount() {
+        guard favoriteAccountCookie != settings.cookie else { return }
+        favoriteActions.reset()
+        favoriteFailureID = nil
+        favoriteAccountGeneration = UUID()
+        favoriteAccountCookie = settings.cookie
+        clearRemoteContent()
+    }
 
-        do {
-            try await api.setPodcastSubscribed(
-                id: podcast.id,
-                isSubscribed: isSubscribed
-            )
-        } catch {
-            guard cookie == settings.cookie else { return }
-            subscribedPodcasts = previousPodcasts
-            subscribedPodcastTotalCount = previousTotalCount
-            subscribedPodcastsNextOffset = previousNextOffset
-            hasMoreSubscribedPodcasts = previousHasMore
-            await persistContent()
-            throw error
+    private func isCurrentFavoriteAccount(_ cookie: String, generation: UUID) -> Bool {
+        cookie == settings.cookie && generation == favoriteAccountGeneration
+    }
+
+    private func isCurrentFavoriteRead(_ read: LibraryFavoriteRead) -> Bool {
+        isCurrentFavoriteAccount(read.cookie, generation: read.accountGeneration)
+    }
+
+    private func setLocalPlaylist(_ playlist: Playlist, isSubscribed: Bool) {
+        guard contains(playlist: playlist) != isSubscribed else { return }
+        favoritePlaylists.removeAll { $0.id == playlist.id }
+        if isSubscribed {
+            var summary = playlist
+            summary.tracks = []
+            favoritePlaylists.insert(summary, at: 0)
+        }
+        persistContentInBackground()
+    }
+
+    private func setLocalAlbum(_ album: Album, isSubscribed: Bool) {
+        guard contains(album: album) != isSubscribed else { return }
+        favoriteAlbums.removeAll { $0.id == album.id }
+        if isSubscribed { favoriteAlbums.insert(album, at: 0) }
+        persistContentInBackground()
+    }
+
+    private func setLocalArtist(_ artist: Artist, isFollowed: Bool) {
+        guard contains(artist: artist) != isFollowed else { return }
+        favoriteArtists.removeAll { $0.id == artist.id }
+        if isFollowed { favoriteArtists.insert(artist, at: 0) }
+        persistContentInBackground()
+    }
+
+    private func reapplyFavoriteActions(readRevision: UInt64, includes: (LibraryFavoriteKey) -> Bool) {
+        favoriteActions.reapply(where: includes, readRevision: readRevision) { key in
+            switch key {
+            case .song(let id): favoriteSongIDSet.contains(id)
+            case .playlist(let id): favoritePlaylists.contains { $0.id == id }
+            case .album(let id): favoriteAlbums.contains { $0.id == id }
+            case .artist(let id): favoriteArtists.contains { $0.id == id }
+            case .podcast(let id): subscribedPodcasts.contains { $0.id == id }
+            }
         }
     }
 
@@ -748,6 +789,10 @@ final class LibraryStore {
     }
 
     func clearAccountData() {
+        favoriteActions.reset()
+        favoriteFailureID = nil
+        favoriteAccountGeneration = UUID()
+        favoriteAccountCookie = settings.cookie
         if let cookie = loadedCookie {
             let cache = api.pageContentCache
             Task { await cache.removeAccount(cookie: cookie) }
@@ -756,6 +801,10 @@ final class LibraryStore {
         clearRemoteContent()
         phase = .loaded
         errorMessage = nil
+    }
+
+    func dismissFavoriteFailure(_ id: UUID) {
+        if favoriteFailureID == id { favoriteFailureID = nil }
     }
 
     func clearError() {
@@ -797,6 +846,7 @@ final class LibraryStore {
         _ song: Song,
         isLiked: Bool
     ) {
+        guard contains(song: song) != isLiked else { return }
         if let index = favoriteSongIDs.firstIndex(of: song.id) {
             favoriteSongIDs.remove(at: index)
             if index < favoriteSongsNextOffset {
@@ -818,10 +868,11 @@ final class LibraryStore {
 
     private func setLocalPodcast(
         _ podcast: Podcast,
-        isSubscribed: Bool
+        isSubscribed: Bool,
+        updatesTotalCount: Bool = true
     ) {
-        let wasSubscribed =
-            contains(podcast: podcast) || podcast.isSubscribed
+        let wasSubscribed = contains(podcast: podcast)
+        guard wasSubscribed != isSubscribed else { return }
         subscribedPodcasts.removeAll { $0.id == podcast.id }
 
         if isSubscribed {
@@ -830,14 +881,14 @@ final class LibraryStore {
             subscribedPodcasts.insert(summary, at: 0)
         }
 
-        if wasSubscribed != isSubscribed {
+        if updatesTotalCount {
             subscribedPodcastTotalCount += isSubscribed ? 1 : -1
         }
         subscribedPodcastTotalCount = max(
             subscribedPodcastTotalCount,
             subscribedPodcasts.count
         )
-        subscribedPodcastsNextOffset = subscribedPodcasts.count
+        if updatesTotalCount { subscribedPodcastsNextOffset = subscribedPodcasts.count }
         hasMoreSubscribedPodcasts =
             subscribedPodcastsNextOffset < subscribedPodcastTotalCount
         persistContentInBackground()

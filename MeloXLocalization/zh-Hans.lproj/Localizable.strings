@@ -915,15 +915,15 @@
 "ui.recognition.source.appAudio" = "应用内音频";
 "ui.recognition.source.systemAudio" = "本机内录";
 "ui.recognition.source.microphone.detail" = "通过麦克风识别身边或外放的音乐。";
-"ui.recognition.source.appAudio.detail" = "识别 MeloX 正在播放的声音，支持耳机播放。";
-"ui.recognition.source.systemAudio.detail" = "在系统面板中选择录制范围，切换到其他 App 播放音乐后，返回 MeloX 查看识别结果。";
-"ui.recognition.system_audio_availability" = "跨 App 的本机内录需要 iOS 27 或更新版本；当前系统支持应用内音频。";
-"ui.recognition.preparing_capture" = "正在准备音频录制";
-"ui.recognition.capture_permission_message" = "请在系统面板中确认录制范围。MeloX 仅处理音频，并只上传在设备上生成的音频指纹。";
+"ui.recognition.source.appAudio.detail" = "识别 MeloX 正在播放的音乐，支持耳机播放；无法读取其他 App 的声音。";
+"ui.recognition.source.systemAudio.detail" = "当前版本不支持捕获其他 App 的音频。";
+"ui.recognition.system_audio_availability" = "应用内音频仅识别 MeloX 自己播放的音乐，不需要系统录屏授权。";
+"ui.recognition.preparing_capture" = "正在连接播放音频";
+"ui.recognition.capture_permission_message" = "当前版本不支持跨 App 内录，请选择应用内音频或麦克风。";
 "ui.recognition.capture.continuous" = "持续识别直到手动停止，只上传设备端生成的音频指纹。";
 "ui.recognition.capture.limited" = "最长识别 %@，只上传设备端生成的音频指纹。";
-"ui.recognition.error.capture_unavailable" = "音频录制不可用，请结束其他录制任务并检查系统录制限制后重试。";
-"ui.recognition.error.capture_timed_out" = "没有收到音频，请确认所选录制范围内正在播放音乐。部分内容可能限制录制。";
+"ui.recognition.error.capture_unavailable" = "暂时无法连接播放音频，请停止其他识别任务后重试。";
+"ui.recognition.error.capture_timed_out" = "没有收到播放音频，请在 MeloX 中播放音乐后重试。暂停或缓冲时无法采样。";
 "ui.account.settings_for_user" = "%@的账号与设置";
 "ui.account.settings" = "账号与设置";
 "ui.account.login_settings" = "登录与设置";
@@ -2163,3 +2163,5 @@
 "ui.playlists.add_gateway_uncertain" = "网易云暂时无法确认歌曲是否已添加（502）。请先刷新歌单确认；若未生效，稍后重试。私密歌单也可先在网易云 App 中检查状态。";
 "ui.playlists.remove_gateway_uncertain" = "网易云暂时无法确认歌曲是否已移除（502）。请先刷新歌单确认；若未生效，稍后重试。";
 "ui.playlists.removed_refresh_failed" = "歌曲已移除，但歌单封面刷新失败，请下拉刷新。";
+
+"ui.library.favorite_sync_failed" = "收藏未能同步，已恢复原状态";

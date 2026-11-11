@@ -52,7 +52,7 @@ struct LibrarySongsView: View {
                     } label: {
                         TrackRowView(song: song, showsArtwork: true)
                     }
-                    .buttonStyle(.automatic)
+                    .buttonStyle(MusicTrackPressStyle())
                     .id(song.id)
                     .listRowInsets(
                         EdgeInsets(

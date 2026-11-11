@@ -16,8 +16,6 @@ struct PodcastDetailView: View {
     @State private var hasMorePrograms = false
     @State private var isLoadingMore = false
     @State private var loadMoreError: String?
-    @State private var isSubscribing = false
-    @State private var subscriptionError: String?
     @State private var reloadToken = 0
     @State private var searchQuery = ""
     @State private var artworkPalette: ArtworkDetailPalette?
@@ -41,7 +39,7 @@ struct PodcastDetailView: View {
 
     var body: some View {
         PodcastDetailContent(
-            podcast: podcast,
+            podcast: displayedPodcast,
             programs: programs,
             totalProgramCount: totalProgramCount,
             searchQuery: searchQuery,
@@ -52,7 +50,7 @@ struct PodcastDetailView: View {
             hasMorePrograms: hasMorePrograms,
             isLoadingMorePrograms: isLoadingMore,
             loadMoreProgramsError: loadMoreError,
-            isSubscribing: isSubscribing,
+            isSubscribing: false,
             onPlay: playFirstProgram,
             onToggleSubscription: toggleSubscription,
             onPlayProgram: play,
@@ -127,23 +125,6 @@ struct PodcastDetailView: View {
                     loadedAssets.blurredBackdropImage
             }
         }
-        .alert(
-            "ui.podcasts.subscription_failed",
-            isPresented: Binding(
-                get: { subscriptionError != nil },
-                set: {
-                    if !$0 {
-                        subscriptionError = nil
-                    }
-                }
-            )
-        ) {
-            Button("ui.common.ok", role: .cancel) {
-                subscriptionError = nil
-            }
-        } message: {
-            Text(subscriptionError ?? L10n.string("ui.error.try_again_later"))
-        }
     }
 
     private var artworkURL: URL? {
@@ -215,32 +196,19 @@ struct PodcastDetailView: View {
         }
     }
 
-    private func toggleSubscription() {
-        guard library.isLoggedIn else {
-            subscriptionError = L10n.string("ui.podcasts.login_to_subscribe")
-            return
-        }
-        guard !isSubscribing else { return }
+    private var displayedPodcast: Podcast {
+        var summary = podcast
+        summary.isSubscribed = library.contains(podcast: podcast)
+        return summary
+    }
 
-        let desiredState = !podcast.isSubscribed
-        isSubscribing = true
-        Task {
-            defer { isSubscribing = false }
-            do {
-                try await library.setPodcastSubscribed(
-                    podcast,
-                    isSubscribed: desiredState
-                )
-                podcast.isSubscribed = desiredState
-            } catch is CancellationError {
-                return
-            } catch {
-                subscriptionError = error.localizedDescription
-            }
-        }
+    private func toggleSubscription() {
+        library.toggle(podcast: podcast)
     }
 
     private func load(reset: Bool) async {
+        let favoriteRead = library.favoriteRead()
+        if podcast.isSubscribed { library.acceptPodcastStatus(podcast, read: favoriteRead) }
         if reset {
             phase = .loading
             loadMoreError = nil
@@ -261,6 +229,7 @@ struct PodcastDetailView: View {
 
             if let refreshedPodcast {
                 podcast = refreshedPodcast
+                library.acceptPodcastStatus(refreshedPodcast, read: favoriteRead)
             }
             if reset {
                 programs = page.programs
@@ -275,6 +244,7 @@ struct PodcastDetailView: View {
         } catch {
             if let refreshedPodcast = await loadedPodcast {
                 podcast = refreshedPodcast
+                library.acceptPodcastStatus(refreshedPodcast, read: favoriteRead)
             }
             if reset {
                 phase = .failed(error.localizedDescription)

@@ -8,9 +8,6 @@ struct ArtistDetailView: View {
     @Environment(LibraryStore.self) private var library
 
     @State private var artist: Artist?
-    @State private var isFollowed = false
-    @State private var isChangingFollowState = false
-    @State private var followError: String?
     @State private var songs: [Song] = []
     @State private var albums: [Album] = []
     @State private var phase: LoadingPhase = .loading
@@ -31,12 +28,6 @@ struct ArtistDetailView: View {
                 }
             }
         }
-        .alert("ui.desktop.artist.follow_failed", isPresented: Binding(
-            get: { followError != nil },
-            set: { if !$0 { followError = nil } }
-        )) {
-            Button("ui.common.ok", role: .cancel) { followError = nil }
-        } message: { Text(followError ?? "") }
         .navigationTitle(artist?.name ?? L10n.string("ui.common.artist"))
         .navigationBarTitleDisplayMode(.inline)
         .task(id: reloadToken) {
@@ -72,13 +63,13 @@ struct ArtistDetailView: View {
                     .disabled(songs.isEmpty)
 
                     Button(
-                        isFollowed ? L10n.string("ui.desktop.artist.following") : L10n.string("ui.desktop.artist.follow"),
-                        systemImage: isFollowed ? "checkmark" : "plus"
+                        library.contains(artist: artist) ? L10n.string("ui.desktop.artist.following") : L10n.string("ui.desktop.artist.follow"),
+                        systemImage: library.contains(artist: artist) ? "checkmark" : "plus"
                     ) {
-                        Task { await toggleFollow(artist) }
+                        library.toggle(artist: artist)
                     }
                     .buttonStyle(.bordered)
-                    .disabled(isChangingFollowState || !library.isLoggedIn)
+                    .disabled(!library.isLoggedIn)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 8)
@@ -93,7 +84,7 @@ struct ArtistDetailView: View {
                     } label: {
                         TrackRowView(song: song, index: index)
                     }
-                    .buttonStyle(.automatic)
+                    .buttonStyle(MusicTrackPressStyle())
                     .swipeActions(edge: .trailing) {
                         Button {
                             library.toggle(song: song)
@@ -132,26 +123,13 @@ struct ArtistDetailView: View {
         .listStyle(.insetGrouped)
     }
 
-    private func toggleFollow(_ artist: Artist) async {
-        guard !isChangingFollowState else { return }
-        let previous = isFollowed
-        isFollowed.toggle()
-        isChangingFollowState = true
-        defer { isChangingFollowState = false }
-        do {
-            try await library.setArtistFollowed(artist, isFollowed: isFollowed)
-        } catch {
-            isFollowed = previous
-            followError = error.localizedDescription
-        }
-    }
-
     private func load() async {
         phase = .loading
+        let favoriteRead = library.favoriteRead()
         do {
             (artist, songs, albums) = try await api.artist(id: id)
             if let artist {
-                isFollowed = artist.isFollowed || library.contains(artist: artist)
+                library.acceptArtistStatus(artist, read: favoriteRead)
             }
             phase = .loaded
         } catch is CancellationError {

@@ -73,59 +73,39 @@ struct SongRecognitionView: View {
     }
 
     private var readyView: some View {
-        ContentUnavailableView {
-            Label("ui.recognition.title", systemImage: "waveform")
-        } description: {
-            Text(readyDescription)
-        } actions: {
-            FilterPicker(
-                title: "ui.recognition.source",
-                selection: audioSourceBinding,
-                maximumWidth: 360
-            ) {
-                ForEach(SongRecognitionAudioSource.availableCases) { source in
-                    Text(source.title).tag(source)
+        stateContent {
+            messageHeader(title: L10n.string("ui.recognition.title"), symbol: "waveform", description: readyDescription)
+            VStack(spacing: 12) {
+                FilterPicker(title: "ui.recognition.source", selection: audioSourceBinding,
+                             maximumWidth: 360, usesMenu: true) {
+                    ForEach(SongRecognitionAudioSource.availableCases) { source in
+                        Text(source.title).tag(source)
+                    }
                 }
+                Button("ui.recognition.start", systemImage: settings.songRecognition.audioSource.systemImage,
+                       action: startRecognition)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
             }
-            .padding(.bottom, 8)
-
-            Button(
-                "ui.recognition.start",
-                systemImage: settings.songRecognition.audioSource.systemImage,
-                action: startRecognition
-            )
-            .buttonStyle(.borderedProminent)
         }
     }
 
     private var listeningView: some View {
-        VStack(spacing: 22) {
-            Spacer()
-
+        stateContent {
             listeningSymbol
-
             VStack(spacing: 8) {
                 Text("ui.recognition.listening")
-                    .font(.title2.bold())
-                Text(
-                    recognition.audioSource == .microphone ? L10n.format(
-                        "ui.recognition.listening_message",
-                        settings.songRecognition.duration.title
-                    ) : recognition.audioSource.detail
-                )
-                    .font(.subheadline)
+                    .font(.title2.weight(.semibold))
+                Text(recognition.audioSource == .microphone
+                     ? L10n.format("ui.recognition.listening_message", settings.songRecognition.duration.title)
+                     : recognition.audioSource.detail)
+                    .font(.body)
                     .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
             }
-
-            Button("ui.common.cancel", role: .cancel) {
-                recognition.cancel()
-            }
-            .buttonStyle(.bordered)
-
-            Spacer()
+            Button("ui.common.cancel", role: .cancel) { recognition.cancel() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
         }
-        .padding()
     }
 
     private var continuousListeningView: some View {
@@ -134,9 +114,9 @@ struct SongRecognitionView: View {
                 VStack(spacing: 16) {
                     listeningSymbol
 
-                    VStack(spacing: 6) {
+                    VStack(spacing: 8) {
                         Text("ui.recognition.continuous")
-                            .font(.title3.bold())
+                            .font(.headline)
                         Text("ui.recognition.continuous_message")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -147,6 +127,7 @@ struct SongRecognitionView: View {
                         recognition.stopContinuousRecognition()
                     }
                     .buttonStyle(.bordered)
+                    .controlSize(.large)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
@@ -177,7 +158,7 @@ struct SongRecognitionView: View {
 
     private var listeningSymbol: some View {
         Image(systemName: "waveform")
-            .font(.system(size: 64, weight: .medium))
+            .font(.system(size: 48, weight: .medium))
             .foregroundStyle(.tint)
             .symbolEffect(
                 .variableColor.iterative,
@@ -198,7 +179,7 @@ struct SongRecognitionView: View {
                 showsArtwork: true
             )
         }
-        .buttonStyle(.automatic)
+        .buttonStyle(MusicTrackPressStyle())
         .swipeActions(edge: .trailing) {
             Button {
                 library.toggle(song: result.song)
@@ -219,82 +200,71 @@ struct SongRecognitionView: View {
     }
 
     private var noMatchView: some View {
-        ContentUnavailableView {
-            Label(
-                "ui.recognition.no_match",
-                systemImage: "questionmark.circle"
-            )
-        } description: {
-            Text("ui.recognition.no_match_message")
-        } actions: {
-            Button(
-                "ui.recognition.try_again",
-                systemImage: "arrow.clockwise",
-                action: startRecognition
-            )
-            .buttonStyle(.borderedProminent)
-        }
-    }
-
-    private func failureView(
-        _ failure: SongRecognitionFailure
-    ) -> some View {
-        ContentUnavailableView {
-            Label(
-                "ui.recognition.failed",
-                systemImage: "exclamationmark.triangle"
-            )
-        } description: {
-            Text(failure.message)
-        } actions: {
-            if failure.opensSystemSettings,
-               let settingsURL = URL(
-                   string: UIApplication.openSettingsURLString
-               ) {
-                Button("ui.common.open_system_settings", systemImage: "gear") {
-                    openURL(settingsURL)
-                }
+        stateContent {
+            messageHeader(title: L10n.string("ui.recognition.no_match"), symbol: "questionmark.circle",
+                          description: L10n.string("ui.recognition.no_match_message"))
+            Button("ui.recognition.try_again", systemImage: "arrow.clockwise", action: startRecognition)
                 .buttonStyle(.borderedProminent)
-
-                Button(
-                    "ui.common.retry",
-                    systemImage: "arrow.clockwise",
-                    action: startRecognition
-                )
-                .buttonStyle(.bordered)
-            } else {
-                Button(
-                    "ui.common.retry",
-                    systemImage: "arrow.clockwise",
-                    action: startRecognition
-                )
-                .buttonStyle(.borderedProminent)
-            }
-        }
-    }
-
-    private func progressView(
-        title: String,
-        description: String
-    ) -> some View {
-        VStack(spacing: 16) {
-            ProgressView()
                 .controlSize(.large)
-            Text(title)
-                .font(.headline)
-            Text(description)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-
-            Button("ui.common.cancel", role: .cancel) {
-                recognition.cancel()
-            }
-            .buttonStyle(.bordered)
-            .padding(.top, 4)
         }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func failureView(_ failure: SongRecognitionFailure) -> some View {
+        stateContent {
+            messageHeader(title: L10n.string("ui.recognition.failed"), symbol: "exclamationmark.triangle",
+                          description: failure.message)
+            VStack(spacing: 12) {
+                if failure.opensSystemSettings,
+                   let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                    Button("ui.common.open_system_settings", systemImage: "gear") { openURL(settingsURL) }
+                        .buttonStyle(.borderedProminent)
+                    Button("ui.common.retry", systemImage: "arrow.clockwise", action: startRecognition)
+                        .buttonStyle(.bordered)
+                } else {
+                    Button("ui.common.retry", systemImage: "arrow.clockwise", action: startRecognition)
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+            .controlSize(.large)
+        }
+    }
+
+    private func progressView(title: String, description: String) -> some View {
+        stateContent {
+            ProgressView().controlSize(.large)
+            VStack(spacing: 8) {
+                Text(title).font(.headline)
+                Text(description).font(.body).foregroundStyle(.secondary)
+            }
+            Button("ui.common.cancel", role: .cancel) { recognition.cancel() }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+        }
+    }
+
+    private func messageHeader(title: String, symbol: String, description: String) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: symbol)
+                .font(.system(size: 48, weight: .medium))
+                .foregroundStyle(.tint)
+                .accessibilityHidden(true)
+            VStack(spacing: 8) {
+                Text(title).font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
+                Text(description).font(.body).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func stateContent<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        ScrollView {
+            VStack(spacing: 24, content: content)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 480)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 24)
+        }
+        .defaultScrollAnchor(.center, for: .alignment)
     }
 
     private var showsRestartButton: Bool {
@@ -348,7 +318,8 @@ struct SongRecognitionView: View {
         recognition.start(
             api: api,
             duration: settings.songRecognition.duration,
-            source: settings.songRecognition.audioSource
+            source: settings.songRecognition.audioSource,
+            playbackAudio: player.playbackAudioCapture
         )
     }
 }

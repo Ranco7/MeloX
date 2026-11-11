@@ -37,10 +37,10 @@ class PlaylistPolishTests(unittest.TestCase):
         self.assertNotIn("Task.sleep", source)
     def test_scrollview_row_pressed_style(self):
         self.assertIn(".buttonStyle(MusicTrackPressStyle())", read("MeloX/Features/Playlist/PlaylistTrackList.swift"))
-        self.assertIn("configuration.isPressed", read("MeloX/Shared/Media/MediaCardGridLayout.swift"))
-    def test_list_song_buttons_use_native_style(self):
+        self.assertIn("configuration.isPressed", read("MeloX/Shared/Components/SoftPressFeedback.swift"))
+    def test_list_song_buttons_share_soft_press_style(self):
         for name in ["Library/LibrarySongsView", "Library/LibraryHistoryView", "Search/SearchView", "Cloud/CloudMusicView", "Home/DailySongsView", "Player/Queue/QueueView"]:
-            self.assertIn(".buttonStyle(.automatic)", read("MeloX/Features/" + name + ".swift"))
+            self.assertIn(".buttonStyle(MusicTrackPressStyle())", read("MeloX/Features/" + name + ".swift"))
     def test_cache_deletion_is_key_and_account_scoped(self):
         self.assertIn("DELETE FROM pageContent WHERE scope = ? AND cacheKey = ?", read("MeloX/Core/Storage/PageContentCache.swift"))
 if __name__ == "__main__": unittest.main()

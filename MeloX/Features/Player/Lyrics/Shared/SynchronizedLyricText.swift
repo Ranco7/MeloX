@@ -53,8 +53,6 @@ enum SynchronizedLyricTextAlignment: Equatable {
 struct SynchronizedLyricText: View {
     static let interactionBackgroundVisualOverflow: CGFloat = 16
 
-    private static let interactionBackgroundCornerRadius: CGFloat = 16
-
     @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.effectiveLyricsRefreshRate) private var effectiveLyricsRefreshRate
@@ -302,28 +300,14 @@ struct SynchronizedLyricText: View {
             alignment: alignment.frameAlignment
         )
         .background(alignment: .topLeading) {
-            if interactionBackgroundOpacity > 0 {
-                RoundedRectangle(
-                    cornerRadius:
-                        Self.interactionBackgroundCornerRadius
-                            / effectiveVisualScale,
-                    style: .continuous
-                )
-                .fill(
-                    .white.opacity(
-                        min(
-                            max(interactionBackgroundOpacity, 0),
-                            1
-                        )
-                    )
-                )
-                .padding(
-                    -Self.interactionBackgroundVisualOverflow
-                        / effectiveVisualScale
-                )
-                .allowsHitTesting(false)
-                .accessibilityHidden(true)
-            }
+            // Keep the existing 16pt layout gutter. The surface extends only
+            // 8pt into it, leaving its continuous corners clear of the clip.
+            SoftPressSurface(
+                opacity: min(max(interactionBackgroundOpacity, 0), 1),
+                tint: .white,
+                cornerRadius: CGFloat(PressFeedbackPolicy.lyricCornerRadius) / effectiveVisualScale
+            )
+            .padding(-CGFloat(PressFeedbackPolicy.lyricInternalInset) / effectiveVisualScale)
         }
         .scaleEffect(
             visualScale,

@@ -128,13 +128,3 @@ enum MusicCollectionLayout {
     }
 
 }
-
-/// A scroll-view row has no native List cell to supply pressed feedback.
-/// ButtonStyle tracks the real press lifecycle (including scroll cancellation)
-/// instead of adding a competing drag/tap recognizer.
-struct MusicTrackPressStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(configuration.isPressed ? Color.primary.opacity(0.12) : Color.clear)
-    }
-}
