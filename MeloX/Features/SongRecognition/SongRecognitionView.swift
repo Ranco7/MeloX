@@ -136,7 +136,7 @@ struct SongRecognitionView: View {
                             Button(action: broadcastPicker.start) {
                                 Text("ui.recognition.broadcast.launch")
                                     .fixedSize(horizontal: false, vertical: true)
-                                    .frame(maxWidth: .infinity, minHeight: 44)
+                                    .frame(maxWidth: .infinity)
                             }
                                 .buttonStyle(.borderedProminent)
                                 .buttonBorderShape(.capsule)
@@ -154,7 +154,7 @@ struct SongRecognitionView: View {
                 Button(role: .cancel) { recognition.cancel() } label: {
                     Text("ui.common.cancel")
                         .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .frame(maxWidth: .infinity)
                 }
                     .buttonStyle(.bordered)
                     .buttonBorderShape(.capsule)
