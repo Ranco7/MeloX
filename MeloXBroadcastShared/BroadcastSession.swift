@@ -1,16 +1,35 @@
 import Foundation
 
+nonisolated struct BroadcastBinding: Codable, Equatable, Sendable {
+    let extensionID: String
+    let groupID: String
+}
+
 nonisolated struct BroadcastRequest: Codable, Equatable, Sendable {
     let id: UUID
     let createdAt: Date
     let startBefore: Date
     let duration: Int
+    let binding: BroadcastBinding
 
-    init(duration: Int, now: Date = Date()) {
+    init(duration: Int, binding: BroadcastBinding, now: Date = Date()) {
         id = UUID()
         createdAt = now
         startBefore = now.addingTimeInterval(60)
         self.duration = max(3, min(9, duration))
+        self.binding = binding
+    }
+
+    private init(id: UUID, createdAt: Date, startBefore: Date, duration: Int, binding: BroadcastBinding) {
+        self.id = id
+        self.createdAt = createdAt
+        self.startBefore = startBefore
+        self.duration = duration
+        self.binding = binding
+    }
+
+    func bound(to binding: BroadcastBinding) -> Self {
+        Self(id: id, createdAt: createdAt, startBefore: startBefore, duration: duration, binding: binding)
     }
 
     func permitsStart(at now: Date) -> Bool {
@@ -27,18 +46,23 @@ nonisolated enum BroadcastStop: String, Codable, Sendable { case cancel, complet
 nonisolated struct BroadcastControl: Codable, Sendable {
     let id: UUID
     let command: BroadcastStop
+    let binding: BroadcastBinding
 }
 
 nonisolated struct BroadcastState: Codable, Sendable {
     let id: UUID
+    let binding: BroadcastBinding
+    var diagnostic: BroadcastDiagnosticCode?
     var phase: BroadcastPhase
     var heartbeat: Date
     var frameCount: Int
     /// Fixed little-endian float32. Metadata and PCM are one atomic envelope.
     var pcm: Data
 
-    init(id: UUID, phase: BroadcastPhase, now: Date = Date(), samples: [Float] = []) {
+    init(id: UUID, binding: BroadcastBinding, phase: BroadcastPhase, now: Date = Date(), samples: [Float] = [], diagnostic: BroadcastDiagnosticCode? = nil) {
         self.id = id
+        self.binding = binding
+        self.diagnostic = diagnostic
         self.phase = phase
         heartbeat = now
         frameCount = samples.count
@@ -69,11 +93,14 @@ nonisolated struct BroadcastSession {
     private var windowStartedAt: TimeInterval
     private var lastAudioAt: TimeInterval?
     private var receivedAudio = false
+    private var diagnostic: BroadcastDiagnosticCode?
 
     init(request: BroadcastRequest, now: Date, uptime: TimeInterval,
          initialState: BroadcastState?, control: BroadcastControl?) throws {
         guard request.permitsStart(at: now), initialState?.id == request.id,
-              initialState?.phase == .waiting, control?.id != request.id else {
+              initialState?.phase == .waiting, initialState?.binding == request.binding,
+              BroadcastIdentifier.isValid(request.binding.extensionID), BroadcastIdentifier.isValid(request.binding.groupID),
+              control?.id != request.id else {
             throw BroadcastCoreError.invalidSession
         }
         self.request = request
@@ -90,10 +117,12 @@ nonisolated struct BroadcastSession {
         if ring.count >= request.duration * BroadcastResampler.rate { finish() }
     }
 
-    mutating func tick(uptime: TimeInterval, control: BroadcastControl?, currentID: UUID?) {
+    mutating func tick(uptime: TimeInterval, control: BroadcastControl?, current: BroadcastRequest?) {
         guard !phase.terminal else { return }
-        if currentID != request.id { phase = .cancelled; return }
+        if current?.id != request.id { phase = .cancelled; return }
+        if current?.binding != request.binding { phase = .failed; diagnostic = .handshakeMismatch; return }
         if let control, control.id == request.id {
+            guard control.binding == request.binding else { phase = .failed; diagnostic = .handshakeMismatch; return }
             if control.command == .cancel { phase = .cancelled }
             else { finish() }
         } else if uptime - startedAt >= Double(request.duration + 15) {
@@ -121,7 +150,9 @@ nonisolated struct BroadcastSession {
         windowStartedAt = uptime
         lastAudioAt = uptime
     }
-    mutating func fail(_ failure: BroadcastPhase) { if !phase.terminal { phase = failure } }
+    mutating func fail(_ failure: BroadcastPhase, diagnostic: BroadcastDiagnosticCode? = nil) {
+        if !phase.terminal { phase = failure; self.diagnostic = diagnostic }
+    }
     mutating func userFinished() { if !phase.terminal { finish() } }
 
     private mutating func finish() {
@@ -129,7 +160,7 @@ nonisolated struct BroadcastSession {
     }
 
     func state(now: Date = Date()) -> BroadcastState {
-        BroadcastState(id: request.id, phase: phase, now: now,
-                       samples: phase == .cancelled || phase == .formatError || phase == .failed ? [] : ring.samples)
+        BroadcastState(id: request.id, binding: request.binding, phase: phase, now: now,
+                       samples: phase == .cancelled || phase == .formatError || phase == .failed ? [] : ring.samples, diagnostic: diagnostic)
     }
 }

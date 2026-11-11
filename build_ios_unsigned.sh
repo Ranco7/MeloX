@@ -52,8 +52,9 @@ case "$BUILD_VARIANT" in
         -e "s#container:MeloX.xcodeproj#container:$TEMPORARY_PROJECT_NAME#g" \
         {} +
 
+    # The existing shared group also serves the widget; keep its identifier.
     sed -i '' \
-      -e 's/azki\.moye\.MeloX/moye.MeloX/g' \
+      -e '/MELOX_BROADCAST_APP_GROUP/!s/azki\.moye\.MeloX/moye.MeloX/g' \
       -e 's/LAW363CUU8/YG7LA7A4T5/g' \
       -e "s#INFOPLIST_FILE = MeloXWatch/Info.plist;#INFOPLIST_FILE = \"$TEMPORARY_WATCH_INFO\";#g" \
       "$TEMPORARY_PROJECT/project.pbxproj"

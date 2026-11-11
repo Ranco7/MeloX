@@ -12,8 +12,13 @@ nonisolated struct BroadcastMailbox: Sendable {
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     }
 
-    func prepare(duration: Int, now: Date = Date()) throws -> BroadcastRequest {
-        let request = BroadcastRequest(duration: duration, now: now)
+    func prepare(duration: Int, binding: BroadcastBinding, now: Date = Date()) throws -> BroadcastRequest {
+        let request = BroadcastRequest(duration: duration, binding: binding, now: now)
+        try prepare(request)
+        return request
+    }
+
+    func prepare(_ request: BroadcastRequest) throws {
         let folders = try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
             .filter { UUID(uuidString: $0.lastPathComponent) != nil }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
@@ -25,20 +30,23 @@ nonisolated struct BroadcastMailbox: Sendable {
             try FileManager.default.removeItem(at: folder)
         }
         try FileManager.default.createDirectory(at: directory(request.id), withIntermediateDirectories: true)
-        try write(BroadcastState(id: request.id, phase: .waiting, now: now), to: file(request.id, "state.plist"))
+        try write(BroadcastState(id: request.id, binding: request.binding, phase: .waiting, now: request.createdAt), to: file(request.id, "state.plist"))
         try write(request, to: root.appendingPathComponent("request.plist"))
-        return request
     }
 
     func currentRequest() throws -> BroadcastRequest? { try read(root.appendingPathComponent("request.plist")) }
     func state(_ id: UUID) throws -> BroadcastState? {
         let value: BroadcastState? = try read(file(id, "state.plist"))
-        guard value == nil || value?.id == id else { throw BroadcastCoreError.invalidSession }
+        guard value == nil || value?.id == id else { throw BroadcastDiagnostic(code: .handshakeMismatch) }
         return value
     }
     func control(_ id: UUID) throws -> BroadcastControl? { try read(file(id, "control.plist")) }
-    func send(_ command: BroadcastStop, id: UUID) throws {
-        try write(BroadcastControl(id: id, command: command), to: file(id, "control.plist"))
+    func send(_ command: BroadcastStop, id: UUID, binding: BroadcastBinding) throws {
+        if let previous = try control(id) {
+            guard previous.id == id, previous.binding == binding else { throw BroadcastDiagnostic(code: .handshakeMismatch) }
+            if previous.command == .cancel { return }
+        }
+        try write(BroadcastControl(id: id, command: command, binding: binding), to: file(id, "control.plist"))
     }
     func publish(_ state: BroadcastState) throws { try write(state, to: file(state.id, "state.plist")) }
     func clearAudio(_ id: UUID) throws {
@@ -64,8 +72,14 @@ nonisolated struct BroadcastMailbox: Sendable {
     }
     private func read<T: Decodable>(_ url: URL) throws -> T? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size <= Self.maximumFileBytes else { throw BroadcastCoreError.mailbox }
-        return try PropertyListDecoder().decode(T.self, from: Data(contentsOf: url))
+        let data: Data
+        do {
+            let file = try FileHandle(forReadingFrom: url)
+            defer { try? file.close() }
+            data = try file.read(upToCount: Self.maximumFileBytes + 1) ?? Data()
+        } catch { throw BroadcastDiagnostic(code: .notWritable) }
+        guard data.count <= Self.maximumFileBytes else { throw BroadcastDiagnostic(code: .handshakeMismatch) }
+        do { return try PropertyListDecoder().decode(T.self, from: data) }
+        catch { throw BroadcastDiagnostic(code: .handshakeMismatch) }
     }
 }

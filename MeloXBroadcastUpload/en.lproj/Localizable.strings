@@ -3,3 +3,15 @@
 "broadcast.no_audio" = "No usable audio was received. Play music and try again. Protected audio may be unavailable.";
 "broadcast.format_error" = "This audio format could not be processed. Stop the broadcast and try another source.";
 "broadcast.unavailable" = "Open song recognition in MeloX and start a new session. Both the app and extension need the same permitted App Group.";
+"broadcast.diagnostic.missingExtension" = "The audio broadcast extension was not found in the installed app.";
+"broadcast.diagnostic.ambiguousExtension" = "Multiple recognition broadcast extensions were found; a unique launch target is required.";
+"broadcast.diagnostic.invalidExtension" = "The broadcast extension type or processing mode does not match.";
+"broadcast.diagnostic.invalidExtensionID" = "The broadcast extension’s actual identifier is missing or invalid.";
+"broadcast.diagnostic.missingExecutable" = "The broadcast extension executable is missing or invalid.";
+"broadcast.diagnostic.noUsableGroup" = "No candidate shared container could be accessed. Check that the app and extension’s actual signatures use a common group.";
+"broadcast.diagnostic.notWritable" = "The shared container did not pass the small-file read/write check.";
+"broadcast.diagnostic.profileIssue" = "Some public signing metadata could not be read or parsed. Configured and established groups were also tried.";
+"broadcast.diagnostic.handshakeMismatch" = "The extension’s session, identifier or shared group did not match this request. Its audio was not used.";
+"broadcast.diagnostic.startNotConfirmed" = "No extension startup confirmation has arrived. Choose Start Broadcast in the system panel. If it already started and ended, check the system completion message and retry. This state alone cannot identify a sharing-permission failure.";
+"broadcast.diagnostic.startNotPrepared" = "No valid pending start request was found. Return to song recognition and begin a new session.";
+"broadcast.diagnostic.heartbeatLost" = "The extension stopped updating its status after startup confirmation. End the system broadcast and retry.";

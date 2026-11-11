@@ -123,6 +123,8 @@ class SwiftBehaviorChecks(unittest.TestCase):
         self.run_swift(["MeloXBroadcastShared/BroadcastPCM.swift",
                         "MeloXBroadcastShared/BroadcastSession.swift",
                         "MeloXBroadcastShared/BroadcastMailbox.swift",
+                        "MeloXBroadcastShared/BroadcastRuntime.swift",
+                        "MeloXBroadcastShared/BroadcastMailboxSet.swift",
                         "MeloX/Features/SongRecognition/SongRecognitionBroadcastClient.swift",
                         "MeloX/Core/Settings/Recognition/SongRecognitionAudioSource.swift",
                         "MeloX/Core/Settings/Recognition/SongRecognitionPreferences.swift",

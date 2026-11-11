@@ -14,6 +14,7 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
     private var expectedPTS: Double?
     private var lastPublish = 0.0
     private var finished = false
+    private var startupDiagnostic: BroadcastDiagnosticCode?
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
         var reason: BroadcastPhase?
@@ -23,15 +24,14 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
             session = nil
             mailbox = nil
             finished = false
+            startupDiagnostic = nil
             lastPublish = 0
             resetConversion()
             do {
-                guard let group = Bundle.main.object(forInfoDictionaryKey: "MeloXBroadcastAppGroup") as? String else {
-                    throw BroadcastCoreError.unavailable
-                }
-                let mailbox = try BroadcastMailbox(container: FileManager.default.containerURL(
-                    forSecurityApplicationGroupIdentifier: group))
-                guard let request = try mailbox.currentRequest() else { throw BroadcastCoreError.invalidSession }
+                let host = try BroadcastRuntime.enclosingHost(extensionURL: Bundle.main.bundleURL)
+                let environment = try BroadcastRuntime.environment(host: host, runningExtension: Bundle.main.bundleURL)
+                let (endpoint, request) = try BroadcastMailboxSet(environment: environment).requestForExtension()
+                let mailbox = endpoint.mailbox
                 let session = try BroadcastSession(request: request, now: Date(), uptime: ProcessInfo.processInfo.systemUptime,
                                                    initialState: mailbox.state(request.id), control: mailbox.control(request.id))
                 self.mailbox = mailbox
@@ -44,6 +44,7 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
                 timer.resume()
             } catch {
                 finished = true
+                startupDiagnostic = (error as? BroadcastDiagnostic)?.code ?? .startNotPrepared
                 reason = .failed
             }
         }
@@ -85,7 +86,7 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
             guard !finished else { return }
             session?.pause()
             resetConversion()
-            do { try publish() } catch { session?.fail(.failed) }
+            do { try publish() } catch { session?.fail(.failed, diagnostic: .notWritable) }
         }
     }
 
@@ -124,7 +125,7 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
         guard let mailbox, let id = session?.request.id else { throw BroadcastCoreError.invalidSession }
         let uptime = ProcessInfo.processInfo.systemUptime
         if checkControl {
-            session?.tick(uptime: uptime, control: try mailbox.control(id), currentID: try mailbox.currentRequest()?.id)
+            session?.tick(uptime: uptime, control: try mailbox.control(id), current: try mailbox.currentRequest())
         }
         if session?.phase.terminal == true {
             try publish()
@@ -145,7 +146,7 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
     }
 
     private func fail(_ phase: BroadcastPhase) -> BroadcastPhase {
-        session?.fail(phase)
+        session?.fail(phase, diagnostic: phase == .failed ? .notWritable : nil)
         try? publish()
         finished = true
         timer?.cancel()
@@ -165,7 +166,11 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
         default: key = "broadcast.unavailable"
         }
         // ReplayKit's public stop API requires an Error, also on normal completion.
-        let reason = NSLocalizedString(key, bundle: .main, comment: "Broadcast completion reason")
+        var reason = NSLocalizedString(key, bundle: .main, comment: "Broadcast completion reason")
+        if let startupDiagnostic {
+            reason += " " + NSLocalizedString("broadcast.diagnostic." + startupDiagnostic.rawValue,
+                                              bundle: .main, comment: "Safe broadcast startup stage")
+        }
         finishBroadcastWithError(NSError(domain: "MeloX.Broadcast", code: 1,
                                          userInfo: [NSLocalizedDescriptionKey: reason]))
     }

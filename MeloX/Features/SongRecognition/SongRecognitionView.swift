@@ -130,6 +130,7 @@ struct SongRecognitionView: View {
                     Text("ui.recognition.broadcast.launch").font(.headline)
                 }
             }
+            if let diagnostic = recognition.broadcastStartupDiagnostic { diagnosticDetails(diagnostic) }
             Text("ui.recognition.broadcast.privacy").font(.body).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             Button("ui.common.cancel", role: .cancel) { recognition.cancel() }
@@ -242,6 +243,7 @@ struct SongRecognitionView: View {
         stateContent {
             messageHeader(title: L10n.string("ui.recognition.failed"), symbol: "exclamationmark.triangle",
                           description: failure.message)
+            if let diagnostic = failure.diagnostic { diagnosticDetails(diagnostic) }
             VStack(spacing: 12) {
                 if failure.opensSystemSettings,
                    let settingsURL = URL(string: UIApplication.openSettingsURLString) {
@@ -263,6 +265,21 @@ struct SongRecognitionView: View {
                 .buttonStyle(.bordered).controlSize(.large)
             }
         }
+    }
+
+    private func diagnosticDetails(_ message: String) -> some View {
+        DisclosureGroup {
+            Text(message)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } label: {
+            Text("ui.recognition.diagnostic.details")
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(minHeight: 44, alignment: .leading)
+        }
+        .multilineTextAlignment(.leading)
     }
 
     private func progressView(title: String, description: String) -> some View {

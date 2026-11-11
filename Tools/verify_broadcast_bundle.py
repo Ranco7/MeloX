@@ -20,11 +20,12 @@ def verify(app, ipa=None, metadata=None):
     extension_info = plistlib.loads((extension / "Info.plist").read_bytes())
     app_id = main_info["CFBundleIdentifier"]
     expected_id = app_id + ".BroadcastUpload"
-    group = "group." + app_id + ".recognition"
+    group = "group.azki.moye.MeloX"
     assert extension_info["CFBundleIdentifier"] == expected_id, "Broadcast extension bundle ID mismatch"
     assert main_info["MeloXBroadcastExtensionID"] == expected_id, "Picker extension ID mismatch"
     assert main_info["MeloXBroadcastAppGroup"] == group, "Host App Group mismatch"
     assert extension_info["MeloXBroadcastAppGroup"] == group, "Extension App Group mismatch"
+    assert extension_info["MeloXRecognitionBroadcastVersion"] == 1, "Wrong recognition protocol marker"
     config = extension_info["NSExtension"]
     assert config["NSExtensionPointIdentifier"] == POINT, "Wrong extension point"
     assert config["NSExtensionAttributes"]["RPBroadcastProcessMode"] == MODE, "Wrong process mode"
@@ -37,7 +38,7 @@ def verify(app, ipa=None, metadata=None):
             "AppBundleIdentifier": app_id,
             "ExtensionBundleIdentifier": expected_id,
             "RequiredApplicationGroupsForBothTargets": [group],
-            "Note": "Requirements only. Both signatures and provisioning profiles must permit this group. Unsigned metadata grants no permissions.",
+            "Note": "Source signing requirements only. Runtime also checks remapped profile candidates using actual container access and a session handshake. Unsigned metadata grants no permissions.",
         }))
     if ipa:
         with zipfile.ZipFile(ipa) as archive:

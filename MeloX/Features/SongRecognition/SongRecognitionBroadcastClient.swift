@@ -8,6 +8,7 @@ nonisolated struct PreparedBroadcast: Sendable {
 nonisolated struct BroadcastPoll: Sendable {
     let phase: BroadcastPhase
     let snapshot: SongRecognitionAudioSnapshot?
+    var diagnostic: BroadcastDiagnostic? = nil
 }
 
 nonisolated protocol SongRecognitionBroadcasting: Sendable {
@@ -20,40 +21,39 @@ nonisolated protocol SongRecognitionBroadcasting: Sendable {
 
 /// All App Group discovery, disk access and PCM decoding run off MainActor.
 actor SongRecognitionBroadcastClient: SongRecognitionBroadcasting {
-    private var mailbox: BroadcastMailbox?
+    // Two generations cover cancellation finishing just after a retry starts.
+    private var sessions: [UUID: BroadcastMailboxSet] = [:]
+    private var sessionOrder: [UUID] = []
 
     func prepare(duration: Int) throws -> PreparedBroadcast {
-        let (mailbox, extensionID) = try environment()
-        self.mailbox = mailbox
-        return PreparedBroadcast(request: try mailbox.prepare(duration: duration), extensionID: extensionID)
+        let environment = try environment()
+        let mailboxes = BroadcastMailboxSet(environment: environment)
+        let request = try mailboxes.prepare(duration: duration)
+        remember(mailboxes, id: request.id)
+        return PreparedBroadcast(request: request, extensionID: environment.extensionID)
     }
 
     func recover() throws -> PreparedBroadcast? {
-        let (mailbox, extensionID) = try environment()
-        self.mailbox = mailbox
-        guard let request = try mailbox.currentRequest(),
-              Date().timeIntervalSince(request.createdAt) < 600,
-              let state = try mailbox.state(request.id), state.phase != .waiting,
-              state.phase != .cancelled,
-              (state.phase != .completed || state.frameCount > 0),
-              try mailbox.control(request.id)?.command != .cancel else { return nil }
-        return PreparedBroadcast(request: request, extensionID: extensionID)
+        let environment = try environment()
+        let mailboxes = BroadcastMailboxSet(environment: environment)
+        guard let request = try mailboxes.recover() else { return nil }
+        remember(mailboxes, id: request.id)
+        return PreparedBroadcast(request: request, extensionID: environment.extensionID)
     }
 
     func poll(_ request: BroadcastRequest) throws -> BroadcastPoll {
-        guard let mailbox, try mailbox.currentRequest()?.id == request.id,
-              let state = try mailbox.state(request.id) else { throw SongRecognitionRecordingError.captureUnavailable }
+        guard var mailboxes = sessions[request.id] else { throw BroadcastDiagnostic(code: .handshakeMismatch) }
+        let state = try mailboxes.state(request)
+        sessions[request.id] = mailboxes
         let age = Date().timeIntervalSince(state.heartbeat)
-        if state.phase == .waiting {
-            guard request.permitsStart(at: Date()) else { throw SongRecognitionRecordingError.broadcastStartExpired }
-        } else if !state.phase.terminal, age > 6 {
-            throw SongRecognitionRecordingError.captureTimedOut
+        if state.phase != .waiting, !state.phase.terminal, age > 6 {
+            throw mailboxes.diagnostic(.heartbeatLost)
         }
-        guard age < 600 else { throw SongRecognitionRecordingError.captureTimedOut }
+        guard age < 600 else { throw mailboxes.diagnostic(.heartbeatLost) }
         switch state.phase {
         case .noAudio, .silent: throw SongRecognitionRecordingError.broadcastSilent
         case .formatError: throw SongRecognitionRecordingError.conversionFailed
-        case .failed: throw SongRecognitionRecordingError.captureUnavailable
+        case .failed: throw mailboxes.diagnostic(state.diagnostic ?? .handshakeMismatch)
         case .cancelled: throw CancellationError()
         default: break
         }
@@ -65,39 +65,28 @@ actor SongRecognitionBroadcastClient: SongRecognitionBroadcasting {
             snapshot = SongRecognitionAudioSnapshot(samples: Array(samples.suffix(frames)),
                 duration: frames / BroadcastResampler.rate, totalDuration: frames / BroadcastResampler.rate,
                 reachedLimit: state.phase.terminal)
-        } else {
-            snapshot = nil
-        }
-        return BroadcastPoll(phase: state.phase, snapshot: snapshot)
+        } else { snapshot = nil }
+        let notice = state.phase == .waiting && Date().timeIntervalSince(request.createdAt) >= 12
+            ? mailboxes.diagnostic(.startNotConfirmed) : nil
+        return BroadcastPoll(phase: state.phase, snapshot: snapshot, diagnostic: notice)
     }
 
     func stop(_ request: BroadcastRequest, command: BroadcastStop) throws {
-        try mailbox?.send(command, id: request.id)
+        try sessions[request.id]?.send(command, request: request)
     }
 
-    func clearAudio(_ request: BroadcastRequest) throws { try mailbox?.clearAudio(request.id) }
+    func clearAudio(_ request: BroadcastRequest) throws { try sessions[request.id]?.clearAudio(request) }
 
-    private func environment() throws -> (BroadcastMailbox, String) {
+    private func remember(_ mailboxes: BroadcastMailboxSet, id: UUID) {
+        sessions[id] = mailboxes
+        sessionOrder.removeAll { $0 == id }
+        sessionOrder.append(id)
+        while sessionOrder.count > 2 { sessions.removeValue(forKey: sessionOrder.removeFirst()) }
+    }
+
+    private func environment() throws -> BroadcastRuntimeEnvironment {
         #if os(iOS)
-        guard let group = Bundle.main.object(forInfoDictionaryKey: "MeloXBroadcastAppGroup") as? String,
-              let extensionID = Bundle.main.object(forInfoDictionaryKey: "MeloXBroadcastExtensionID") as? String,
-              let plugins = Bundle.main.builtInPlugInsURL,
-              let embedded = Bundle(url: plugins.appendingPathComponent("MeloXBroadcastUpload.appex")),
-              embedded.bundleIdentifier == extensionID,
-              embedded.object(forInfoDictionaryKey: "MeloXBroadcastAppGroup") as? String == group,
-              let info = embedded.object(forInfoDictionaryKey: "NSExtension") as? [String: Any],
-              info["NSExtensionPointIdentifier"] as? String == "com.apple.broadcast-services-upload",
-              let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group) else {
-            throw SongRecognitionRecordingError.captureUnavailable
-        }
-        do {
-            let mailbox = try BroadcastMailbox(container: container)
-            let probe = mailbox.root.appendingPathComponent("host-probe")
-            try Data([0]).write(to: probe, options: .atomic)
-            guard try Data(contentsOf: probe) == Data([0]) else { throw BroadcastCoreError.mailbox }
-            try FileManager.default.removeItem(at: probe)
-            return (mailbox, extensionID)
-        } catch { throw SongRecognitionRecordingError.captureUnavailable }
+        return try BroadcastRuntime.environment(host: .main)
         #else
         throw SongRecognitionRecordingError.captureUnavailable
         #endif

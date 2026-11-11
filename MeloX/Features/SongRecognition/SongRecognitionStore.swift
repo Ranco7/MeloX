@@ -27,6 +27,7 @@ enum SongRecognitionPhase: Equatable {
 struct SongRecognitionFailure: Equatable {
     let message: String
     let opensSystemSettings: Bool
+    var diagnostic: String? = nil
 }
 
 @MainActor
@@ -41,6 +42,7 @@ final class SongRecognitionStore {
     private(set) var audioSource: SongRecognitionAudioSource = .microphone
     private(set) var broadcastExtensionID: String?
     private(set) var broadcastPaused = false
+    private(set) var broadcastStartupDiagnostic: String?
 
     @ObservationIgnored private let broadcastClient: any SongRecognitionBroadcasting
     @ObservationIgnored private var broadcastRequest: BroadcastRequest?
@@ -130,6 +132,7 @@ final class SongRecognitionStore {
         broadcastRequest = nil
         broadcastExtensionID = nil
         broadcastPaused = false
+        broadcastStartupDiagnostic = nil
         let wasWorking = phase.isWorking
         generation &+= 1
         recognitionTask?.cancel()
@@ -149,7 +152,8 @@ final class SongRecognitionStore {
                 cancel()
                 phase = .failed(SongRecognitionFailure(
                     message: SongRecognitionRecordingError.captureUnavailable.localizedDescription,
-                    opensSystemSettings: false))
+                    opensSystemSettings: false,
+                    diagnostic: (error as? BroadcastDiagnostic).map { localizedDiagnostic($0) }))
             }
         }
     }
@@ -179,6 +183,7 @@ final class SongRecognitionStore {
                 broadcastExtensionID = nil
                 broadcastRequest = nil
                 broadcastPaused = false
+                broadcastStartupDiagnostic = nil
             }
         }
         do {
@@ -206,6 +211,7 @@ final class SongRecognitionStore {
                 let update = try await broadcastClient.poll(prepared.request)
                 try Task.checkCancellation()
                 guard generation == currentGeneration else { throw CancellationError() }
+                broadcastStartupDiagnostic = update.diagnostic.map { localizedDiagnostic($0) }
                 if update.phase != .waiting {
                     broadcastExtensionID = nil
                     broadcastPaused = update.phase == .paused
@@ -242,16 +248,33 @@ final class SongRecognitionStore {
             if error is CancellationError { phase = .ready }
             else {
                 let displayError: any Error
-                if let coreError = error as? BroadcastCoreError {
+                var diagnostic: String?
+                if let setup = error as? BroadcastDiagnostic {
+                    displayError = setup.code == .heartbeatLost ? SongRecognitionRecordingError.captureTimedOut
+                        : SongRecognitionRecordingError.captureUnavailable
+                    diagnostic = localizedDiagnostic(setup)
+                } else if let coreError = error as? BroadcastCoreError {
                     switch coreError {
                     case .invalidPCM: displayError = SongRecognitionRecordingError.conversionFailed
                     case .invalidSession: displayError = SongRecognitionRecordingError.captureTimedOut
                     case .unavailable, .mailbox: displayError = SongRecognitionRecordingError.captureUnavailable
                     }
                 } else { displayError = error }
-                phase = .failed(SongRecognitionFailure(message: displayError.localizedDescription, opensSystemSettings: false))
+                phase = .failed(SongRecognitionFailure(message: displayError.localizedDescription,
+                    opensSystemSettings: false, diagnostic: diagnostic))
             }
         }
+    }
+
+    private func localizedDiagnostic(_ diagnostic: BroadcastDiagnostic) -> String {
+        var message = "[" + diagnostic.code.rawValue + "] " + L10n.string("ui.recognition.diagnostic." + diagnostic.code.rawValue)
+        if diagnostic.candidateCount > 0 {
+            message += "\n" + L10n.format("ui.recognition.diagnostic.counts", diagnostic.usableCount, diagnostic.candidateCount)
+        }
+        if diagnostic.profileIssue {
+            message += "\n" + L10n.string("ui.recognition.diagnostic.profileIssue")
+        }
+        return message
     }
 
     private func recognize(

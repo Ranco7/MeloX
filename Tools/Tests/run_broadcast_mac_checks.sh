@@ -4,10 +4,13 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 CHECK_BUILD_DIR="${BROADCAST_CHECK_BUILD_DIR:-build/BroadcastChecks}"
 mkdir -p "$CHECK_BUILD_DIR"
-CORE=(MeloXBroadcastShared/BroadcastPCM.swift MeloXBroadcastShared/BroadcastSession.swift MeloXBroadcastShared/BroadcastMailbox.swift)
+CORE=(MeloXBroadcastShared/*.swift)
 xcrun swiftc -swift-version 5 -parse-as-library "${CORE[@]}" \
   Tests/SongRecognition/BroadcastCoreChecks.swift -o "$CHECK_BUILD_DIR/core"
 "$CHECK_BUILD_DIR/core"
+xcrun swiftc -swift-version 5 -parse-as-library "${CORE[@]}" \
+  Tests/SongRecognition/BroadcastRuntimeChecks.swift -o "$CHECK_BUILD_DIR/runtime"
+"$CHECK_BUILD_DIR/runtime"
 xcrun swiftc -swift-version 5 -parse-as-library MeloXBroadcastShared/BroadcastPCM.swift \
   MeloXBroadcastUpload/BroadcastSamplePCM.swift Tests/SongRecognition/BroadcastSamplePCMChecks.swift \
   -o "$CHECK_BUILD_DIR/sample-pcm"

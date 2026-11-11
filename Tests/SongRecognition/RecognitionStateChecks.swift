@@ -139,11 +139,15 @@ struct RecognitionStateChecks {
         precondition(!store.isContinuous && recorder.starts == 0 && store.broadcastExtensionID == "fixture.BroadcastUpload")
         let duration = await client.duration
         precondition(duration == 9)
+        await client.setNotice(true)
+        await wait { store.broadcastStartupDiagnostic != nil }
+        precondition(store.phase == .waitingForBroadcast && store.broadcastStartupDiagnostic?.contains("[startNotConfirmed]") == true)
+        await client.setNotice(false)
         await client.setPhase(.capturing)
         await wait { store.phase == .listening }
         store.stopBroadcastCapture()
         await wait { store.phase == .results }
-        precondition(store.broadcastExtensionID == nil && recorder.starts == 0)
+        precondition(store.broadcastExtensionID == nil && store.broadcastStartupDiagnostic == nil && recorder.starts == 0)
         print("PASS: native-picker waiting state, bounded system mode, manual finish and existing match pipeline")
 
         store.start(api: api, duration: .quick, source: .appAudio)
@@ -160,6 +164,15 @@ struct RecognitionStateChecks {
         await client.setPhase(.completed)
         await wait { store.phase == .results }
         print("PASS: silence error, cancellation before picker start, retry and stale UUID control isolation")
+
+        await client.setFailure(BroadcastDiagnostic(code: .invalidExtensionID))
+        store.start(api: api, duration: .quick, source: .appAudio)
+        await wait { !store.phase.isWorking }
+        guard case .failed(let setupFailure) = store.phase else { fatalError("Expected setup diagnostic") }
+        precondition(setupFailure.message == SongRecognitionRecordingError.captureUnavailable.localizedDescription)
+        precondition(setupFailure.diagnostic?.contains("[invalidExtensionID]") == true)
+        precondition(store.broadcastExtensionID == nil && recorder.starts == 0)
+        print("PASS: safe localized setup diagnostic preserves the friendly failure and microphone fallback")
 
         let unavailable = SongRecognitionStore(recorder: recorder, fingerprintGenerator: NeteaseAudioFingerprintGenerator())
         unavailable.start(api: api, duration: .quick, source: .appAudio)
@@ -195,9 +208,14 @@ actor BroadcastDouble: SongRecognitionBroadcasting {
     var duration = 0
     private var current: BroadcastRequest?
     private var phase: BroadcastPhase = .waiting
+    private var notice = false
+    private var setupFailure: BroadcastDiagnostic?
+    func setNotice(_ value: Bool) { notice = value }
+    func setFailure(_ value: BroadcastDiagnostic?) { setupFailure = value }
     func prepare(duration: Int) throws -> PreparedBroadcast {
         self.duration = duration
-        let request = BroadcastRequest(duration: duration)
+        if let setupFailure { throw setupFailure }
+        let request = BroadcastRequest(duration: duration, binding: BroadcastBinding(extensionID: "fixture.BroadcastUpload", groupID: "group.fixture.MeloX"))
         current = request
         phase = .waiting
         return PreparedBroadcast(request: request, extensionID: "fixture.BroadcastUpload")
@@ -209,7 +227,8 @@ actor BroadcastDouble: SongRecognitionBroadcasting {
         if phase == .silent { throw SongRecognitionRecordingError.broadcastSilent }
         let snapshot = phase == .completed ? SongRecognitionAudioSnapshot(samples: Array(repeating: 0.5, count: 24_000),
             duration: 3, totalDuration: 3, reachedLimit: true) : nil
-        return BroadcastPoll(phase: phase, snapshot: snapshot)
+        return BroadcastPoll(phase: phase, snapshot: snapshot,
+                             diagnostic: notice ? BroadcastDiagnostic(code: .startNotConfirmed) : nil)
     }
     func stop(_ request: BroadcastRequest, command: BroadcastStop) throws {
         guard request.id == current?.id else { return }

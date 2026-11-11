@@ -2185,3 +2185,18 @@
 "ui.recognition.broadcast.stop" = "Finish Capture & Recognize";
 
 "ui.recognition.broadcast.use_microphone" = "Use Microphone";
+
+"ui.recognition.diagnostic.details" = "Diagnostic Details";
+"ui.recognition.diagnostic.counts" = "Containers passing the app’s read/write check: %ld of %ld candidates.";
+"ui.recognition.diagnostic.missingExtension" = "The audio broadcast extension was not found in the installed app.";
+"ui.recognition.diagnostic.ambiguousExtension" = "Multiple recognition broadcast extensions were found; a unique launch target is required.";
+"ui.recognition.diagnostic.invalidExtension" = "The broadcast extension type or processing mode does not match.";
+"ui.recognition.diagnostic.invalidExtensionID" = "The broadcast extension’s actual identifier is missing or invalid.";
+"ui.recognition.diagnostic.missingExecutable" = "The broadcast extension executable is missing or invalid.";
+"ui.recognition.diagnostic.noUsableGroup" = "No candidate shared container could be accessed. Check that the app and extension’s actual signatures use a common group.";
+"ui.recognition.diagnostic.notWritable" = "The shared container did not pass the small-file read/write check.";
+"ui.recognition.diagnostic.profileIssue" = "Some public signing metadata could not be read or parsed. Configured and established groups were also tried.";
+"ui.recognition.diagnostic.handshakeMismatch" = "The extension’s session, identifier or shared group did not match this request. Its audio was not used.";
+"ui.recognition.diagnostic.startNotConfirmed" = "No extension startup confirmation has arrived. Choose Start Broadcast in the system panel. If it already started and ended, check the system completion message and retry. This state alone cannot identify a sharing-permission failure.";
+"ui.recognition.diagnostic.startNotPrepared" = "No valid pending start request was found. Return to song recognition and begin a new session.";
+"ui.recognition.diagnostic.heartbeatLost" = "The extension stopped updating its status after startup confirmation. End the system broadcast and retry.";

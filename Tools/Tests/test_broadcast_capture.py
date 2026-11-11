@@ -25,7 +25,7 @@ def read(path):
     return (ROOT / path).read_text()
 
 
-CORE = ["MeloXBroadcastShared/BroadcastPCM.swift", "MeloXBroadcastShared/BroadcastSession.swift", "MeloXBroadcastShared/BroadcastMailbox.swift"]
+CORE = ["MeloXBroadcastShared/BroadcastPCM.swift", "MeloXBroadcastShared/BroadcastSession.swift", "MeloXBroadcastShared/BroadcastMailbox.swift", "MeloXBroadcastShared/BroadcastRuntime.swift", "MeloXBroadcastShared/BroadcastMailboxSet.swift"]
 
 
 class PackagingChecks(unittest.TestCase):
@@ -33,11 +33,11 @@ class PackagingChecks(unittest.TestCase):
         app = root / "Payload/MeloX.app"
         extension = app / "PlugIns/MeloXBroadcastUpload.appex"
         extension.mkdir(parents=True)
-        group = "group." + app_id + ".recognition"
+        group = "group.azki.moye.MeloX"
         main = {"CFBundleIdentifier": app_id, "MeloXBroadcastExtensionID": app_id + ".BroadcastUpload",
                 "MeloXBroadcastAppGroup": group, "CFBundleVersion": "9110401", "CFBundleShortVersionString": "2.0"}
         ext = {"CFBundleIdentifier": app_id + ".BroadcastUpload", "MeloXBroadcastAppGroup": group,
-               "CFBundleVersion": "9110401", "CFBundleShortVersionString": "2.0", "CFBundleExecutable": "MeloXBroadcastUpload",
+               "CFBundleVersion": "9110401", "CFBundleShortVersionString": "2.0", "CFBundleExecutable": "MeloXBroadcastUpload", "MeloXRecognitionBroadcastVersion": 1,
                "NSExtension": {"NSExtensionPointIdentifier": verifier.POINT,
                                "NSExtensionPrincipalClass": "MeloXBroadcastUpload.SampleHandler",
                                "NSExtensionAttributes": {"RPBroadcastProcessMode": verifier.MODE}}}
@@ -56,7 +56,7 @@ class PackagingChecks(unittest.TestCase):
                     for path in app.rglob("*"):
                         if path.is_file():
                             archive.write(path, path.relative_to(root))
-                self.assertEqual(verifier.verify(app, ipa), "group." + app_id + ".recognition")
+                self.assertEqual(verifier.verify(app, ipa), "group.azki.moye.MeloX")
                 # A zip without the binary is not a valid embedded extension.
                 with zipfile.ZipFile(ipa, "w") as archive:
                     archive.write(extension / "Info.plist", "Payload/MeloX.app/PlugIns/MeloXBroadcastUpload.appex/Info.plist")
@@ -68,7 +68,9 @@ class PackagingChecks(unittest.TestCase):
             app, extension, baseline = self.fixture(Path(tmp), "moye.MeloX")
             mutations = [lambda i: i.update(MeloXBroadcastAppGroup="group.other"),
                          lambda i: i["NSExtension"].update(NSExtensionPointIdentifier="wrong"),
-                         lambda i: i["NSExtension"]["NSExtensionAttributes"].update(RPBroadcastProcessMode="wrong")]
+                         lambda i: i["NSExtension"]["NSExtensionAttributes"].update(RPBroadcastProcessMode="wrong"),
+                         lambda i: i.update(MeloXRecognitionBroadcastVersion=2),
+                         lambda i: i.update(CFBundleIdentifier="example.rewritten.Upload")]
             for mutation in mutations:
                 info = copy.deepcopy(baseline)
                 mutation(info)
@@ -87,12 +89,12 @@ class PackagingChecks(unittest.TestCase):
                       "BC0000000000000000000004 /* PBXTargetDependency */,",
                       "target = BC0000000000000000000007;", "remoteGlobalIDString = BC0000000000000000000007;",
                       'PRODUCT_BUNDLE_IDENTIFIER = "$(MELOX_APP_BUNDLE_IDENTIFIER).BroadcastUpload";',
-                      'MELOX_BROADCAST_APP_GROUP = "group.$(MELOX_APP_BUNDLE_IDENTIFIER).recognition";']:
+                      'MELOX_BROADCAST_APP_GROUP = group.azki.moye.MeloX;']:
             self.assertIn(token, project)
         self.assertEqual(project.count("BC0000000000000000000008 /* MeloXBroadcastShared */,"), 2)
         for path in ["MeloX/MeloX.entitlements", "MeloXBroadcastUpload/MeloXBroadcastUpload.entitlements"]:
             groups = plistlib.loads((ROOT / path).read_bytes())["com.apple.security.application-groups"]
-            self.assertIn("$(MELOX_BROADCAST_APP_GROUP)", groups)
+            self.assertIn("group.azki.moye.MeloX" if path.startswith("MeloX/") else "$(MELOX_BROADCAST_APP_GROUP)", groups)
         info = plistlib.loads((ROOT / "MeloXBroadcastUpload/Info.plist").read_bytes())
         self.assertEqual(info["NSExtension"]["NSExtensionAttributes"]["RPBroadcastProcessMode"], verifier.MODE)
         self.assertIn("verify_broadcast_bundle.py", read("build_ios_unsigned.sh"))
@@ -121,9 +123,12 @@ class CaptureSourceContracts(unittest.TestCase):
     def test_host_suspension_and_recovery_contract(self):
         client = read("MeloX/Features/SongRecognition/SongRecognitionBroadcastClient.swift")
         self.assertIn("actor SongRecognitionBroadcastClient", client)
-        self.assertIn("guard let", client)
-        self.assertIn("containerURL", client)
-        self.assertNotIn("containerURL(forSecurityApplicationGroupIdentifier: group)!", client)
+        runtime = read("MeloXBroadcastShared/BroadcastRuntime.swift")
+        self.assertIn("containerURL(forSecurityApplicationGroupIdentifier: group)", runtime)
+        self.assertNotIn("MeloXBroadcastExtensionID", runtime)
+        self.assertNotIn("MeloXBroadcastExtensionID", client)
+        self.assertIn("bundle.bundleIdentifier", runtime)
+        self.assertNotIn("containerURL(forSecurityApplicationGroupIdentifier: group)!", runtime)
         store = read("MeloX/Features/SongRecognition/SongRecognitionStore.swift")
         self.assertIn("applicationState != .active", store)
         self.assertIn("resumeBroadcastIfNeeded", store)
@@ -221,6 +226,40 @@ class CaptureSourceContracts(unittest.TestCase):
         self.assertNotIn('"ui.settings.content.recognition.footer.limited"', device_footer)
         self.assertIn('.fixedSize(horizontal: false, vertical: true)', settings)
 
+    def test_runtime_uses_actual_bundle_and_authorized_probe_with_bound_handshake(self):
+        runtime = read("MeloXBroadcastShared/BroadcastRuntime.swift")
+        client = read("MeloX/Features/SongRecognition/SongRecognitionBroadcastClient.swift")
+        hub = read("MeloXBroadcastShared/BroadcastMailboxSet.swift")
+        for token in ["bundle.bundleIdentifier", "MeloXRecognitionBroadcastVersion", "PropertyListSerialization",
+                      "maximumBytes = 512 * 1024", "maximumCandidates = 8", "Set(host.groups).intersection",
+                      "containerURL(forSecurityApplicationGroupIdentifier: group)", "probe-\\(UUID().uuidString)"]:
+            self.assertIn(token, runtime)
+        for forbidden in ["MeloXBroadcastExtensionID", "print(", "Logger(", "UserDefaults", "SecTask", "codesign"]:
+            self.assertNotIn(forbidden, runtime)
+        self.assertNotIn("embedded.bundleIdentifier ==", client)
+        self.assertIn("state.binding == binding(endpoint)", hub)
+        self.assertIn("request.binding == binding(endpoint)", hub)
+        self.assertIn("phase == .waiting", hub)
+        self.assertIn("diagnostic(.startNotConfirmed)", hub)
+        self.assertIn("timeIntervalSince(request.createdAt) >= 12", client)
+
+    def test_safe_diagnostic_codes_are_localized_and_adaptive(self):
+        codes = ["missingExtension", "ambiguousExtension", "invalidExtension", "invalidExtensionID",
+                 "missingExecutable", "noUsableGroup", "notWritable", "profileIssue", "handshakeMismatch",
+                 "startNotConfirmed", "startNotPrepared", "heartbeatLost"]
+        for language in ["en", "zh-Hans"]:
+            host = read(f"MeloXLocalization/{language}.lproj/Localizable.strings")
+            upload = read(f"MeloXBroadcastUpload/{language}.lproj/Localizable.strings")
+            for code in codes:
+                self.assertIn(f'"ui.recognition.diagnostic.{code}"', host)
+                self.assertIn(f'"broadcast.diagnostic.{code}"', upload)
+        view = read("MeloX/Features/SongRecognition/SongRecognitionView.swift")
+        self.assertIn("DisclosureGroup {", view)
+        self.assertIn('Text("ui.recognition.diagnostic.details")', view)
+        self.assertIn("failure.diagnostic", view)
+        self.assertIn("recognition.broadcastStartupDiagnostic", view)
+        self.assertIn(".fixedSize(horizontal: false, vertical: true)", view)
+
 
 class SwiftBehaviorChecks(unittest.TestCase):
     def run_swift(self, sources):
@@ -233,6 +272,10 @@ class SwiftBehaviorChecks(unittest.TestCase):
     @unittest.skipUnless(shutil.which("swiftc"), "Swift compiler unavailable")
     def test_portable_pcm_ring_session_mailbox_behavior(self):
         self.run_swift(CORE + ["Tests/SongRecognition/BroadcastCoreChecks.swift"])
+
+    @unittest.skipUnless(shutil.which("swiftc"), "Swift compiler unavailable")
+    def test_runtime_resigning_profiles_resolution_and_handshake(self):
+        self.run_swift(CORE + ["Tests/SongRecognition/BroadcastRuntimeChecks.swift"])
 
     @unittest.skipUnless(sys.platform == "darwin" and shutil.which("swiftc"), "Requires macOS CoreMedia SDK")
     def test_real_asbd_big_endian_cmsamplebuffer(self):
