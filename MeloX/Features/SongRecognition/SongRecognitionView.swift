@@ -11,6 +11,7 @@ struct SongRecognitionView: View {
     @Environment(AppSettings.self) private var settings
 
     @State private var recognition = SongRecognitionStore()
+    @State private var broadcastPicker = SongRecognitionBroadcastPickerController()
 
     var body: some View {
         Group {
@@ -123,18 +124,47 @@ struct SongRecognitionView: View {
         stateContent {
             messageHeader(title: L10n.string("ui.recognition.broadcast.waiting"), symbol: "record.circle",
                           description: L10n.string("ui.recognition.broadcast.instructions"))
-            if let extensionID = recognition.broadcastExtensionID {
-                VStack(spacing: 8) {
-                    SongRecognitionBroadcastPicker(extensionID: extensionID)
-                        .frame(width: 56, height: 56)
-                    Text("ui.recognition.broadcast.launch").font(.headline)
+            VStack(spacing: 8) {
+                if let extensionID = recognition.broadcastExtensionID {
+                    ZStack {
+                        SongRecognitionBroadcastPicker(extensionID: extensionID, controller: broadcastPicker)
+                            .frame(width: 56, height: 56)
+                            .background(.tint, in: Capsule())
+                            .opacity(broadcastPicker.canForward ? 0 : 1)
+                            .accessibilityHidden(broadcastPicker.canForward)
+                        if broadcastPicker.canForward {
+                            Button(action: broadcastPicker.start) {
+                                Text("ui.recognition.broadcast.launch")
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                            }
+                                .buttonStyle(.borderedProminent)
+                                .buttonBorderShape(.capsule)
+                                .controlSize(.large)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .accessibilityHint("ui.recognition.broadcast.launch_hint")
+                        }
+                    }
+                    if !broadcastPicker.canForward {
+                        Text("ui.recognition.broadcast.launch")
+                            .font(.body)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                Button(role: .cancel) { recognition.cancel() } label: {
+                    Text("ui.common.cancel")
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.capsule)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity, minHeight: 44)
             }
+            .frame(maxWidth: 320)
             if let diagnostic = recognition.broadcastStartupDiagnostic { diagnosticDetails(diagnostic) }
             Text("ui.recognition.broadcast.privacy").font(.body).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("ui.common.cancel", role: .cancel) { recognition.cancel() }
-                .buttonStyle(.bordered).controlSize(.large)
         }
     }
 

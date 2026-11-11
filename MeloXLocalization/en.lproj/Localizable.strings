@@ -2172,9 +2172,9 @@
 
 "ui.recognition.broadcast.launch_hint" = "Confirm Start Broadcast, switch to the app playing music, then return to recognize it.";
 
-"ui.recognition.broadcast.instructions" = "Start the screen broadcast below, then switch to the app playing music. Capture ends automatically and the red system indicator disappears. Return to MeloX for recognition.";
+"ui.recognition.broadcast.instructions" = "Start the broadcast and switch to your music app. Capture stops automatically; return to MeloX.";
 
-"ui.recognition.broadcast.privacy" = "Video and microphone input are ignored. No screen data is saved or sent. Audio stays temporarily on your device; only a locally generated fingerprint is sent to NetEase Cloud Music.";
+"ui.recognition.broadcast.privacy" = "Only audio is processed; video is not saved or sent. Only an on-device fingerprint is sent to NetEase Cloud Music.";
 
 "ui.recognition.broadcast.expired" = "This start request has expired. Close the system broadcast panel and retry to begin a new session.";
 

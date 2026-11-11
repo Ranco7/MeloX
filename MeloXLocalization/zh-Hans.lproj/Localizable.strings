@@ -2172,9 +2172,9 @@
 
 "ui.recognition.broadcast.launch_hint" = "确认开始广播后，切换到播放音乐的 App，再返回识别。";
 
-"ui.recognition.broadcast.instructions" = "点击下方按钮开始屏幕广播，再切到播放音乐的 App。采集会自动结束，红色系统指示随之消失；返回 MeloX 完成识别。";
+"ui.recognition.broadcast.instructions" = "开始广播，切换到音乐 App。采集自动结束后，返回 MeloX。";
 
-"ui.recognition.broadcast.privacy" = "忽略画面与麦克风，画面不保存、不发送。音频仅临时保存在设备上，仅向网易云音乐发送设备端生成的音频指纹。";
+"ui.recognition.broadcast.privacy" = "仅处理音频，画面不保存或发送。仅向网易云音乐发送设备端生成的音频指纹。";
 
 "ui.recognition.broadcast.expired" = "本次启动等待已结束。请关闭系统广播面板，再重试开启新会话。";
 

@@ -104,14 +104,25 @@ class PackagingChecks(unittest.TestCase):
 
 
 class CaptureSourceContracts(unittest.TestCase):
-    def test_visible_public_picker_and_early_video_microphone_rejection(self):
+    def test_custom_picker_fallback_and_early_video_microphone_rejection(self):
         picker = read("MeloX/Features/SongRecognition/SongRecognitionBroadcastPicker.swift")
-        self.assertIn("RPSystemBroadcastPickerView(frame:", picker)
+        self.assertIn("class SongRecognitionNativeBroadcastPicker: RPSystemBroadcastPickerView", picker)
         self.assertIn("preferredExtension = extensionID", picker)
         self.assertIn("showsMicrophoneButton = false", picker)
         self.assertIn("accessibilityLabel", picker)
-        for forbidden in ["subviews", "sendActions", "performSelector", "isHidden", "alpha =", "RPScreenRecorder"]:
+        self.assertIn("button.sendActions(for: .touchUpInside)", picker)
+        self.assertIn("button.isEnabled", picker)
+        self.assertIn("timeIntervalSince(lastLaunch) >= 1", picker)
+        self.assertIn("picker.tintColor = .white", picker)
+        self.assertIn("controller?.detach(uiView)", picker)
+        for forbidden in ["performSelector", "value(forKey:", "RPScreenRecorder"]:
             self.assertNotIn(forbidden, picker)
+        view = read("MeloX/Features/SongRecognition/SongRecognitionView.swift")
+        self.assertIn(".opacity(broadcastPicker.canForward ? 0 : 1)", view)
+        self.assertIn("if !broadcastPicker.canForward", view)
+        self.assertIn(".accessibilityHidden(broadcastPicker.canForward)", view)
+        self.assertIn(".buttonBorderShape(.capsule)", view)
+        self.assertIn(".frame(maxWidth: .infinity, minHeight: 44)", view)
         handler = read("MeloXBroadcastUpload/SampleHandler.swift")
         self.assertLess(handler.index("guard sampleBufferType == .audioApp"), handler.index("BroadcastSamplePCM.decode"))
         self.assertNotIn("async", handler)
@@ -159,7 +170,7 @@ class CaptureSourceContracts(unittest.TestCase):
             self.assertNotIn("ui.recognition.broadcast.protected", lines)
             self.assertIn("受保护" if language == "zh-Hans" else "protected", lines["ui.recognition.broadcast.silent"])
             self.assertNotIn("喵", " ".join(lines.values()))
-            self.assertIn("screen" if language == "en" else "画面", lines["ui.recognition.broadcast.privacy"])
+            self.assertIn("video" if language == "en" else "画面", lines["ui.recognition.broadcast.privacy"])
 
     def test_source_names_and_microphone_duration_copy_follow_preferences(self):
         for language in ["en", "zh-Hans"]:
@@ -198,13 +209,13 @@ class CaptureSourceContracts(unittest.TestCase):
             detail = strings["ui.recognition.source.appAudio.detail"]
             waiting = strings["ui.recognition.broadcast.instructions"]
             privacy = strings["ui.recognition.broadcast.privacy"]
+            self.assertIn("red system indicator" if language == "en" else "红色系统指示", detail)
             for text in [detail, waiting]:
-                self.assertIn("screen broadcast" if language == "en" else "屏幕广播", text.lower())
-                self.assertIn("red system indicator" if language == "en" else "红色系统指示", text)
-                self.assertIn("ends automatically" if language == "en" else "自动结束", text)
+                self.assertIn("broadcast" if language == "en" else "广播", text.lower())
+                self.assertIn("automatically" if language == "en" else "自动结束", text)
                 self.assertIn("return to MeloX" if language == "en" else "返回 MeloX", text.replace("Return", "return"))
             self.assertIn("device audio only" if language == "en" else "仅处理设备音频", detail)
-            self.assertIn("No screen data is saved or sent" if language == "en" else "画面不保存、不发送", privacy)
+            self.assertIn("video is not saved or sent" if language == "en" else "画面不保存或发送", privacy)
             for key in ["ui.recognition.source.appAudio.detail", "ui.recognition.capture.limited",
                         "ui.recognition.capture.continuous", "ui.recognition.capture_permission_message",
                         "ui.recognition.broadcast.instructions", "ui.recognition.broadcast.privacy"]:
