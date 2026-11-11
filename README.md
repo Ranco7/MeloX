@@ -1,6 +1,13 @@
+
 # MeloX
 
-[简体中文](README.md) | [English](README.en.md)
+> **MeloX 2.0｜独立修改版**
+>
+> 基于原项目 v1.4.1，重点增强 iPad 侧栏导航、歌单与专辑宽屏布局、底部迷你播放器和完整播放页交互，优化窗口自适应、封面取色、一起听同步、歌词容错与播放缓存。
+>
+> **[查看 MeloX 2.0 最新发行版](https://github.com/Ranco7/MeloX/releases/tag/fix-2e4e1e1)**
+
+[简体中文](README.md) | [English](README_en.md)
 
 [![License](https://img.shields.io/github/license/youshen2/MeloX)](https://github.com/youshen2/MeloX/blob/master/LICENSE)
 [![Download](https://img.shields.io/github/v/release/youshen2/MeloX)](https://github.com/youshen2/MeloX/releases)
