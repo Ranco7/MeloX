@@ -12,9 +12,8 @@ final class SongRecognitionAudioRecorder: SongRecognitionRecording {
     private var isTapInstalled = false
     private var isSessionActive = false
     private var shouldPreservePlaybackSession = false
-    private var audioCapture: (any SongRecognitionAudioCapture)?
 
-    func start(maximumDuration: Int?, source: SongRecognitionAudioSource, playbackAudio: PlaybackAudioCapture?) async throws {
+    func start(maximumDuration: Int?, source: SongRecognitionAudioSource) async throws {
         stop()
         resetCapture()
         shouldPreservePlaybackSession = false
@@ -24,26 +23,7 @@ final class SongRecognitionAudioRecorder: SongRecognitionRecording {
             throw SongRecognitionRecordingError.conversionFailed
         }
 
-        if source != .microphone {
-            let recordingBuffer = makeSampleBuffer(
-                sampleRate: SongRecognitionCapturedAudioBuffer.sampleRate,
-                maximumDuration: maximumDuration
-            )
-            let buffer = SongRecognitionCapturedAudioBuffer(recordingBuffer: recordingBuffer)
-            guard source == .appAudio, let playbackAudio else {
-                resetCapture()
-                throw SongRecognitionRecordingError.captureUnavailable
-            }
-            let capture = SongRecognitionAppAudioCapture(buffer: buffer, playbackAudio: playbackAudio)
-            audioCapture = capture
-            do { try await capture.start() }
-            catch {
-                stop()
-                resetCapture()
-                throw error
-            }
-            return
-        }
+        guard source == .microphone else { throw SongRecognitionRecordingError.captureUnavailable }
 
         try await ensureMicrophonePermission()
         try Task.checkCancellation()
@@ -116,7 +96,6 @@ final class SongRecognitionAudioRecorder: SongRecognitionRecording {
     }
 
     func snapshot() throws -> SongRecognitionAudioSnapshot? {
-        if let failure = audioCapture?.failure { throw failure }
         guard let sampleBuffer,
               sourceSampleRate > 0 else {
             return nil
@@ -172,8 +151,6 @@ final class SongRecognitionAudioRecorder: SongRecognitionRecording {
     }
 
     private func stopEngine() {
-        audioCapture?.stop()
-        audioCapture = nil
         guard let engine else { return }
         if isTapInstalled {
             engine.inputNode.removeTap(onBus: 0)

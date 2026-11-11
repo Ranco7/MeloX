@@ -22,6 +22,8 @@ struct SongRecognitionView: View {
                     title: recognition.audioSource.preparationTitle,
                     description: recognition.audioSource.permissionMessage
                 )
+            case .waitingForBroadcast:
+                broadcastWaitingView
             case .listening:
                 if recognition.isContinuous {
                     continuousListeningView
@@ -67,6 +69,7 @@ struct SongRecognitionView: View {
         } message: {
             Text(library.errorMessage ?? L10n.string("ui.common.unknown_error"))
         }
+        .task { await recognition.resumeBroadcastIfNeeded(api: api) }
         .onDisappear {
             recognition.cancel()
         }
@@ -101,10 +104,36 @@ struct SongRecognitionView: View {
                      : recognition.audioSource.detail)
                     .font(.body)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if recognition.audioSource != .microphone {
+                if recognition.broadcastPaused {
+                    Text("ui.recognition.broadcast.paused").foregroundStyle(.secondary)
+                }
+                Button("ui.recognition.broadcast.stop", action: recognition.stopBroadcastCapture)
+                    .buttonStyle(.borderedProminent).controlSize(.large)
             }
             Button("ui.common.cancel", role: .cancel) { recognition.cancel() }
                 .buttonStyle(.bordered)
                 .controlSize(.large)
+        }
+    }
+
+    private var broadcastWaitingView: some View {
+        stateContent {
+            messageHeader(title: L10n.string("ui.recognition.broadcast.waiting"), symbol: "record.circle",
+                          description: L10n.string("ui.recognition.broadcast.instructions"))
+            if let extensionID = recognition.broadcastExtensionID {
+                VStack(spacing: 8) {
+                    SongRecognitionBroadcastPicker(extensionID: extensionID)
+                        .frame(width: 56, height: 56)
+                    Text("ui.recognition.broadcast.launch").font(.headline)
+                }
+            }
+            Text("ui.recognition.broadcast.privacy").font(.body).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("ui.common.cancel", role: .cancel) { recognition.cancel() }
+                .buttonStyle(.bordered).controlSize(.large)
         }
     }
 
@@ -226,6 +255,13 @@ struct SongRecognitionView: View {
                 }
             }
             .controlSize(.large)
+            if recognition.audioSource != .microphone {
+                Button("ui.recognition.broadcast.use_microphone") {
+                    settings.songRecognition.audioSource = .microphone
+                    startRecognition()
+                }
+                .buttonStyle(.bordered).controlSize(.large)
+            }
         }
     }
 
@@ -235,6 +271,7 @@ struct SongRecognitionView: View {
             VStack(spacing: 8) {
                 Text(title).font(.headline)
                 Text(description).font(.body).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Button("ui.common.cancel", role: .cancel) { recognition.cancel() }
                 .buttonStyle(.bordered)
@@ -251,6 +288,7 @@ struct SongRecognitionView: View {
             VStack(spacing: 8) {
                 Text(title).font(.title2.weight(.semibold)).accessibilityAddTraits(.isHeader)
                 Text(description).font(.body).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -273,6 +311,7 @@ struct SongRecognitionView: View {
             true
         case .ready,
              .requestingPermission,
+             .waitingForBroadcast,
              .listening,
              .matching:
             false
@@ -318,8 +357,7 @@ struct SongRecognitionView: View {
         recognition.start(
             api: api,
             duration: settings.songRecognition.duration,
-            source: settings.songRecognition.audioSource,
-            playbackAudio: player.playbackAudioCapture
+            source: settings.songRecognition.audioSource
         )
     }
 }

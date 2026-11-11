@@ -8,7 +8,7 @@ enum SongRecognitionAudioSource: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     static var availableCases: [Self] {
-        // Cross-app recording is not a supported source in the sideloadable app.
+        // appAudio keeps the saved preference identity; capture uses ReplayKit.
         return [.microphone, .appAudio]
     }
 

@@ -112,6 +112,9 @@ fi
 WIDGET_PATH="$APP_PATH/PlugIns/MeloXLyricsWidget.appex"
 WATCH_PATH="$APP_PATH/Watch/MeloX Watch App.app"
 
+python3 "$ROOT/Tools/verify_broadcast_bundle.py" "$APP_PATH" \
+  --metadata "$APP_PATH/BroadcastSigningRequirements.plist"
+
 assert_bundle_identifier() {
   local bundle_path="$1"
   local expected_bundle_id="$2"
@@ -165,6 +168,7 @@ if [[ ! -f "$IPA_PATH" ]]; then
 fi
 
 unzip -tq "$IPA_PATH"
+python3 "$ROOT/Tools/verify_broadcast_bundle.py" "$STAGING/Payload/$APP_NAME.app" --ipa "$IPA_PATH"
 ls -lh "$IPA_PATH"
 
 echo "Generated / 已生成：$IPA_PATH"

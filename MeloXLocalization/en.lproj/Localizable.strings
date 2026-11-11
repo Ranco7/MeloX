@@ -912,18 +912,18 @@
 "ui.recognition.title" = "Song Recognition";
 "ui.recognition.source" = "Audio Source";
 "ui.recognition.source.microphone" = "Microphone";
-"ui.recognition.source.appAudio" = "App Audio";
+"ui.recognition.source.appAudio" = "Device Audio";
 "ui.recognition.source.systemAudio" = "System Audio";
 "ui.recognition.source.microphone.detail" = "Use the microphone to recognize music nearby or through speakers.";
-"ui.recognition.source.appAudio.detail" = "Recognize music playing in MeloX, including through headphones. Audio from other apps is not accessible.";
+"ui.recognition.source.appAudio.detail" = "Start a system screen broadcast to process device audio only. A red system indicator appears during capture. Capture ends automatically; return to MeloX for recognition.";
 "ui.recognition.source.systemAudio.detail" = "Capturing audio from other apps is not supported in this version.";
-"ui.recognition.system_audio_availability" = "App Audio recognizes only MeloX playback and does not require screen recording permission.";
-"ui.recognition.preparing_capture" = "Connecting to Playback Audio";
-"ui.recognition.capture_permission_message" = "Cross-app recording is not supported in this version. Choose App Audio or Microphone.";
-"ui.recognition.capture.continuous" = "Recognition continues until you stop it. Only an on-device audio fingerprint is uploaded.";
-"ui.recognition.capture.limited" = "Recognize for up to %@. Only an on-device audio fingerprint is uploaded.";
-"ui.recognition.error.capture_unavailable" = "Playback audio could not be connected. Stop other recognition sessions and try again.";
-"ui.recognition.error.capture_timed_out" = "No playback audio was received. Play music in MeloX and try again. Paused or buffering playback cannot be sampled.";
+"ui.recognition.system_audio_availability" = "Requires the bundled audio broadcast extension and a permitted App Group shared by the app and extension.";
+"ui.recognition.preparing_capture" = "Preparing System Audio Capture";
+"ui.recognition.capture_permission_message" = "When ready, tap the system broadcast button and confirm Start Broadcast.";
+"ui.recognition.capture.continuous" = "This mode captures up to 9 seconds per session, without continuous recording.";
+"ui.recognition.capture.limited" = "Capture up to %@ per session.";
+"ui.recognition.error.capture_unavailable" = "System audio capture is unavailable. Check that the extension is installed and both the app and extension are signed with the same permitted App Group, or use the microphone.";
+"ui.recognition.error.capture_timed_out" = "The audio broadcast stopped responding or ended. Stop the system broadcast and retry, and check sharing permissions for both the app and extension.";
 "ui.account.settings_for_user" = "%@’s Account & Settings";
 "ui.account.settings" = "Account & Settings";
 "ui.account.login_settings" = "Sign In & Settings";
@@ -1547,8 +1547,8 @@
 "ui.recognition.no_match_message" = "Move closer to the audio source, reduce ambient noise, extend the duration in Settings, or try Continuous Recognition.";
 "ui.recognition.try_again" = "Try Again";
 "ui.recognition.failed" = "Could Not Complete Recognition";
-"ui.recognition.ready.continuous" = "Move your iPhone close to music that is playing. MeloX keeps listening and showing recognition results until you stop it. Only an audio fingerprint generated on this device is sent to NetEase Cloud Music.";
-"ui.recognition.ready.limited" = "Move your iPhone close to music that is playing. MeloX listens for up to %@ and stops as soon as it finds a result. Only an audio fingerprint generated on this device is sent to NetEase Cloud Music.";
+"ui.recognition.ready.continuous" = "Move your device close to the music. MeloX keeps recognizing until you stop. Only a fingerprint generated on your device is sent to NetEase Cloud Music.";
+"ui.recognition.ready.limited" = "Move your device close to the music. MeloX listens for up to %@ and stops on a match. Only a fingerprint generated on your device is sent to NetEase Cloud Music.";
 "ui.recognition.error.microphone_permission" = "Microphone access is unavailable. Allow MeloX to use the microphone in System Settings.";
 "ui.recognition.error.microphone_unavailable" = "No microphone input is currently available.";
 "ui.recognition.error.recording_failed" = "Could not start recording: %@";
@@ -2165,3 +2165,23 @@
 "ui.playlists.removed_refresh_failed" = "The song was removed, but the playlist artwork could not be refreshed. Pull to refresh.";
 
 "ui.library.favorite_sync_failed" = "Could not sync favorite. The previous state was restored.";
+
+"ui.recognition.broadcast.waiting" = "Waiting for Broadcast";
+
+"ui.recognition.broadcast.launch" = "Open System Broadcast";
+
+"ui.recognition.broadcast.launch_hint" = "Confirm Start Broadcast, switch to the app playing music, then return to recognize it.";
+
+"ui.recognition.broadcast.instructions" = "Start the screen broadcast below, then switch to the app playing music. Capture ends automatically and the red system indicator disappears. Return to MeloX for recognition.";
+
+"ui.recognition.broadcast.privacy" = "Video and microphone input are ignored. No screen data is saved or sent. Audio stays temporarily on your device; only a locally generated fingerprint is sent to NetEase Cloud Music.";
+
+"ui.recognition.broadcast.expired" = "This start request has expired. Close the system broadcast panel and retry to begin a new session.";
+
+"ui.recognition.broadcast.silent" = "Not enough usable audio was captured. Play music in another app and retry. Silent or protected audio may be unavailable.";
+
+"ui.recognition.broadcast.paused" = "The system broadcast is paused. Resuming starts a new continuous audio window; the session still ends automatically.";
+
+"ui.recognition.broadcast.stop" = "Finish Capture & Recognize";
+
+"ui.recognition.broadcast.use_microphone" = "Use Microphone";

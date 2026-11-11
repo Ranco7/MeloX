@@ -48,15 +48,18 @@ struct ContentSettingsView: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(recognition.audioSource.detail)
-                    if !SongRecognitionAudioSource.availableCases.contains(.systemAudio) {
+                    if recognition.audioSource == .appAudio {
                         Text("ui.recognition.system_audio_availability")
-                    }
-                    if recognition.duration.isContinuous {
+                        Text(recognition.duration.isContinuous
+                            ? L10n.string("ui.recognition.capture.continuous")
+                            : L10n.format("ui.recognition.capture.limited", recognition.duration.title))
+                    } else if recognition.duration.isContinuous {
                         Text("ui.settings.content.recognition.footer.continuous")
                     } else {
                         Text("ui.settings.content.recognition.footer.limited")
                     }
                 }
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .navigationTitle("ui.settings.content.title")

@@ -7,6 +7,7 @@ import UIKit
 enum SongRecognitionPhase: Equatable {
     case ready
     case requestingPermission
+    case waitingForBroadcast
     case listening
     case matching
     case results
@@ -15,7 +16,7 @@ enum SongRecognitionPhase: Equatable {
 
     var isWorking: Bool {
         switch self {
-        case .requestingPermission, .listening, .matching:
+        case .requestingPermission, .waitingForBroadcast, .listening, .matching:
             true
         case .ready, .results, .noMatch, .failed:
             false
@@ -38,6 +39,11 @@ final class SongRecognitionStore {
     private(set) var results: [SongRecognitionResult] = []
     private(set) var isContinuous = false
     private(set) var audioSource: SongRecognitionAudioSource = .microphone
+    private(set) var broadcastExtensionID: String?
+    private(set) var broadcastPaused = false
+
+    @ObservationIgnored private let broadcastClient: any SongRecognitionBroadcasting
+    @ObservationIgnored private var broadcastRequest: BroadcastRequest?
 
     @ObservationIgnored
     private let recorder: any SongRecognitionRecording
@@ -52,14 +58,17 @@ final class SongRecognitionStore {
     private var generation = 0
 
     init() {
+        broadcastClient = SongRecognitionBroadcastClient()
         recorder = SongRecognitionAudioRecorder()
         fingerprintGenerator = NeteaseAudioFingerprintGenerator()
     }
 
     init(
         recorder: any SongRecognitionRecording,
-        fingerprintGenerator: any AudioFingerprintGenerating
+        fingerprintGenerator: any AudioFingerprintGenerating,
+        broadcastClient: any SongRecognitionBroadcasting = SongRecognitionBroadcastClient()
     ) {
+        self.broadcastClient = broadcastClient
         self.recorder = recorder
         self.fingerprintGenerator = fingerprintGenerator
     }
@@ -67,8 +76,7 @@ final class SongRecognitionStore {
     func start(
         api: NeteaseAPI,
         duration: SongRecognitionDuration,
-        source: SongRecognitionAudioSource,
-        playbackAudio: PlaybackAudioCapture? = nil
+        source: SongRecognitionAudioSource
     ) {
         guard !phase.isWorking else { return }
 
@@ -78,7 +86,7 @@ final class SongRecognitionStore {
         generation &+= 1
         let currentGeneration = generation
         results = []
-        isContinuous = duration.isContinuous
+        isContinuous = source == .microphone && duration.isContinuous
         audioSource = source
         phase = .requestingPermission
 
@@ -87,11 +95,14 @@ final class SongRecognitionStore {
             await previousTask?.value
             guard let self else { return }
             guard !Task.isCancelled, generation == currentGeneration else { return }
+            if source != .microphone {
+                await recognizeBroadcast(api: api, duration: duration, generation: currentGeneration)
+                return
+            }
             await recognize(
                 api: api,
                 duration: duration,
                 source: source,
-                playbackAudio: playbackAudio,
                 generation: currentGeneration
             )
         }
@@ -112,6 +123,13 @@ final class SongRecognitionStore {
     }
 
     func cancel() {
+        if let request = broadcastRequest {
+            let client = broadcastClient
+            Task { try? await client.stop(request, command: .cancel) }
+        }
+        broadcastRequest = nil
+        broadcastExtensionID = nil
+        broadcastPaused = false
         let wasWorking = phase.isWorking
         generation &+= 1
         recognitionTask?.cancel()
@@ -121,11 +139,125 @@ final class SongRecognitionStore {
         }
     }
 
+    func stopBroadcastCapture() {
+        guard let request = broadcastRequest else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            do { try await broadcastClient.stop(request, command: .complete) }
+            catch {
+                guard broadcastRequest?.id == request.id else { return }
+                cancel()
+                phase = .failed(SongRecognitionFailure(
+                    message: SongRecognitionRecordingError.captureUnavailable.localizedDescription,
+                    opensSystemSettings: false))
+            }
+        }
+    }
+
+    func resumeBroadcastIfNeeded(api: NeteaseAPI) async {
+        guard phase == .ready, recognitionTask == nil else { return }
+        let currentGeneration = generation
+        guard let prepared = try? await broadcastClient.recover(),
+              generation == currentGeneration, phase == .ready else { return }
+        audioSource = .appAudio
+        isContinuous = false
+        phase = .requestingPermission
+        recognitionTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await recognizeBroadcast(api: api, duration: .extended,
+                generation: currentGeneration, prepared: prepared)
+        }
+    }
+
+    private func recognizeBroadcast(api: NeteaseAPI, duration: SongRecognitionDuration,
+                                    generation currentGeneration: Int,
+                                    prepared recovered: PreparedBroadcast? = nil) async {
+        var request: BroadcastRequest?
+        defer {
+            if generation == currentGeneration {
+                recognitionTask = nil
+                broadcastExtensionID = nil
+                broadcastRequest = nil
+                broadcastPaused = false
+            }
+        }
+        do {
+            let prepared: PreparedBroadcast
+            if let recovered { prepared = recovered }
+            else { prepared = try await broadcastClient.prepare(duration: duration.maximumDuration ?? 9) }
+            request = prepared.request
+            // Cancellation may arrive while the actor is preparing its files.
+            // Invalidate that exact UUID even if it never reached the UI.
+            try Task.checkCancellation()
+            guard generation == currentGeneration else { throw CancellationError() }
+            broadcastRequest = prepared.request
+            broadcastExtensionID = prepared.extensionID
+            phase = .waitingForBroadcast
+            var finalSnapshot: SongRecognitionAudioSnapshot?
+            while finalSnapshot == nil {
+                try Task.checkCancellation()
+                // ReplayKit keeps running in its own process. Do not execute
+                // the WebKit fingerprint runtime while the host is suspended.
+                #if canImport(UIKit)
+                while UIApplication.shared.applicationState != .active {
+                    try await Task.sleep(for: .milliseconds(500))
+                }
+                #endif
+                let update = try await broadcastClient.poll(prepared.request)
+                try Task.checkCancellation()
+                guard generation == currentGeneration else { throw CancellationError() }
+                if update.phase != .waiting {
+                    broadcastExtensionID = nil
+                    broadcastPaused = update.phase == .paused
+                    phase = .listening
+                }
+                if update.phase == .completed {
+                    guard let snapshot = update.snapshot else { throw SongRecognitionRecordingError.broadcastSilent }
+                    finalSnapshot = snapshot
+                } else {
+                    try await Task.sleep(for: .milliseconds(500))
+                }
+            }
+            guard let snapshot = finalSnapshot else { return }
+            phase = .matching
+            let fingerprint = try await fingerprintGenerator.generate(from: snapshot.samples)
+            let candidates = try await api.audioMatches(fingerprint: fingerprint, duration: snapshot.duration)
+            try Task.checkCancellation()
+            guard generation == currentGeneration else { return }
+            let immediate = candidateResults(from: candidates)
+            try await broadcastClient.stop(prepared.request, command: .matched)
+            try await broadcastClient.clearAudio(prepared.request)
+            try Task.checkCancellation()
+            guard generation == currentGeneration else { return }
+            results = immediate
+            phase = immediate.isEmpty ? .noMatch : .results
+            if !immediate.isEmpty {
+                let detailed = await resolvedResults(from: immediate, api: api)
+                guard generation == currentGeneration else { return }
+                results = detailed
+            }
+        } catch {
+            if let request { try? await broadcastClient.stop(request, command: .cancel) }
+            guard generation == currentGeneration else { return }
+            if error is CancellationError { phase = .ready }
+            else {
+                let displayError: any Error
+                if let coreError = error as? BroadcastCoreError {
+                    switch coreError {
+                    case .invalidPCM: displayError = SongRecognitionRecordingError.conversionFailed
+                    case .invalidSession: displayError = SongRecognitionRecordingError.captureTimedOut
+                    case .unavailable, .mailbox: displayError = SongRecognitionRecordingError.captureUnavailable
+                    }
+                } else { displayError = error }
+                phase = .failed(SongRecognitionFailure(message: displayError.localizedDescription, opensSystemSettings: false))
+            }
+        }
+    }
+
     private func recognize(
         api: NeteaseAPI,
         duration: SongRecognitionDuration,
         source: SongRecognitionAudioSource,
-        playbackAudio: PlaybackAudioCapture?,
         generation currentGeneration: Int
     ) async {
         defer {
@@ -137,8 +269,7 @@ final class SongRecognitionStore {
         do {
             try await recorder.start(
                 maximumDuration: duration.maximumDuration,
-                source: source,
-                playbackAudio: playbackAudio
+                source: source
             )
             defer {
                 if generation == currentGeneration { recorder.stop() }
@@ -153,24 +284,12 @@ final class SongRecognitionStore {
             )
 
             while true {
-                var snapshot = try await waitForSnapshot(
+                let snapshot = try await waitForSnapshot(
                     minimumTotalDuration: nextQueryDuration
                 )
 
                 try Task.checkCancellation()
                 guard generation == currentGeneration else { return }
-
-                if source != .microphone {
-                    // WebKit's fingerprint runtime needs the foreground. Own-app
-                    // playback capture does not grant access to other apps.
-                    #if canImport(UIKit)
-                    while UIApplication.shared.applicationState != .active {
-                        try await Task.sleep(for: .milliseconds(500))
-                    }
-                    #endif
-                    try Task.checkCancellation()
-                    if let latest = try recorder.snapshot() { snapshot = latest }
-                }
 
                 if snapshot.reachedLimit {
                     recorder.stop()

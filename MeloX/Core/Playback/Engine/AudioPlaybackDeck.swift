@@ -24,8 +24,6 @@ final class AudioPlaybackDeck: NSObject, @preconcurrency AudioPlayerDelegate {
     private var playbackRate: Float = 1
     private var outputVolume: Float = 1
     private let equalizer: AudioEqualizerProcessor
-    let captureSourceID = UUID()
-    var playbackAudioCapture: PlaybackAudioCapture?
 
     #if os(iOS)
     private let spectrum = SharedPlaybackAudioSpectrum()
@@ -92,13 +90,6 @@ final class AudioPlaybackDeck: NSObject, @preconcurrency AudioPlayerDelegate {
         let analyzer = PlaybackAudioSpectrumAnalyzer(sharedSpectrum: spectrum)
         player.frameFiltering.add(entry: "melox.spectrum") { buffer, _ in
             analyzer.process(buffer: buffer)
-        }
-        if let playbackAudioCapture {
-            let sourceID = captureSourceID
-            // Reuse AudioStreaming's mixer tap; a bus supports only one tap.
-            player.frameFiltering.add(entry: "melox.recognition") { buffer, _ in
-                playbackAudioCapture.append(buffer, from: sourceID)
-            }
         }
         #endif
         return await withCheckedContinuation { continuation in

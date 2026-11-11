@@ -39,15 +39,13 @@ final class NeteaseAudioFingerprintGenerator:
             throw NeteaseAudioFingerprintError.invalidResult
         }
 
-        let pcmData = samples.withUnsafeBufferPointer { buffer in
-            guard let baseAddress = buffer.baseAddress else {
-                return Data()
+        let encodedPCM = await Task.detached(priority: .userInitiated) {
+            samples.withUnsafeBufferPointer { buffer in
+                guard let baseAddress = buffer.baseAddress else { return "" }
+                return Data(bytes: baseAddress, count: buffer.count * MemoryLayout<Float>.size).base64EncodedString()
             }
-            return Data(
-                bytes: baseAddress,
-                count: buffer.count * MemoryLayout<Float>.size
-            )
-        }
+        }.value
+        try Task.checkCancellation()
 
         let script = """
         const bytes = Uint8Array.from(
@@ -67,7 +65,7 @@ final class NeteaseAudioFingerprintGenerator:
         do {
             result = try await webView.callAsyncJavaScript(
                 script,
-                arguments: ["pcm": pcmData.base64EncodedString()],
+                arguments: ["pcm": encodedPCM],
                 in: nil,
                 contentWorld: .page
             )
@@ -98,14 +96,12 @@ final class NeteaseAudioFingerprintGenerator:
             )
         }
 
-        guard let wasmSource = bundledText(
-            named: "afp.wasm",
-            extension: "js"
-        ),
-        let fingerprintSource = bundledText(
-            named: "afp",
-            extension: "js"
-        ) else {
+        let sources = await Task.detached(priority: .userInitiated) {
+            (Self.bundledText(named: "afp.wasm", extension: "js"),
+             Self.bundledText(named: "afp", extension: "js"))
+        }.value
+        try Task.checkCancellation()
+        guard let wasmSource = sources.0, let fingerprintSource = sources.1 else {
             throw NeteaseAudioFingerprintError.resourcesMissing
         }
 
@@ -160,7 +156,7 @@ final class NeteaseAudioFingerprintGenerator:
         }
     }
 
-    private func bundledText(
+    nonisolated private static func bundledText(
         named name: String,
         extension fileExtension: String
     ) -> String? {

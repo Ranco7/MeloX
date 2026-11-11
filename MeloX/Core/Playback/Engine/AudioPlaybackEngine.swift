@@ -49,7 +49,6 @@ final class AudioPlaybackEngine {
 
     private(set) var state: AudioPlaybackState = .idle
     private let autoMixController: AutoMixDeckTransitionController
-    let playbackAudioCapture = PlaybackAudioCapture()
     private var clockTask: Task<Void, Never>?
     private var notificationObservers: [NSObjectProtocol] = []
     private var wantsPlayback = false
@@ -187,10 +186,8 @@ final class AudioPlaybackEngine {
 
     private func bindDecks() {
         for (index, deck) in decks.enumerated() {
-            deck.playbackAudioCapture = playbackAudioCapture
             deck.onStateChanged = { [weak self, weak deck] in
                 guard let self, let deck else { return }
-                self.updateCaptureSource()
                 #if os(macOS)
                 if deck.isReady { AudioSpatializationPolicy.apply(self.spatialAudioMode, to: deck) }
                 #endif
@@ -214,9 +211,6 @@ final class AudioPlaybackEngine {
     }
 
     private func bindAutoMixController() {
-        autoMixController.onActiveDeckChanged = { [weak self] in
-            self?.updateCaptureSource()
-        }
         autoMixController.onTransitionBegan = { [weak self] identifier, plan in
             self?.onAutoMixTransitionBegan?(identifier, plan)
         }
@@ -234,13 +228,8 @@ final class AudioPlaybackEngine {
     }
 
     private func updateStateFromPlayer(clockOrigin: AudioPlaybackClockSample.Origin = .stateChanged) {
-        updateCaptureSource()
         transition(to: activeDeck.state)
         publishPlaybackClockSample(origin: clockOrigin)
-    }
-    private func updateCaptureSource() {
-        // Do not concatenate both decks during AutoMix or capture muted seeks.
-        playbackAudioCapture.select(source: activeDeck.state == .playing ? activeDeck.captureSourceID : nil)
     }
     private func publishDurationIfAvailable() {
         guard let duration = activeDeck.playbackDuration else { return }

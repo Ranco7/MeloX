@@ -912,18 +912,18 @@
 "ui.recognition.title" = "听歌识曲";
 "ui.recognition.source" = "音频来源";
 "ui.recognition.source.microphone" = "麦克风";
-"ui.recognition.source.appAudio" = "应用内音频";
+"ui.recognition.source.appAudio" = "设备音频";
 "ui.recognition.source.systemAudio" = "本机内录";
 "ui.recognition.source.microphone.detail" = "通过麦克风识别身边或外放的音乐。";
-"ui.recognition.source.appAudio.detail" = "识别 MeloX 正在播放的音乐，支持耳机播放；无法读取其他 App 的声音。";
+"ui.recognition.source.appAudio.detail" = "手动开启系统屏幕广播，仅处理设备音频。广播时会显示红色系统指示；采集自动结束，返回 MeloX 完成识别。";
 "ui.recognition.source.systemAudio.detail" = "当前版本不支持捕获其他 App 的音频。";
-"ui.recognition.system_audio_availability" = "应用内音频仅识别 MeloX 自己播放的音乐，不需要系统录屏授权。";
-"ui.recognition.preparing_capture" = "正在连接播放音频";
-"ui.recognition.capture_permission_message" = "当前版本不支持跨 App 内录，请选择应用内音频或麦克风。";
-"ui.recognition.capture.continuous" = "持续识别直到手动停止，只上传设备端生成的音频指纹。";
-"ui.recognition.capture.limited" = "最长识别 %@，只上传设备端生成的音频指纹。";
-"ui.recognition.error.capture_unavailable" = "暂时无法连接播放音频，请停止其他识别任务后重试。";
-"ui.recognition.error.capture_timed_out" = "没有收到播放音频，请在 MeloX 中播放音乐后重试。暂停或缓冲时无法采样。";
+"ui.recognition.system_audio_availability" = "需要已嵌入的音频广播扩展，以及 App 与扩展共同获准使用的 App Group。";
+"ui.recognition.preparing_capture" = "正在准备系统音频采集";
+"ui.recognition.capture_permission_message" = "准备完成后，请点击系统广播按钮并确认开始。";
+"ui.recognition.capture.continuous" = "此模式每次最多采集 9 秒，不连续录制。";
+"ui.recognition.capture.limited" = "本次最多采集 %@。";
+"ui.recognition.error.capture_unavailable" = "系统音频扩展不可用。请确认安装包包含扩展，且重签时 App 与扩展都获准使用相同的 App Group；也可使用麦克风。";
+"ui.recognition.error.capture_timed_out" = "音频广播未响应或已停止，请停止系统广播后重试，并检查 App 与扩展的共享权限。";
 "ui.account.settings_for_user" = "%@的账号与设置";
 "ui.account.settings" = "账号与设置";
 "ui.account.login_settings" = "登录与设置";
@@ -1547,8 +1547,8 @@
 "ui.recognition.no_match_message" = "请靠近声源、减少环境噪声，或在设置中延长时长、选择持续识别后重试。";
 "ui.recognition.try_again" = "再试一次";
 "ui.recognition.failed" = "无法完成识别";
-"ui.recognition.ready.continuous" = "将 iPhone 靠近正在播放的音乐。MeloX 会持续聆听并不断展示识别结果，直到你手动停止。只会向网易云音乐发送设备端生成的音频指纹。";
-"ui.recognition.ready.limited" = "将 iPhone 靠近正在播放的音乐。MeloX 最长会聆听 %@，识别到结果后立即停止，并只向网易云音乐发送设备端生成的音频指纹。";
+"ui.recognition.ready.continuous" = "将设备靠近音乐，MeloX 会持续识别，直到你停止。仅向网易云音乐发送设备端生成的音频指纹。";
+"ui.recognition.ready.limited" = "将设备靠近音乐，MeloX 最多聆听 %@，识别后立即停止。仅向网易云音乐发送设备端生成的音频指纹。";
 "ui.recognition.error.microphone_permission" = "没有麦克风权限。请在系统设置中允许 MeloX 使用麦克风。";
 "ui.recognition.error.microphone_unavailable" = "当前没有可用的麦克风输入。";
 "ui.recognition.error.recording_failed" = "无法开始录音：%@";
@@ -2165,3 +2165,23 @@
 "ui.playlists.removed_refresh_failed" = "歌曲已移除，但歌单封面刷新失败，请下拉刷新。";
 
 "ui.library.favorite_sync_failed" = "收藏未能同步，已恢复原状态";
+
+"ui.recognition.broadcast.waiting" = "等待开始广播";
+
+"ui.recognition.broadcast.launch" = "打开系统广播";
+
+"ui.recognition.broadcast.launch_hint" = "确认开始广播后，切换到播放音乐的 App，再返回识别。";
+
+"ui.recognition.broadcast.instructions" = "点击下方按钮开始屏幕广播，再切到播放音乐的 App。采集会自动结束，红色系统指示随之消失；返回 MeloX 完成识别。";
+
+"ui.recognition.broadcast.privacy" = "忽略画面与麦克风，画面不保存、不发送。音频仅临时保存在设备上，仅向网易云音乐发送设备端生成的音频指纹。";
+
+"ui.recognition.broadcast.expired" = "本次启动等待已结束。请关闭系统广播面板，再重试开启新会话。";
+
+"ui.recognition.broadcast.silent" = "未采集到足够的有效声音。请在其他 App 播放音乐后重试；静音或受保护的音频可能无法采集。";
+
+"ui.recognition.broadcast.paused" = "系统广播已暂停，恢复后将重新采集连续片段；本次仍会自动到时结束。";
+
+"ui.recognition.broadcast.stop" = "结束采集并识别";
+
+"ui.recognition.broadcast.use_microphone" = "使用麦克风";

@@ -70,6 +70,10 @@ jobs:
             -o "$RUNNER_TEMP/artwork-background-checks"
           "$RUNNER_TEMP/artwork-background-checks"
 
+      - name: Run broadcast capture regression / 检查系统音频采集
+        shell: bash
+        run: python3 -m unittest Tools.Tests.test_broadcast_capture -v
+
       - name: Build unsigned IPA / 构建未签名 IPA
         shell: bash
         run: bash build_ios_unsigned.sh
@@ -83,6 +87,7 @@ jobs:
           test -d "${APP}"
           test -f "${IPA}"
           unzip -tq "${IPA}"
+          python3 Tools/verify_broadcast_bundle.py "${APP}" --ipa "${IPA}"
 
           echo "size: $(du -h "${IPA}" | awk '{print $1}')"
           echo "bytes: $(wc -c < "${IPA}" | tr -d ' ')"

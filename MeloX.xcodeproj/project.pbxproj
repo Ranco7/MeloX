@@ -15,6 +15,7 @@
 		D3000000000000000000000B /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A1D0AD000000000000000003 /* GRDB */; };
 		F60000000000000000000001 /* AudioStreaming in Frameworks */ = {isa = PBXBuildFile; productRef = F60000000000000000000004 /* AudioStreaming */; };
 		F60000000000000000000002 /* AudioStreaming in Frameworks */ = {isa = PBXBuildFile; productRef = F60000000000000000000004 /* AudioStreaming */; };
+		BC0000000000000000000001 /* MeloXBroadcastUpload.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = BC0000000000000000000002; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,6 +33,13 @@
 			remoteGlobalIDString = B10000000000000000000001;
 			remoteInfo = "MeloX Watch App";
 		};
+		BC0000000000000000000003 = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6DB1D87A300F5FA000FB3AEE;
+			proxyType = 1;
+			remoteGlobalIDString = BC0000000000000000000007;
+			remoteInfo = MeloXBroadcastUpload;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -42,6 +50,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				CDCDC02B263846DD93AAF886 /* MeloXLyricsWidget.appex in Embed Foundation Extensions */,
+				BC0000000000000000000001 /* MeloXBroadcastUpload.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -64,6 +73,7 @@
 		6DB1D882300F5FA000FB3AEE /* MeloX.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MeloX.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B10000000000000000000002 /* MeloX Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MeloX Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		D30000000000000000000001 /* MeloX Desktop.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "MeloX Desktop.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		BC0000000000000000000002 /* MeloXBroadcastUpload.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MeloXBroadcastUpload.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -94,6 +104,11 @@
 				Info.plist,
 			);
 			target = D30000000000000000000007 /* MeloX Desktop */;
+		};
+		BC0000000000000000000005 = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (Info.plist, MeloXBroadcastUpload.entitlements, );
+			target = BC0000000000000000000007;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -145,6 +160,17 @@
 			path = MeloXLocalization;
 			sourceTree = "<group>";
 		};
+		BC0000000000000000000006 /* MeloXBroadcastUpload */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (BC0000000000000000000005, );
+			path = MeloXBroadcastUpload;
+			sourceTree = "<group>";
+		};
+		BC0000000000000000000008 /* MeloXBroadcastShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MeloXBroadcastShared;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -182,6 +208,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BC000000000000000000000A = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -194,6 +221,8 @@
 				B10000000000000000000004 /* MeloXWatchShared */,
 				B10000000000000000000003 /* MeloXWatch */,
 				CCEB73D46F0F496D8CBFF0CE /* MeloXLyricsWidget */,
+				BC0000000000000000000006 /* MeloXBroadcastUpload */,
+				BC0000000000000000000008 /* MeloXBroadcastShared */,
 				C2283E4B5CA041B19C10CB23 /* MeloXLiveActivityShared */,
 				6DB1D883300F5FA000FB3AEE /* Products */,
 			);
@@ -206,6 +235,7 @@
 				D30000000000000000000001 /* MeloX Desktop.app */,
 				B10000000000000000000002 /* MeloX Watch App.app */,
 				2572AEB5A5B04809878AE645 /* MeloXLyricsWidget.appex */,
+				BC0000000000000000000002 /* MeloXBroadcastUpload.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -252,10 +282,12 @@
 			);
 			dependencies = (
 				B680245FE2CA46B0B69EBFF8 /* PBXTargetDependency */,
+				BC0000000000000000000004 /* PBXTargetDependency */,
 				B1000000000000000000000E /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				6DB1D884300F5FA000FB3AEE /* MeloX */,
+				BC0000000000000000000008 /* MeloXBroadcastShared */,
 				B10000000000000000000004 /* MeloXWatchShared */,
 				C2283E4B5CA041B19C10CB23 /* MeloXLiveActivityShared */,
 				E40000000000000000000001 /* MeloXLocalization */,
@@ -321,6 +353,19 @@
 			productReference = D30000000000000000000001 /* MeloX Desktop.app */;
 			productType = "com.apple.product-type.application";
 		};
+		BC0000000000000000000007 /* MeloXBroadcastUpload */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BC000000000000000000000C;
+			buildPhases = (BC0000000000000000000009, BC000000000000000000000A, BC000000000000000000000B, );
+			buildRules = ();
+			dependencies = ();
+			fileSystemSynchronizedGroups = (BC0000000000000000000006, BC0000000000000000000008, );
+			name = MeloXBroadcastUpload;
+			packageProductDependencies = ();
+			productName = MeloXBroadcastUpload;
+			productReference = BC0000000000000000000002;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -346,6 +391,10 @@
 								enabled = 1;
 							};
 						};
+					};
+					BC0000000000000000000007 = {
+						CreatedOnToolsVersion = 27.2;
+						SystemCapabilities = {com.apple.ApplicationGroups.iOS = {enabled = 1; }; };
 					};
 					B10000000000000000000001 = {
 						CreatedOnToolsVersion = 26.6;
@@ -380,6 +429,7 @@
 				D30000000000000000000007 /* MeloX Desktop */,
 				B10000000000000000000001 /* MeloX Watch App */,
 				1CC9813243AD4097A843BDAE /* MeloXLyricsWidget */,
+				BC0000000000000000000007 /* MeloXBroadcastUpload */,
 			);
 		};
 /* End PBXProject section */
@@ -413,6 +463,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BC000000000000000000000B = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
@@ -491,6 +542,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		BC0000000000000000000009 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -504,6 +556,11 @@
 			isa = PBXTargetDependency;
 			target = 1CC9813243AD4097A843BDAE /* MeloXLyricsWidget */;
 			targetProxy = 4D674F3579C9450D998FCCD4 /* PBXContainerItemProxy */;
+		};
+		BC0000000000000000000004 = {
+			isa = PBXTargetDependency;
+			target = BC0000000000000000000007;
+			targetProxy = BC0000000000000000000003;
 		};
 /* End PBXTargetDependency section */
 
@@ -545,6 +602,8 @@
 		6DB1D88D300F5FA100FB3AEE /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				MELOX_APP_BUNDLE_IDENTIFIER = azki.moye.MeloX;
+				MELOX_BROADCAST_APP_GROUP = "group.$(MELOX_APP_BUNDLE_IDENTIFIER).recognition";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
@@ -611,6 +670,8 @@
 		6DB1D88E300F5FA100FB3AEE /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				MELOX_APP_BUNDLE_IDENTIFIER = azki.moye.MeloX;
+				MELOX_BROADCAST_APP_GROUP = "group.$(MELOX_APP_BUNDLE_IDENTIFIER).recognition";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
@@ -934,6 +995,50 @@
 			};
 			name = Release;
 		};
+		BC000000000000000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = MeloXBroadcastUpload/MeloXBroadcastUpload.entitlements;
+				CURRENT_PROJECT_VERSION = 9110401;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MeloXBroadcastUpload/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", );
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MELOX_APP_BUNDLE_IDENTIFIER).BroadcastUpload";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BC000000000000000000000E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = MeloXBroadcastUpload/MeloXBroadcastUpload.entitlements;
+				CURRENT_PROJECT_VERSION = 9110401;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = MeloXBroadcastUpload/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks", "@executable_path/../../Frameworks", );
+				MARKETING_VERSION = 2.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(MELOX_APP_BUNDLE_IDENTIFIER).BroadcastUpload";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -979,6 +1084,12 @@
 				D30000000000000000000009 /* Debug */,
 				D3000000000000000000000A /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BC000000000000000000000C = {
+			isa = XCConfigurationList;
+			buildConfigurations = (BC000000000000000000000D, BC000000000000000000000E, );
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};

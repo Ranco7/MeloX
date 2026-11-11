@@ -171,8 +171,6 @@ final class PlayerStore {
     @ObservationIgnored
     private let engine: AudioPlaybackEngine
 
-    var playbackAudioCapture: PlaybackAudioCapture { engine.playbackAudioCapture }
-
     @ObservationIgnored
     private let beatAnalyzer: AutoMixAudioAnalyzer
 

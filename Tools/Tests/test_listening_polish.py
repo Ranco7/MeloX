@@ -18,22 +18,15 @@ def read(path):
 
 
 class ListeningSourceChecks(unittest.TestCase):
-    def test_own_audio_uses_existing_mixer_callback(self):
-        capture = read("MeloX/Features/SongRecognition/SongRecognitionAppAudioCapture.swift")
-        recorder = read("MeloX/Features/SongRecognition/SongRecognitionAudioRecorder.swift")
+    def test_system_audio_has_no_playback_mixer_subscription(self):
+        self.assertFalse((ROOT / "MeloX/Core/Playback/Engine/PlaybackAudioCapture.swift").exists())
+        self.assertFalse((ROOT / "MeloX/Features/SongRecognition/SongRecognitionAppAudioCapture.swift").exists())
         deck = read("MeloX/Core/Playback/Engine/AudioPlaybackDeck.swift")
-        self.assertIn('frameFiltering.add(entry: "melox.recognition")', deck)
-        self.assertIn("playbackAudioCapture.append(buffer, from: sourceID)", deck)
-        self.assertNotIn("installTap", capture)
-        self.assertNotIn("ReplayKit", capture)
-        self.assertNotIn("ScreenCaptureKit", recorder)
-        self.assertIn("guard source == .appAudio, let playbackAudio", recorder)
-        self.assertNotIn("Task {", capture, "PCM callbacks must not enqueue per-buffer UI work")
-        engine = read("MeloX/Core/Playback/Engine/AudioPlaybackEngine.swift")
-        self.assertIn("activeDeck.state == .playing ? activeDeck.captureSourceID : nil", engine)
+        self.assertNotIn('melox.recognition', deck)
+        self.assertIn('frameFiltering.add(entry: "melox.spectrum")', deck)
         view = read("MeloX/Features/SongRecognition/SongRecognitionView.swift")
-        self.assertIn("playbackAudio: player.playbackAudioCapture", view)
         self.assertIn("== .microphone, player.isPlaying", view)
+        self.assertIn("SongRecognitionBroadcastPicker(extensionID:", view)
 
     def test_capture_claims_and_adaptive_states(self):
         source = read("MeloX/Core/Settings/Recognition/SongRecognitionAudioSource.swift")
@@ -47,7 +40,7 @@ class ListeningSourceChecks(unittest.TestCase):
         for language in ["zh-Hans", "en"]:
             strings = read(f"MeloXLocalization/{language}.lproj/Localizable.strings")
             line = next(line for line in strings.splitlines() if line.startswith('"ui.recognition.source.appAudio.detail"'))
-            self.assertIn("无法读取其他 App" if language == "zh-Hans" else "not accessible", line)
+            self.assertIn("系统屏幕广播" if language == "zh-Hans" else "system screen broadcast", line)
 
     def test_favorites_are_observed_and_centralized(self):
         library = read("MeloX/Core/Library/LibraryStore.swift")
@@ -126,16 +119,11 @@ class SwiftBehaviorChecks(unittest.TestCase):
                         "Tests/Player/MusicCollectionSearchLayoutChecks.swift"])
 
     @unittest.skipUnless(sys.platform == "darwin" and shutil.which("swiftc"), "Requires macOS AVFoundation SDK")
-    def test_playback_pcm_capture(self):
-        self.run_swift(["MeloX/Core/Playback/Engine/PlaybackAudioCapture.swift",
-                        "MeloX/Features/SongRecognition/SongRecognitionSampleBuffer.swift",
-                        "MeloX/Features/SongRecognition/SongRecognitionCapturedAudioBuffer.swift",
-                        "MeloX/Features/SongRecognition/SongRecognitionAppAudioCapture.swift",
-                        "Tests/SongRecognition/PlaybackCaptureChecks.swift"])
-
-    @unittest.skipUnless(sys.platform == "darwin" and shutil.which("swiftc"), "Requires macOS AVFoundation SDK")
     def test_recognition_failure_cancel_and_states(self):
-        self.run_swift(["MeloX/Core/Playback/Engine/PlaybackAudioCapture.swift",
+        self.run_swift(["MeloXBroadcastShared/BroadcastPCM.swift",
+                        "MeloXBroadcastShared/BroadcastSession.swift",
+                        "MeloXBroadcastShared/BroadcastMailbox.swift",
+                        "MeloX/Features/SongRecognition/SongRecognitionBroadcastClient.swift",
                         "MeloX/Core/Settings/Recognition/SongRecognitionAudioSource.swift",
                         "MeloX/Core/Settings/Recognition/SongRecognitionPreferences.swift",
                         "MeloX/Core/Models/Networking/AudioMatchResponse.swift",

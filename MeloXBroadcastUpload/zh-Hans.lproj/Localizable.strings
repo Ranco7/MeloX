@@ -1,0 +1,5 @@
+"broadcast.finished" = "音频采集已完成，请返回 MeloX 识别歌曲。";
+"broadcast.cancelled" = "音频采集已停止。";
+"broadcast.no_audio" = "未收到可用音频，请播放音乐后重试。受保护的音频可能无法采集。";
+"broadcast.format_error" = "无法处理此音频格式，请停止广播后尝试其他音源。";
+"broadcast.unavailable" = "请在 MeloX 听歌识曲中开启新会话。App 与扩展都需要获准使用同一个 App Group。";

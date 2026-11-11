@@ -1,6 +1,6 @@
 import Foundation
 
-enum SongRecognitionRecordingError: LocalizedError {
+nonisolated enum SongRecognitionRecordingError: LocalizedError {
     case microphonePermissionDenied
     case microphoneUnavailable
     case recordingFailed(String)
@@ -8,6 +8,8 @@ enum SongRecognitionRecordingError: LocalizedError {
     case conversionFailed
     case captureUnavailable
     case captureTimedOut
+    case broadcastStartExpired
+    case broadcastSilent
 
     var errorDescription: String? {
         switch self {
@@ -23,6 +25,10 @@ enum SongRecognitionRecordingError: LocalizedError {
             L10n.string("ui.recognition.error.conversion_failed")
         case .captureUnavailable:
             L10n.string("ui.recognition.error.capture_unavailable")
+        case .broadcastStartExpired:
+            L10n.string("ui.recognition.broadcast.expired")
+        case .broadcastSilent:
+            L10n.string("ui.recognition.broadcast.silent")
         case .captureTimedOut:
             L10n.string("ui.recognition.error.capture_timed_out")
         }
@@ -37,7 +43,7 @@ enum SongRecognitionRecordingError: LocalizedError {
     }
 }
 
-struct SongRecognitionAudioSnapshot {
+nonisolated struct SongRecognitionAudioSnapshot: Sendable {
     let samples: [Float]
     let duration: Int
     let totalDuration: Int
@@ -48,8 +54,7 @@ struct SongRecognitionAudioSnapshot {
 protocol SongRecognitionRecording: AnyObject {
     func start(
         maximumDuration: Int?,
-        source: SongRecognitionAudioSource,
-        playbackAudio: PlaybackAudioCapture?
+        source: SongRecognitionAudioSource
     ) async throws
     func snapshot() throws -> SongRecognitionAudioSnapshot?
     func prepareForConcurrentPlayback()

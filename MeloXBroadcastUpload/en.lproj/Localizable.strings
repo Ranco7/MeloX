@@ -1,0 +1,5 @@
+"broadcast.finished" = "Audio capture is complete. Return to MeloX to recognize the song.";
+"broadcast.cancelled" = "Audio capture stopped.";
+"broadcast.no_audio" = "No usable audio was received. Play music and try again. Protected audio may be unavailable.";
+"broadcast.format_error" = "This audio format could not be processed. Stop the broadcast and try another source.";
+"broadcast.unavailable" = "Open song recognition in MeloX and start a new session. Both the app and extension need the same permitted App Group.";
