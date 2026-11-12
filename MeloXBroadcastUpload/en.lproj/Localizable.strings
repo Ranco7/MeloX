@@ -10,7 +10,7 @@
 "broadcast.diagnostic.missingExecutable" = "The broadcast extension executable is missing or invalid.";
 "broadcast.diagnostic.noUsableGroup" = "No candidate shared container could be accessed. Check that the app and extension’s actual signatures use a common group.";
 "broadcast.diagnostic.notWritable" = "The shared container did not pass the small-file read/write check.";
-"broadcast.diagnostic.profileIssue" = "Some public signing metadata could not be read or parsed. Configured and established groups were also tried.";
+"broadcast.diagnostic.profileIssue" = "Some provisioning profile data could not be read or parsed. The configured and established groups were tried instead.";
 "broadcast.diagnostic.handshakeMismatch" = "The extension’s session, identifier or shared group did not match this request. Its audio was not used.";
 "broadcast.diagnostic.startNotConfirmed" = "No extension startup confirmation has arrived. Choose Start Broadcast in the system panel. If it already started and ended, check the system completion message and retry. This state alone cannot identify a sharing-permission failure.";
 "broadcast.diagnostic.startNotPrepared" = "No valid pending start request was found. Return to song recognition and begin a new session.";

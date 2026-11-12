@@ -2176,7 +2176,7 @@
 
 "ui.recognition.broadcast.privacy" = "Only audio is processed; video is not saved or sent. Only an on-device fingerprint is sent to NetEase Cloud Music.";
 
-"ui.recognition.broadcast.expired" = "This start request has expired. Close the system broadcast panel and retry to begin a new session.";
+"ui.recognition.broadcast.expired" = "This start request has expired. Close the system broadcast panel and start a new session.";
 
 "ui.recognition.broadcast.silent" = "Not enough usable audio was captured. Play music in another app and retry. Silent or protected audio may be unavailable.";
 
@@ -2195,7 +2195,7 @@
 "ui.recognition.diagnostic.missingExecutable" = "The broadcast extension executable is missing or invalid.";
 "ui.recognition.diagnostic.noUsableGroup" = "No candidate shared container could be accessed. Check that the app and extension’s actual signatures use a common group.";
 "ui.recognition.diagnostic.notWritable" = "The shared container did not pass the small-file read/write check.";
-"ui.recognition.diagnostic.profileIssue" = "Some public signing metadata could not be read or parsed. Configured and established groups were also tried.";
+"ui.recognition.diagnostic.profileIssue" = "Some provisioning profile data could not be read or parsed. The configured and established groups were tried instead.";
 "ui.recognition.diagnostic.handshakeMismatch" = "The extension’s session, identifier or shared group did not match this request. Its audio was not used.";
 "ui.recognition.diagnostic.startNotConfirmed" = "No extension startup confirmation has arrived. Choose Start Broadcast in the system panel. If it already started and ended, check the system completion message and retry. This state alone cannot identify a sharing-permission failure.";
 "ui.recognition.diagnostic.startNotPrepared" = "No valid pending start request was found. Return to song recognition and begin a new session.";

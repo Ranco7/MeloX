@@ -2176,11 +2176,11 @@
 
 "ui.recognition.broadcast.privacy" = "仅处理音频，画面不保存或发送。仅向网易云音乐发送设备端生成的音频指纹。";
 
-"ui.recognition.broadcast.expired" = "本次启动等待已结束。请关闭系统广播面板，再重试开启新会话。";
+"ui.recognition.broadcast.expired" = "本次启动已超时。请关闭系统广播面板，再开启新会话。";
 
 "ui.recognition.broadcast.silent" = "未采集到足够的有效声音。请在其他 App 播放音乐后重试；静音或受保护的音频可能无法采集。";
 
-"ui.recognition.broadcast.paused" = "系统广播已暂停，恢复后将重新采集连续片段；本次仍会自动到时结束。";
+"ui.recognition.broadcast.paused" = "系统广播已暂停，恢复后会重新采集一段连续音频；到时间后仍会自动结束。";
 
 "ui.recognition.broadcast.stop" = "结束采集并识别";
 
@@ -2195,7 +2195,7 @@
 "ui.recognition.diagnostic.missingExecutable" = "广播扩展的可执行文件缺失或无效。";
 "ui.recognition.diagnostic.noUsableGroup" = "未能访问候选共享容器。请确认 App 与扩展的实际签名使用同一个共享组。";
 "ui.recognition.diagnostic.notWritable" = "共享容器未通过小文件读写检查。";
-"ui.recognition.diagnostic.profileIssue" = "部分公开签名元数据无法读取或解析，仍尝试了配置与已有共享组。";
+"ui.recognition.diagnostic.profileIssue" = "部分签名描述文件无法读取或解析，已改用配置中的共享组和已有共享组继续尝试。";
 "ui.recognition.diagnostic.handshakeMismatch" = "扩展确认的会话、扩展标识或共享组与本次请求不一致，未使用其音频。";
 "ui.recognition.diagnostic.startNotConfirmed" = "尚未收到扩展启动确认。请在系统面板点开始广播；若已开始后结束，请查看系统结束提示并重试。此状态不能单独确定是否为共享权限问题。";
 "ui.recognition.diagnostic.startNotPrepared" = "没有找到本次有效的启动请求。请返回识曲页开启新会话。";

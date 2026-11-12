@@ -10,7 +10,7 @@
 "broadcast.diagnostic.missingExecutable" = "广播扩展的可执行文件缺失或无效。";
 "broadcast.diagnostic.noUsableGroup" = "未能访问候选共享容器。请确认 App 与扩展的实际签名使用同一个共享组。";
 "broadcast.diagnostic.notWritable" = "共享容器未通过小文件读写检查。";
-"broadcast.diagnostic.profileIssue" = "部分公开签名元数据无法读取或解析，仍尝试了配置与已有共享组。";
+"broadcast.diagnostic.profileIssue" = "部分签名描述文件无法读取或解析，已改用配置中的共享组和已有共享组继续尝试。";
 "broadcast.diagnostic.handshakeMismatch" = "扩展确认的会话、扩展标识或共享组与本次请求不一致，未使用其音频。";
 "broadcast.diagnostic.startNotConfirmed" = "尚未收到扩展启动确认。请在系统面板点开始广播；若已开始后结束，请查看系统结束提示并重试。此状态不能单独确定是否为共享权限问题。";
 "broadcast.diagnostic.startNotPrepared" = "没有找到本次有效的启动请求。请返回识曲页开启新会话。";

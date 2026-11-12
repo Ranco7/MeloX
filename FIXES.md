@@ -92,7 +92,7 @@
 ### b5-downloads-network（14 条 / 11 提交）
 
 - **状态**：11 fixed、1 partially_fixed（D15）、1 deferred（A11）、1 false_positive（A12）。
-- **结论**：由 fast 模型执行，产出 11 个真实提交、每个提交 1 个文件，逐条与报告文件清单一致（`156a008`、`94275bc`、`fa7c3a7`、`0114bec`、`bd3cac0`、`851581a`、`ff03f6a`、`4556bcc`、`7329c02`、`4fe619b`、`d2b1412`）。
+- **结论**：产出 11 个真实提交、每个提交 1 个文件，逐条与报告文件清单一致（`156a008`、`94275bc`、`fa7c3a7`、`0114bec`、`bd3cac0`、`851581a`、`ff03f6a`、`4556bcc`、`7329c02`、`4fe619b`、`d2b1412`）。
 - **差异（误报）**：A12 经复核为**确认误报**——`Self.scope(for: settings.cookie)` 在 async actor 调用/await 之前求值，scope 在 actor hop 前已按当前 cookie 固定；三个调用方（`LibraryStore.persistContent`、`HomeRecommendedView.persistContent`、`PlaylistDetailView.persistContent`）都在 await 后按请求发起时的 token 做了 guard。因此未改代码。
 - **残余风险**：D15 只补了日志，没有 UI 错误通道、也没有保留上次缓存；`QQMusicLyricMatchStore` 的 actor/static 隔离（D21）需编译确认；`A5`/`B4` 占位实现使用 `Song(id:name:artists:)` 与 `Set.subtract([Int])`，类型是否成立未编译验证。
 
@@ -1852,7 +1852,7 @@
 - **Owner analytics（2026-11-09 补充，来自较旧版本，非本轮构建）**：`moye.MeloX` telemetry 有 Non-Responsive Task Runloop Hang 22–44s 分桶，以及 Extended Launch Runloop Hang 3s、26s 分桶；**没有实际 crash stack**。这加强“主线程阻塞 / 系统 watchdog”假设，但不能证明 resize 崩溃的根因，也不能归因到本分支。
   - 按此线索复核到的现有主线程 I/O：`DownloadStore.init`（`@MainActor`）同步打开/迁移 GRDB、fetch/解码全部下载记录、逐个检查文件并删除缺失记录；`LibraryStore` 启动持久化在 MainActor 取快照，`PageContentCache.store` 也在 MainActor 执行 `JSONEncoder().encode` 后才把 Data 交给 actor。两者都可能是启动/恢复 hang 的来源，但本轮**未改**：缺少编译/真机环境，且改动会触及启动顺序与持久化契约，先记录为后续 focused follow-up。
   - `ArtworkAccentColorProvider` 在本轮之前就是独立 actor + per-URL `assetsCache`；本轮只修查询 key 的 URL 规范化，**没有“首次把取色移出主线程”**。
-- **环境**：代码阶段在 Linux 上静态审查与 Swift parse；随后在可可 Mac 上用 Xcode / iOS SDK 27.2 完成 Release 未签名构建，见 11.14。没有运行 App、模拟器或 iPad 真机调试，不能把编译通过当成运行通过。
+- **环境**：代码阶段在 Linux 上静态审查与 Swift parse；随后在本地 Mac 上用 Xcode / iOS SDK 27.2 完成 Release 未签名构建，见 11.14。没有运行 App、模拟器或 iPad 真机调试，不能把编译通过当成运行通过。
 - **未改动**：`.fix/`、REVIEW.md、工程文件、CI/workflows、签名、版本号与构建号；未推送、未安装依赖、未访问网络。
 - **崩溃结论的写法**：凡是无法用 crash log 证明的，一律写“假设/风险”，不写“已确认根因”。
 
@@ -1947,7 +1947,7 @@
 | 17 | `544b174` | test(playback) | 歌曲切换提取方法 fixture 增加缓存生命周期断言，保留 iOS/Desktop 原有 16 场景 |
 
 - 首轮另有 1 个文档提交，follow-up 另有 1 个文档提交记录本节；未改版本号、构建号、签名、workflows、pbxproj；未推送。
-- 原有 `.fix/` 未触碰；执行器只读尝试产生的 `.permission-probe-agent` 已删除。操作记录 `.agent-notes.md` 保留本地，最终源码树不包含它；未推送。
+- 原有 `.fix/` 未触碰；只读探测产生的临时文件已删除。操作记录 `.agent-notes.md` 保留本地，最终源码树不包含它；未推送。
 
 ### 11.9 静态验证结果（全部可复现）
 
@@ -1983,7 +1983,7 @@
 | 本轮 UI 改动 | 对应 HIG 指引 | 实现与边界 |
 | --- | --- | --- |
 | #1 连续缩窗：负尺寸钳制、稳定行身份、宽度回调量化 | Layout: “Design a layout that adapts gracefully and consistently”; “Keep functionality the same as size classes change” | 只把几何钳到安全值、稳定 `Song.id` 身份、按 8pt 量化重建，不改功能；未真机验证 |
-| #3 自己/喜欢歌单隐藏收藏按钮 | 内容优先、界面克制；只呈现有效操作（可可要求） | 页头和更多菜单共用同一归属判断，避免看似可点但必然无效/报错的动作 |
+| #3 自己/喜欢歌单隐藏收藏按钮 | 内容优先、界面克制；只呈现有效操作（设备反馈要求） | 页头和更多菜单共用同一归属判断，避免看似可点但必然无效/报错的动作 |
 | #4 喜欢歌曲行尾部 20pt inset | Layout: “Align elements…”; “Use consistent spacing” | 与歌单/专辑详情统一 trailing，替换默认 inset 而非叠加，避免双重间距 |
 | #5 浮动播放器贴底/键盘/分屏 | Layout: “respect system-defined safe areas”; “design based on actual available space, not device type or orientation” | 根级 overlay + `.ignoresSafeArea(.keyboard)` + `safeAreaInsets.bottom`；宽布局按几何宽度扣 28pt 外 padding + 16pt 内 padding，而不是按设备/方向判断 |
 | #5/#6 迷你播放器 → 全屏转场 | Motion: “Add motion purposefully”; “Aim for brevity and precision in feedback animations”; “Let people cancel motion”; “Make motion optional” | **保留 iPad 系统 native zoom**（`.navigationTransition(.zoom)` + 单一 `matchedTransitionSource`），不从 mini 视图自建替代动画；连续性来自同一 artwork source；未新增全局动画，Reduce Motion 仍由系统与现有 `pausesAnimation` 生效 |
@@ -2003,13 +2003,13 @@
 - **编译源码提交**：`544b1741b15c8ddd17002ad340a1936e90bf0bfa`（生产代码最后修改 `d2b58cc`；其后仅测试/文档/本地记录清理）。
 - **结果**：Xcode / iOS SDK 27.2，Release，`generic/platform=iOS`，完整 clean build + 打包通过。固定 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`；没有 sudo，没有签名，没有改版本/CI/工程配置。
 - **经过**：前两次类型检查暴露缺少 `Self.` 与不存在的 Nuke state API，由 Command Code 修复；第三次编译链接已通过，但归档拷贝缺少 Git HEAD，原有 release-notes phase 无法解析。随后只补入本地 Git bundle 元数据，第四次完整构建通过，没有绕过或删除构建阶段。
-- **IPA**：`.out/MeloX-round2-unsigned-544b174.ipa`，30,769,977 字节（约 29.35 MiB）。SHA256：`6769ad62848f22853c9afcb19fe92c44f9389f6c27e47e5f073651be0a5c1f7f`。Mac→box 拷回后再次核验相同。
+- **IPA**：`.out/MeloX-round2-unsigned-544b174.ipa`，30,769,977 字节（约 29.35 MiB）。SHA256：`6769ad62848f22853c9afcb19fe92c44f9389f6c27e47e5f073651be0a5c1f7f`。从 Mac 拷回构建机后再次核验相同。
 - **独立校验**：主 App、Widget、Watch App 均 `codesign -d` 确认未签名；无 `embedded.mobileprovision`；ZIP 完整；`UIDeviceFamily=[1,2]`。主版本/构建仍 `2.0 / 9110401`；Widget 原有 `9110300` 不一致警告按“不改版本号”约束保留。
 - **实际运行的检查**：歌曲切换 iOS / Desktop 各 16 场景通过（新增缓存生命周期断言）；侧栏歌单回归通过；artwork 颜色 Swift 检查通过；设备第二轮 19 项静态检查通过；`git diff --check` 通过。不是 App 真机运行或性能测量。
-- **Mac 删除清单**：唯一临时目录 `/Users/order-/melox-round2.yFbt9r` 已整个删除，含源码/Git bundle 与对象、IPA/产物/DerivedData、Swift 包/checkouts、Clang/Swift/Xcode 缓存、staging、测试二进制、脚本、日志、诊断。IPA 与诊断仅保留在 box。
+- **Mac 删除清单**：唯一临时目录 `melox-round2.*` 已整个删除，含源码/Git bundle 与对象、IPA/产物/DerivedData、Swift 包/checkouts、Clang/Swift/Xcode 缓存、staging、测试二进制、脚本、日志、诊断。IPA 与诊断仅保留在构建机。
 - **目录外清理**：删除本轮生成的 DeveloperTools 缓存（`PlugInCache-ibtoold`、`PlugInCache-embeddedBinaryValidationUtility`、`CachedSpecifications-embeddedBinaryValidationUtility`，以及最初 SDK readiness 检查在基线前生成的 `PlugInCache-xcodebuild` / `CachedSpecifications-xcodebuild` 和空父目录）。另删除本轮工具生成的过大诊断文本。完整精确列表见 `.out/round2/mac-diagnostics/external-deleted.json`；初次检查缓存归属证据见 `readiness-cache-attribution.json`。
 - **基线核对**：原有 DerivedData、两处 SwiftPM、Archives、Xcode cache 五个目录：最终新建/改动/丢失条目均为 0；本次 readiness 生成的 DeveloperTools 缓存树已不存在。原有已获批准的 Metal Toolchain 未改动。
-- **仍需可可复测（最少四组）**：
+- **仍需真机复测（最少四组）**：
   1. 连续拖窗跨宽/窄布局，退后台数秒再打开，反复点底部条；若仍退出，提供 MeloX `.ips` 或 watchdog / jetsam 记录。旧分析中的 runloop hang 不等于本轮 crash 根因。
   2. 搜索键盘弹出/收起、分屏/旋转/切 Tab 后，底部条是否仍贴实际窗口底部，列表末行不被遮挡；反复 mini→全屏/下拉关闭。
   3. 起播后先等全曲缓存完成再多处 seek，并测暂停时拖动、交接时暂停/继续、快速切歌；下载完成前或首次切本地仍可有短暂缓冲，不能承诺始终瞬时。

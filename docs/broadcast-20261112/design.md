@@ -51,7 +51,7 @@ Apple Music 订阅等 DRM／受保护音频可能静音或不可用，系统、�
 1. [Apple：RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview.md)：使用可见的公开 picker、`preferredExtension` 和 `showsMicrophoneButton`；不遍历内部按钮或伪造点击。
 2. [Apple：RPBroadcastSampleHandler](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler.md) 与 [结束广播 API](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/finishbroadcastwitherror(_:).md)：回调串行，sample buffer 模式。停止 API 需要 Error，因此正常完成也提供中性的本地化结束原因，系统可能仍显示其错误式提示。
 3. [Apple Platform Security：ReplayKit](https://support.apple.com/guide/security-pdf/replaykit-security-seca5fc039dd/web)：进程隔离和原始缓冲；只处理音频是本扩展的策略，系统广播授权本身仍涉及屏幕。
-4. [HaishinKit #1384](https://github.com/shogo4405/HaishinKit.swift/issues/1384)：实际扩展排队转换导致内存崩溃的报告；这是工程警示，不能据此把约 50 MB 当成所有设备的承诺额度。
+4. [HaishinKit #1384](https://github.com/HaishinKit/HaishinKit.swift/issues/1384)：实际扩展排队转换导致内存崩溃的报告；这是工程警示，不能据此把约 50 MB 当成所有设备的承诺额度。
 5. [PCM 大端格式讨论](https://stackoverflow.com/questions/64716540/audio-frame-sample-type-in-pcm)：`0xe` 为 signed packed big-endian Int16 的实际案例；解码依据 ASBD，不将该案例当作所有 ReplayKit 版本的固定格式。
 6. [App Extension IPC](https://7strikes.dev/articles/app-extension-ipc/)：持久共享邮箱、挂起及通知的限制；本实现选择低频轮询，不假设 Darwin 通知能唤醒挂起进程，不使用 iOS 不可用的 CFMessagePort。
 7. [Zoom iOS share troubleshooting](https://godevelopers.zoom.us/docs/video-sdk/ios/share/troubleshooting/)：扩展嵌入及双方 App Group 配置核查；不是某个重签工具的兼容认证。
@@ -108,7 +108,7 @@ DRM/protected audio, including Apple Music subscription tracks, may be silent or
 1. [Apple: RPSystemBroadcastPickerView](https://developer.apple.com/documentation/replaykit/rpsystembroadcastpickerview.md): visible public picker, exact preferred extension and hidden microphone option; no internal-button invocation.
 2. [Apple: RPBroadcastSampleHandler](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler.md) and [finish API](https://developer.apple.com/documentation/replaykit/rpbroadcastsamplehandler/finishbroadcastwitherror(_:).md): serialized callbacks and sample-buffer mode. The finish API requires an Error; normal completion uses neutral localized text, though the system may present error-style UI.
 3. [Apple Platform Security: ReplayKit](https://support.apple.com/guide/security-pdf/replaykit-security-seca5fc039dd/web): process separation and raw buffers. Ignoring video is this extension's policy; system broadcast authorization still concerns the screen.
-4. [HaishinKit #1384](https://github.com/shogo4405/HaishinKit.swift/issues/1384): a real queued-conversion memory crash report, not a universal promise of a 50 MB budget.
+4. [HaishinKit #1384](https://github.com/HaishinKit/HaishinKit.swift/issues/1384): a real queued-conversion memory crash report, not a universal promise of a 50 MB budget.
 5. [Big-endian PCM discussion](https://stackoverflow.com/questions/64716540/audio-frame-sample-type-in-pcm): an actual ASBD `0xe` signed packed BE Int16 case, not a fixed format for every ReplayKit version.
 6. [App extension IPC](https://7strikes.dev/articles/app-extension-ipc/): durable mailbox and suspension/notification constraints. This implementation polls and does not assume Darwin notifications wake a suspended host or use CFMessagePort on iOS.
 7. [Zoom iOS share troubleshooting](https://godevelopers.zoom.us/docs/video-sdk/ios/share/troubleshooting/): embedding and matching group configuration checks, not certification of a re-signing product.
