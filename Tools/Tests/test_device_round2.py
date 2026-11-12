@@ -38,7 +38,7 @@ class PlaybackTrackCacheChecks(unittest.TestCase):
         self.assertIn("httpResponse.expectedContentLength > maximumBytes", source)
         self.assertIn("receivedBytes + Int64(data.count) <= maximumBytes", source)
         self.assertIn("dataTask.cancel()", source)
-        self.assertIn("activeSongID == nil", source)
+        self.assertIn("while activeSongID != nil", source)
         self.assertIn("configuration.urlCache = nil", source)
 
     def test_cache_is_wired_and_cancelled(self):

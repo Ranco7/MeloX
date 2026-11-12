@@ -91,8 +91,18 @@ actor PlaybackTrackCache {
         guard source.url.isFileURL == false,
               let scheme = source.url.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
-              !Self.isStreamingPlaylistURL(source.url),
-              activeSongID == nil,
+              !Self.isStreamingPlaylistURL(source.url) else {
+            return
+        }
+
+        // Only one full-track transfer runs at a time. After a song change the
+        // cancelled transfer may still be unwinding; wait for it instead of
+        // dropping the new song's request.
+        while activeSongID != nil {
+            guard !Task.isCancelled else { return }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        guard !Task.isCancelled,
               cachedFileURL(for: songID, quality: source.quality) == nil else {
             return
         }
@@ -342,6 +352,13 @@ actor PlaybackTrackCache {
         source: PlaybackSource
     ) -> String? {
         let bytes = [UInt8](header)
+        // ADTS AAC also starts with an 0xFFF sync word, but its layer bits are
+        // 00; MPEG audio layers use non-zero layer bits.
+        if bytes.count >= 2,
+           bytes[0] == 0xFF,
+           (bytes[1] & 0xF6) == 0xF0 {
+            return "aac"
+        }
         if bytes.starts(with: [0x49, 0x44, 0x33])
             || (
                 bytes.count >= 2

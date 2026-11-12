@@ -231,8 +231,14 @@ final class SongRecognitionStore {
             try Task.checkCancellation()
             guard generation == currentGeneration else { return }
             let immediate = candidateResults(from: candidates)
-            try await broadcastClient.stop(prepared.request, command: .matched)
-            try await broadcastClient.clearAudio(prepared.request)
+            // The match already succeeded; a failed mailbox cleanup must not
+            // hide it. Fall back to cancelling the session so it is not resumed.
+            do {
+                try await broadcastClient.stop(prepared.request, command: .matched)
+                try await broadcastClient.clearAudio(prepared.request)
+            } catch {
+                try? await broadcastClient.stop(prepared.request, command: .cancel)
+            }
             try Task.checkCancellation()
             guard generation == currentGeneration else { return }
             results = immediate

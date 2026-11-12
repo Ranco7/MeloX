@@ -178,6 +178,7 @@ class ReferenceLayoutChecks(unittest.TestCase):
             self.assertLess(abs(a['artwork']-b['artwork']),.003)
             self.assertEqual(a['column'],b['column'])
 
+    @unittest.skipUnless((OUT/'refs').is_dir(), 'reference screenshots are local-only (.out/nowplaying-am/refs)')
     def test_source_pixel_measurements(self):
         self.assertEqual(len(list((OUT/'refs').glob('*.jpg'))),4)
         for r in REFERENCES:
