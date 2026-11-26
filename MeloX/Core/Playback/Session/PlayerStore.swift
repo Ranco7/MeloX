@@ -1732,19 +1732,21 @@ final class PlayerStore {
            AudioPlaybackSessionConfigurator.shouldIgnoreInterruption() {
             return
         }
-        let wasActive = isPlaying || engine.expectsPlaybackToContinue
+        // An interruption is the system or another app taking audio away, not
+        // the user pressing pause. Reporting it as a transport command would
+        // pause the whole room, so only the local engine is stopped.
         shouldResumeAfterInterruption =
             !event.routeDisconnected && isPlaying
         engine.pause()
-        if wasActive {
-            onListenTogetherTransport?(.pause, currentSong?.id)
-        }
+        updateNowPlayingState()
     }
 
     private func handleAudioInterruptionEnded(shouldResume: Bool) {
         if shouldResume, shouldResumeAfterInterruption {
             engine.play()
-            onListenTogetherTransport?(.play, currentSong?.id)
+            // The room never saw a pause, so it must not see a play either;
+            // resuming is the system handing audio back.
+            updateNowPlayingState()
         }
         shouldResumeAfterInterruption = false
     }

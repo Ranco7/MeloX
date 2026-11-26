@@ -7,7 +7,7 @@ struct DesktopCollectionPaginationFooter: View {
     var loadingTitle = L10n.string("ui.common.loading_more_songs")
     let action: () async -> Void
 
-    @State private var lastAutoLoadToken: Int?
+    @State private var requestGate = MusicCollectionPageRequestGate()
 
     var body: some View {
         Group {
@@ -45,19 +45,27 @@ struct DesktopCollectionPaginationFooter: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 18)
         .onAppear {
-            triggerAutoLoad(for: loadToken)
+            requestPageIfNeeded()
         }
-        .onChange(of: loadToken) { _, newToken in
-            triggerAutoLoad(for: newToken)
+        .onChange(of: loadToken) { _, _ in
+            requestPageIfNeeded()
+        }
+        // A page publishes its new offset before it stops loading, so the
+        // token can arrive while `isLoading` is still true. Ask again once
+        // loading settles instead of waiting for a token that never changes.
+        .onChange(of: isLoading) { _, isLoading in
+            guard !isLoading else { return }
+            requestPageIfNeeded()
         }
     }
 
-    private func triggerAutoLoad(for token: Int?) {
-        guard let token,
-              lastAutoLoadToken != token,
-              !isLoading,
-              failureMessage == nil else { return }
-        lastAutoLoadToken = token
+    private func requestPageIfNeeded() {
+        guard loadToken != nil,
+              requestGate.shouldRequest(
+                  token: loadToken,
+                  isLoading: isLoading,
+                  hasFailure: failureMessage != nil
+              ) else { return }
         Task { await action() }
     }
 }

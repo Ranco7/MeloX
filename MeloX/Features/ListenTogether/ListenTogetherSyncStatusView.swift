@@ -4,6 +4,8 @@ struct ListenTogetherSyncStatusView: View {
     @Environment(ListenTogetherStore.self) private var listenTogether
 
     @State private var isRefreshing = false
+    @State private var didJustSync = false
+    @State private var didJustSyncResetTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -44,6 +46,17 @@ struct ListenTogetherSyncStatusView: View {
 
                 Spacer()
 
+                if didJustSync {
+                    Label(
+                        "ui.listen_together.playback_synchronized",
+                        systemImage: "checkmark.circle.fill"
+                    )
+                    .labelStyle(.iconOnly)
+                    .foregroundStyle(.green)
+                    .transition(.opacity)
+                    .accessibilityLabel("ui.listen_together.playback_synchronized")
+                }
+
                 Button {
                     refresh()
                 } label: {
@@ -69,6 +82,10 @@ struct ListenTogetherSyncStatusView: View {
             .default,
             value: listenTogether.connectionState
         )
+        .onDisappear {
+            didJustSyncResetTask?.cancel()
+            didJustSyncResetTask = nil
+        }
     }
 
     @ViewBuilder
@@ -159,9 +176,26 @@ struct ListenTogetherSyncStatusView: View {
     private func refresh() {
         guard !isRefreshing else { return }
         isRefreshing = true
+        didJustSyncResetTask?.cancel()
+        didJustSync = false
         Task { @MainActor in
+            let previousSyncDate = listenTogether.lastSyncDate
             await listenTogether.refresh()
             isRefreshing = false
+            // The store only advances `lastSyncDate` on a successful round
+            // trip, so this distinguishes a real sync from a swallowed tap.
+            guard listenTogether.lastSyncDate != previousSyncDate,
+                  listenTogether.errorMessage == nil else { return }
+            withAnimation {
+                didJustSync = true
+            }
+            didJustSyncResetTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled else { return }
+                withAnimation {
+                    didJustSync = false
+                }
+            }
         }
     }
 }

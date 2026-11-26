@@ -29,6 +29,15 @@ enum ListenTogetherConnectionState: Equatable {
     }
 }
 
+/// A play command remembered from the poll that first delivered it. Commands
+/// only carry the position at the moment they were issued, so applying one
+/// later must add the time spent resolving the room playlist.
+struct ListenTogetherObservedPlayCommand {
+    let signature: String
+    let isPlaying: Bool
+    let observedAt: Date
+}
+
 enum ListenTogetherOperation: Equatable {
     case creating
     case joining
@@ -123,10 +132,18 @@ final class ListenTogetherStore {
     @ObservationIgnored
     var clientSequence = 0
 
-    /// Play-command sequences this device just submitted. Echoes of those
-    /// commands must not seek backward over playback that has already moved on.
+    /// Highest client sequence this device submitted. Echoes of our own
+    /// commands must not seek backward over playback that has already moved
+    /// on; a fixed window of remembered sequences eventually forgets them and
+    /// then applies our own stale echo as a remote seek.
     @ObservationIgnored
-    var locallyReportedCommandSequences: [Int] = []
+    var lastLocallyReportedCommandSequence: Int64 = 0
+
+    /// A play command remembered from the poll that first delivered it.
+    /// Commands only carry the position at the moment they were issued, so
+    /// applying one later must add the time spent resolving the room playlist.
+    @ObservationIgnored
+    var observedPlayCommand: ListenTogetherObservedPlayCommand?
 
     @ObservationIgnored
     var monitorTask: Task<Void, Never>?
@@ -317,17 +334,36 @@ final class ListenTogetherStore {
 
     func refresh() async {
         guard !isBusy, isInRoom else { return }
+        let session = sessionRevision
+        // An explicit sync must not be swallowed by an in-flight background
+        // poll, so pause polling first and let the running sync settle.
+        monitorTask?.cancel()
+        monitorTask = nil
+        defer {
+            if sessionRevision == session, isInRoom, operation != .leaving {
+                startMonitoring()
+            }
+        }
+        var waitCount = 0
+        while synchronizingSession == session, waitCount < 20 {
+            try? await Task.sleep(for: .milliseconds(50))
+            waitCount += 1
+        }
+        guard sessionRevision == session, isInRoom, operation != .leaving else { return }
         do {
             try await refreshRoomStatus()
-            guard isInRoom else { return }
-            try await synchronizeFromServer(initial: false)
+            guard isInRoom, sessionRevision == session else { return }
+            try await synchronizeFromServer(initial: false, force: true)
+            guard sessionRevision == session else { return }
             try await sendHeartbeat()
+            guard sessionRevision == session else { return }
             connectionState = .connected
             consecutiveSyncFailures = 0
             lastSyncDate = .now
         } catch is CancellationError {
             return
         } catch {
+            guard sessionRevision == session else { return }
             connectionState = .reconnecting
             errorMessage = error.localizedDescription
         }
@@ -356,7 +392,8 @@ final class ListenTogetherStore {
         self.localUserID = localUserID
         isHost = room.creatorID == String(localUserID)
         clientSequence = 0
-        locallyReportedCommandSequences = []
+        lastLocallyReportedCommandSequence = 0
+        observedPlayCommand = nil
         lastPlaylistSignature = nil
         lastCommandSignature = nil
         consecutiveSyncFailures = 0
@@ -378,7 +415,8 @@ final class ListenTogetherStore {
         localUserID = nil
         isHost = false
         clientSequence = 0
-        locallyReportedCommandSequences = []
+        lastLocallyReportedCommandSequence = 0
+        observedPlayCommand = nil
         lastPlaylistSignature = nil
         lastCommandSignature = nil
         consecutiveSyncFailures = 0

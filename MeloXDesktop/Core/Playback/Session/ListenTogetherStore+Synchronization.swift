@@ -95,9 +95,20 @@ extension ListenTogetherStore {
         }
     }
 
-    func synchronizeFromServer(initial: Bool) async throws {
+    func synchronizeFromServer(initial: Bool, force: Bool = false) async throws {
         guard let room, operation != .leaving else { return }
         let session = sessionRevision
+        if force {
+            // A manual sync must not be dropped just because a poll or a local
+            // report is already in flight; wait (bounded) for it to settle.
+            var waited = 0
+            while synchronizingSession == session || transportReportTask != nil,
+                  waited < 40 {
+                try await Task.sleep(for: .milliseconds(50))
+                waited += 1
+                guard sessionRevision == session, operation != .leaving else { return }
+            }
+        }
         guard synchronizingSession != session, transportReportTask == nil else { return }
         synchronizingSession = session
         defer {
@@ -119,15 +130,29 @@ extension ListenTogetherStore {
         let commandSignature = signature(for: payload.playCommand)
         let playlistChanged = playlistSignature != lastPlaylistSignature
         let commandChanged = commandSignature != lastCommandSignature
-        guard initial || playlistChanged || commandChanged else { return }
+        guard initial || force || playlistChanged || commandChanged else { return }
 
         let command = payload.playCommand
+        // A forced sync still ignores this device's own command echo: the local
+        // player already advanced past the position that echo was recorded at.
         let appliesTransport = initial || (
-            commandChanged && command != nil && !commandOriginatedLocally(command)
+            (force || commandChanged) && command != nil
+                && !commandOriginatedLocally(command)
         )
         if !appliesTransport, !playlistChanged {
             lastCommandSignature = commandSignature
             return
+        }
+        if let command, let commandSignature {
+            if observedPlayCommand?.signature != commandSignature {
+                observedPlayCommand = ListenTogetherObservedPlayCommand(
+                    signature: commandSignature,
+                    isPlaying: command.shouldPlay ?? false,
+                    observedAt: Date()
+                )
+            }
+        } else {
+            observedPlayCommand = nil
         }
 
         var songIDs = playlist?.playbackSongIDs ?? []
@@ -158,8 +183,35 @@ extension ListenTogetherStore {
 
         if appliesTransport {
             let shouldPlay = command?.shouldPlay ?? player.listenTogetherReportedPlaying
-            let progress = command.map { TimeInterval($0.progressMilliseconds) / 1_000 }
-                ?? player.estimatedProgress()
+            let progress: TimeInterval
+            if let command {
+                let reportedProgress =
+                    TimeInterval(command.progressMilliseconds) / 1_000
+                // A play command only carries the position at the moment it was
+                // issued, so an extrapolatable anchor is required before a
+                // position can be trusted at all. Without it a slow playlist
+                // load would seek back to where the sender pressed play.
+                let hasTrustworthyAnchor = commandSignature.flatMap { signature in
+                    observedPlayCommand.flatMap {
+                        $0.signature == signature && $0.isPlaying ? $0 : nil
+                    }
+                }
+                if let anchor = hasTrustworthyAnchor {
+                    progress = reportedProgress + max(
+                        0,
+                        Date().timeIntervalSince(anchor.observedAt)
+                    )
+                } else if force, !initial, !commandChanged {
+                    // The button re-applies an unchanged command. Without an
+                    // anchor its reported position is stale, and seeking to it
+                    // would rewind playback instead of aligning with the room.
+                    progress = player.estimatedProgress()
+                } else {
+                    progress = reportedProgress
+                }
+            } else {
+                progress = player.estimatedProgress()
+            }
             player.synchronizeListenTogetherPlayback(
                 songs: songs,
                 targetSongID: targetSongID,

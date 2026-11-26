@@ -188,12 +188,11 @@ extension ListenTogetherStore {
         _ report: PendingListenTogetherTransportReport,
         roomID: String
     ) async throws {
-        if !locallyReportedCommandSequences.contains(report.clientSequence) {
-            locallyReportedCommandSequences.append(report.clientSequence)
-            if locallyReportedCommandSequences.count > 16 {
-                locallyReportedCommandSequences.removeFirst()
-            }
-        }
+        // Record the sequence before the request so an echo cannot be applied
+        // as a remote command if the response is lost.
+        lastLocallyReportedCommandSequence = max(
+            lastLocallyReportedCommandSequence, Int64(report.clientSequence)
+        )
         try await api.reportListenTogetherCommand(
             roomID: roomID,
             commandType: report.type,
@@ -224,7 +223,7 @@ extension ListenTogetherStore {
         guard let command,
               let localUserID,
               command.userID == String(localUserID),
-              let sequence = Int(exactly: command.clientSequence) else { return false }
-        return locallyReportedCommandSequences.contains(sequence)
+              command.clientSequence > 0 else { return false }
+        return command.clientSequence <= lastLocallyReportedCommandSequence
     }
 }

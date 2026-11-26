@@ -344,7 +344,10 @@ final class ListenTogetherStore {
         do {
             try await refreshRoomStatus()
             guard isInRoom, sessionRevision == session else { return }
-            try await synchronizeFromServer(initial: false)
+            // A normal sync only applies a changed command. The button has to
+            // re-apply the room state even when the last command is unchanged,
+            // otherwise a drifted member stays drifted after tapping it.
+            try await synchronizeFromServer(initial: false, force: true)
             guard sessionRevision == session else { return }
             try await sendHeartbeat()
             guard sessionRevision == session else { return }

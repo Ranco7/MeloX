@@ -5,6 +5,9 @@ struct DesktopListenTogetherView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var invitationText: String
     @State private var confirmsLeaving = false
+    @State private var isRefreshing = false
+    @State private var didJustSync = false
+    @State private var didJustSyncResetTask: Task<Void, Never>?
 
     init(invitationText: String = "") {
         _invitationText = State(initialValue: invitationText)
@@ -154,12 +157,30 @@ struct DesktopListenTogetherView: View {
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
+                    if didJustSync {
+                        Label(
+                            "ui.listen_together.playback_synchronized",
+                            systemImage: "checkmark.circle.fill"
+                        )
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.green)
+                        .transition(.opacity)
+                        .accessibilityLabel("ui.listen_together.playback_synchronized")
+                    }
                     Button {
-                        Task { await model.listenTogether.refresh() }
+                        refresh()
                     } label: {
-                        Image(systemName: "arrow.clockwise")
+                        if isRefreshing {
+                            ProgressView()
+                                .controlSize(.small)
+                                .accessibilityLabel("ui.listen_together.syncing")
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
                     }
                     .buttonStyle(.bordered)
+                    .disabled(isRefreshing)
+                    .help("ui.listen_together.sync_now")
                 }
 
                 if let song = model.player.currentSong {
@@ -222,6 +243,32 @@ struct DesktopListenTogetherView: View {
                 }
             }
             .padding(28)
+        }
+    }
+
+    private func refresh() {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        didJustSyncResetTask?.cancel()
+        didJustSync = false
+        Task { @MainActor in
+            let previousSyncDate = model.listenTogether.lastSyncDate
+            await model.listenTogether.refresh()
+            isRefreshing = false
+            // The store only advances `lastSyncDate` on a successful round
+            // trip, so this distinguishes a real sync from a swallowed tap.
+            guard model.listenTogether.lastSyncDate != previousSyncDate,
+                  model.listenTogether.errorMessage == nil else { return }
+            withAnimation {
+                didJustSync = true
+            }
+            didJustSyncResetTask = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2))
+                guard !Task.isCancelled else { return }
+                withAnimation {
+                    didJustSync = false
+                }
+            }
         }
     }
 }
