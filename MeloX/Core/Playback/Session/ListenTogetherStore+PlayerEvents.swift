@@ -1,6 +1,7 @@
 import Foundation
 
 struct PendingListenTogetherTransportReport {
+    let clientSequence: Int
     let type: ListenTogetherCommandType
     let formerSongID: Int?
     let targetSongID: Int
@@ -25,12 +26,11 @@ extension ListenTogetherStore {
         case .pause: isPlaying = false
         default: isPlaying = player.listenTogetherReportedPlaying
         }
-        pendingTransportReport = PendingListenTogetherTransportReport(
+        pendingTransportReport = makeTransportReport(
             type: preservesTrackChange ? .goTo : type,
             formerSongID: preservesTrackChange ? pending?.formerSongID : formerSongID,
             targetSongID: targetSongID,
-            isPlaying: isPlaying,
-            progressMilliseconds: Int64((player.estimatedProgress() * 1_000).rounded())
+            isPlaying: isPlaying
         )
         guard transportReportTask == nil else { return }
         let session = sessionRevision
@@ -47,47 +47,61 @@ extension ListenTogetherStore {
         }
         // Merge nearby actions before sending. Once sent, finish that request
         // before starting the next one so it cannot overtake the newer action.
-        var retryDelayMilliseconds = 1_000
-        while !Task.isCancelled, sessionRevision == session {
-            guard operation != .leaving,
-                  let pending = pendingTransportReport else { return }
-            var failedReport = pending
+        while !Task.isCancelled, sessionRevision == session,
+              pendingTransportReport != nil {
             do {
                 try await Task.sleep(for: .milliseconds(40))
-                guard sessionRevision == session, operation != .leaving,
-                      let report = pendingTransportReport else { return }
-                failedReport = report
+            } catch {
+                return
+            }
+            guard sessionRevision == session, operation != .leaving,
+                  let report = pendingTransportReport else { return }
+            await sendTransportReportWithRetry(report, session: session)
+            guard !Task.isCancelled, sessionRevision == session else { return }
+            if pendingTransportReport?.clientSequence == report.clientSequence {
                 pendingTransportReport = nil
-                try await sendCommand(
-                    type: report.type,
-                    formerSongID: report.formerSongID,
-                    targetSongID: report.targetSongID,
-                    isPlaying: report.isPlaying,
-                    progressMilliseconds: report.progressMilliseconds
-                )
-                retryDelayMilliseconds = 1_000
-            } catch is CancellationError {
+            }
+        }
+    }
+
+    private func sendTransportReportWithRetry(
+        _ report: PendingListenTogetherTransportReport,
+        session: Int
+    ) async {
+        // Reuse the sequence if the request went through but its reply was lost.
+        // Limit retries so a local failure cannot stop remote playback indefinitely.
+        let retryDelays = [0, 250, 1_000]
+        for (attempt, delay) in retryDelays.enumerated() {
+            do {
+                if delay > 0 {
+                    try await Task.sleep(for: .milliseconds(delay))
+                }
+                guard sessionRevision == session, operation != .leaving,
+                      pendingTransportReport?.clientSequence == report.clientSequence,
+                      let room else { return }
+                try await sendCommand(report, roomID: room.id)
                 return
             } catch {
-                guard !Task.isCancelled, sessionRevision == session else { return }
-                // Keep the failed action unless a newer one is already queued;
-                // otherwise the room would never learn about this pause/seek.
-                if pendingTransportReport == nil {
-                    pendingTransportReport = failedReport
-                }
+                guard !Task.isCancelled, sessionRevision == session,
+                      pendingTransportReport?.clientSequence == report.clientSequence else { return }
                 connectionState = .reconnecting
-                do {
-                    try await Task.sleep(
-                        for: .milliseconds(retryDelayMilliseconds)
-                    )
-                } catch {
-                    return
-                }
-                retryDelayMilliseconds = min(
-                    retryDelayMilliseconds * 2,
-                    8_000
-                )
+                guard attempt + 1 < retryDelays.count,
+                      Self.isRetryableTransportReportError(error) else { return }
             }
+        }
+    }
+
+    private static func isRetryableTransportReportError(_ error: Error) -> Bool {
+        if let error = error as? URLError {
+            return error.code != .cancelled
+        }
+        switch error as? APIError {
+        case .emptyResponse: return true
+        case .server(let code, _):
+            // The API also uses this error for a successful HTTP response
+            // with a missing action acknowledgement.
+            return (200..<300).contains(code) || (500..<600).contains(code)
+        default: return false
         }
     }
 
@@ -165,35 +179,50 @@ extension ListenTogetherStore {
         guard let songID = player.currentSong?.id else {
             throw ListenTogetherSessionError.noCurrentSong
         }
-        try await sendCommand(
+        guard let room else { return }
+        let report = makeTransportReport(
             type: type,
             formerSongID: songID,
-            targetSongID: songID
+            targetSongID: songID,
+            isPlaying: player.listenTogetherReportedPlaying
+        )
+        try await sendCommand(report, roomID: room.id)
+    }
+
+    private func makeTransportReport(
+        type: ListenTogetherCommandType,
+        formerSongID: Int?,
+        targetSongID: Int,
+        isPlaying: Bool
+    ) -> PendingListenTogetherTransportReport {
+        clientSequence += 1
+        return PendingListenTogetherTransportReport(
+            clientSequence: clientSequence,
+            type: type,
+            formerSongID: formerSongID,
+            targetSongID: targetSongID,
+            isPlaying: isPlaying,
+            progressMilliseconds: Int64((player.estimatedProgress() * 1_000).rounded())
         )
     }
 
     private func sendCommand(
-        type: ListenTogetherCommandType,
-        formerSongID: Int?,
-        targetSongID: Int,
-        isPlaying: Bool? = nil,
-        progressMilliseconds: Int64? = nil
+        _ report: PendingListenTogetherTransportReport,
+        roomID: String
     ) async throws {
-        guard let room else { return }
-        clientSequence += 1
         // Record the sequence before the request so an echo cannot be applied
         // as a remote command if the response is lost.
-        lastLocallyReportedCommandSequence = Int64(clientSequence)
+        lastLocallyReportedCommandSequence = max(
+            lastLocallyReportedCommandSequence, Int64(report.clientSequence)
+        )
         try await api.reportListenTogetherCommand(
-            roomID: room.id,
-            commandType: type,
-            progressMilliseconds: progressMilliseconds ?? Int64(
-                (player.estimatedProgress() * 1_000).rounded()
-            ),
-            isPlaying: isPlaying ?? player.listenTogetherReportedPlaying,
-            formerSongID: formerSongID,
-            targetSongID: targetSongID,
-            clientSequence: clientSequence
+            roomID: roomID,
+            commandType: report.type,
+            progressMilliseconds: report.progressMilliseconds,
+            isPlaying: report.isPlaying,
+            formerSongID: report.formerSongID,
+            targetSongID: report.targetSongID,
+            clientSequence: report.clientSequence
         )
     }
 

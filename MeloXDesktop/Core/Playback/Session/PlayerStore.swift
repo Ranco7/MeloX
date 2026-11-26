@@ -93,6 +93,12 @@ final class PlayerStore {
     var queueModeBadgeSystemImage: String? {
         queueModeIndicator?.systemImage
     }
+    @ObservationIgnored
+    var onListenTogetherTransport: ((ListenTogetherCommandType, Int?) -> Void)?
+
+    @ObservationIgnored
+    var onListenTogetherQueueEdit: (() -> Void)?
+
     var listenTogetherDisplaySongIDs: [Int] {
         queue.map(\.id)
     }
@@ -101,6 +107,10 @@ final class PlayerStore {
         return playbackQueue.persistedShuffleOrder.compactMap { index in
             queue.indices.contains(index) ? queue[index].id : nil
         }
+    }
+
+    var listenTogetherReportedPlaying: Bool {
+        isPlaying || (isListenTogetherSessionActive && isLoading && currentLoadShouldAutoplay)
     }
     var isAutoMixTransitioning: Bool {
         autoMixTransitionProgress != nil
@@ -165,6 +175,9 @@ final class PlayerStore {
 
     @ObservationIgnored
     private var loadGeneration = 0
+
+    @ObservationIgnored
+    private var listenTogetherLoadTask: Task<Void, Never>?
 
     @ObservationIgnored
     private var beatAnalysisGeneration = 0
@@ -352,9 +365,8 @@ final class PlayerStore {
         targetSongID: Int,
         progress targetProgress: TimeInterval,
         isPlaying shouldPlay: Bool,
-        shouldSeek: Bool,
         playMode: String?
-    ) async {
+    ) {
         guard !songs.isEmpty,
               let targetIndex = songs.firstIndex(where: {
                   $0.id == targetSongID
@@ -370,23 +382,29 @@ final class PlayerStore {
         if songChanged {
             recordCurrentPlayback()
         }
-        if queueChanged {
-            cancelAutoMixPreparation()
-            playbackQueue.replace(
-                with: songs,
-                startingAt: targetIndex
-            )
-            historySourceID = nil
-        } else if currentIndex != targetIndex {
-            _ = playbackQueue.select(index: targetIndex)
+        if queueChanged || currentIndex != targetIndex {
+            adoptListenTogetherQueue(songs: songs, targetIndex: targetIndex)
+        }
+
+        if !songChanged, isResolvingSource {
+            currentLoadShouldAutoplay = shouldPlay
+            seek(to: targetProgress, reportsToRoom: false)
+            return
         }
 
         if songChanged || !engine.hasCurrentItem {
             hasRecordedCurrentStart = false
-            await loadCurrentSong(
+            guard let load = prepareCurrentSongLoad(
                 autoplay: shouldPlay,
-                startAt: max(targetProgress, 0)
-            )
+                startAt: targetProgress
+            ) else { return }
+            // Keep receiving room commands while the audio source resolves.
+            listenTogetherLoadTask = Task { @MainActor [weak self] in
+                await self?.resolveCurrentSongLoad(song: load.song, generation: load.generation)
+                if self?.loadGeneration == load.generation {
+                    self?.listenTogetherLoadTask = nil
+                }
+            }
             return
         }
 
@@ -400,11 +418,11 @@ final class PlayerStore {
                 nowPlayingLyricsDisplaySettings
         )
 
-        if shouldSeek,
-           abs(estimatedProgress() - targetProgress) > 0.35 {
-            seek(to: targetProgress)
+        if abs(estimatedProgress() - targetProgress) > 0.35 {
+            seek(to: targetProgress, reportsToRoom: false)
         }
 
+        currentLoadShouldAutoplay = shouldPlay
         if shouldPlay {
             playbackIssue = nil
             engine.play()
@@ -413,6 +431,33 @@ final class PlayerStore {
         }
         updateNowPlayingState()
         persistSnapshot()
+    }
+
+    func synchronizeListenTogetherQueue(songs: [Song], playMode: String?) {
+        applyListenTogetherPlayMode(playMode)
+        guard let currentSong,
+              let index = songs.firstIndex(where: { $0.id == currentSong.id }),
+              songs.map(\.id) != queue.map(\.id) else { return }
+        adoptListenTogetherQueue(songs: songs, targetIndex: index)
+        nowPlayingSession.setSong(
+            currentSong,
+            duration: duration,
+            queueIndex: currentIndex,
+            queueCount: queue.count,
+            lyricsDisplaySettings: nowPlayingLyricsDisplaySettings
+        )
+        updateNowPlayingState()
+        persistSnapshot()
+    }
+
+    private func adoptListenTogetherQueue(songs: [Song], targetIndex: Int) {
+        if songs.map(\.id) != queue.map(\.id) {
+            cancelAutoMixPreparation()
+            playbackQueue.replace(with: songs, startingAt: targetIndex)
+            historySourceID = nil
+        } else if currentIndex != targetIndex {
+            _ = playbackQueue.select(index: targetIndex)
+        }
     }
 
     private func applyListenTogetherPlayMode(_ playMode: String?) {
@@ -439,6 +484,7 @@ final class PlayerStore {
         sourceID: Int? = nil,
         startAt: TimeInterval = 0
     ) async {
+        let previousQueueIDs = listenTogetherDisplaySongIDs
         recordCurrentPlayback()
         isHeartModeActive = false
         if let songs, !songs.isEmpty {
@@ -458,7 +504,9 @@ final class PlayerStore {
             : max(0, startAt)
         await loadCurrentSong(
             autoplay: true,
-            startAt: playbackPosition
+            startAt: playbackPosition,
+            reportsToRoom: true,
+            queueChanged: previousQueueIDs != listenTogetherDisplaySongIDs
         )
     }
 
@@ -499,30 +547,21 @@ final class PlayerStore {
     ) async {
         guard !songs.isEmpty else { return }
         recordCurrentPlayback()
+        let queueChanged = songs.map(\.id) != listenTogetherDisplaySongIDs
         playbackQueue.replace(with: songs, startingAt: 0)
         historySourceID = sourceID
         isHeartModeActive = activatesHeartMode
         hasRecordedCurrentStart = false
-        await loadCurrentSong(autoplay: true)
+        await loadCurrentSong(autoplay: true, reportsToRoom: true, queueChanged: queueChanged)
     }
 
     func togglePlayback() {
         guard currentSong != nil else { return }
-        if isLoading {
-            playbackIssue = nil
-            currentLoadShouldAutoplay = true
-            engine.play()
-            updateNowPlayingState()
-            return
-        }
-        if engine.hasCurrentItem {
-            if isPlaying {
-                engine.pause()
-                persistSnapshot()
-            } else {
-                playbackIssue = nil
-                engine.play()
-            }
+        if isLoading || engine.hasCurrentItem {
+            let shouldPlay = isLoading
+                ? (!isListenTogetherSessionActive || !currentLoadShouldAutoplay)
+                : !isPlaying
+            setLocalPlaybackIntent(shouldPlay)
         } else {
             Task { @MainActor [weak self] in
                 await self?.retry()
@@ -530,11 +569,25 @@ final class PlayerStore {
         }
     }
 
+    private func setLocalPlaybackIntent(_ shouldPlay: Bool) {
+        currentLoadShouldAutoplay = shouldPlay
+        if shouldPlay {
+            playbackIssue = nil
+            engine.play()
+        } else {
+            engine.pause()
+            persistSnapshot()
+        }
+        updateNowPlayingState()
+        onListenTogetherTransport?(shouldPlay ? .play : .pause, currentSong?.id)
+    }
+
     func retry() async {
         guard currentSong != nil else { return }
         await loadCurrentSong(
             autoplay: true,
-            startAt: estimatedProgress()
+            startAt: estimatedProgress(),
+            reportsToRoom: true
         )
     }
 
@@ -594,7 +647,7 @@ final class PlayerStore {
             return
         }
         hasRecordedCurrentStart = false
-        await loadCurrentSong(autoplay: true)
+        await loadCurrentSong(autoplay: true, reportsToRoom: true)
     }
 
     func previous() async {
@@ -610,7 +663,7 @@ final class PlayerStore {
         recordCurrentPlayback()
         guard playbackQueue.move(by: -1, wraps: repeatMode == .all) else { return }
         hasRecordedCurrentStart = false
-        await loadCurrentSong(autoplay: true)
+        await loadCurrentSong(autoplay: true, reportsToRoom: true)
     }
 
     func playFromQueue(at index: Int) async {
@@ -618,12 +671,13 @@ final class PlayerStore {
         recordCurrentPlayback()
         guard playbackQueue.select(index: index) else { return }
         hasRecordedCurrentStart = false
-        await loadCurrentSong(autoplay: true)
+        await loadCurrentSong(autoplay: true, reportsToRoom: true)
     }
 
     func addToPlaybackQueue(_ song: Song) {
         cancelAutoMixPreparation()
         playbackQueue.append(song)
+        onListenTogetherQueueEdit?()
         persistSnapshot()
         prepareAutoMixIfNeeded()
     }
@@ -631,6 +685,7 @@ final class PlayerStore {
     func clearUpcomingQueue() {
         cancelAutoMixPreparation()
         playbackQueue.clearUpcoming()
+        onListenTogetherQueueEdit?()
         persistSnapshot()
         prepareAutoMixIfNeeded()
     }
@@ -651,12 +706,14 @@ final class PlayerStore {
 
     func clearPlaybackHistory() {
         playbackQueue.clearHistory()
+        onListenTogetherQueueEdit?()
         persistSnapshot()
     }
 
     func removeFromPlaybackQueue(at index: Int) {
         cancelAutoMixPreparation()
         guard playbackQueue.remove(at: index) else { return }
+        onListenTogetherQueueEdit?()
         persistSnapshot()
         prepareAutoMixIfNeeded()
     }
@@ -669,6 +726,7 @@ final class PlayerStore {
 
         cancelAutoMixPreparation()
         playbackQueue.insertNext(song)
+        onListenTogetherQueueEdit?()
         persistSnapshot()
         prepareAutoMixIfNeeded()
     }
@@ -678,22 +736,29 @@ final class PlayerStore {
         toOffset destination: Int
     ) {
         cancelAutoMixPreparation()
+        let previousIDs = listenTogetherDisplaySongIDs
         playbackQueue.moveUpcomingSongs(
             fromOffsets: source,
             toOffset: destination,
             wraps: repeatMode == .all
         )
+        if listenTogetherDisplaySongIDs != previousIDs {
+            onListenTogetherQueueEdit?()
+        }
         persistSnapshot()
         prepareAutoMixIfNeeded()
     }
 
-    func seek(to seconds: TimeInterval) {
+    func seek(to seconds: TimeInterval, reportsToRoom: Bool = true) {
         let clamped = clampedPlaybackPosition(seconds)
         cancelAutoMixPreparation()
         progress = clamped
         reanchorPlaybackTimeline(to: clamped, rate: 0)
         seekRevision += 1
         engine.seek(to: clamped)
+        if reportsToRoom {
+            onListenTogetherTransport?(.progress, currentSong?.id)
+        }
         updateNowPlayingState(
             forceNowPlayingLyrics: true,
             forceLyricsLiveActivity: true
@@ -1017,9 +1082,29 @@ final class PlayerStore {
 
     private func loadCurrentSong(
         autoplay: Bool,
-        startAt: TimeInterval = 0
+        startAt: TimeInterval = 0,
+        reportsToRoom: Bool = false,
+        queueChanged: Bool = false
     ) async {
-        guard let song = playbackQueue.currentSong else { return }
+        guard let load = prepareCurrentSongLoad(
+            autoplay: autoplay,
+            startAt: startAt,
+            reportsToRoom: reportsToRoom,
+            queueChanged: queueChanged
+        ) else { return }
+        await resolveCurrentSongLoad(song: load.song, generation: load.generation)
+    }
+
+    private func prepareCurrentSongLoad(
+        autoplay: Bool,
+        startAt: TimeInterval,
+        reportsToRoom: Bool = false,
+        queueChanged: Bool = false
+    ) -> (song: Song, generation: Int)? {
+        guard let song = playbackQueue.currentSong else { return nil }
+        listenTogetherLoadTask?.cancel()
+        listenTogetherLoadTask = nil
+        let formerSongID = currentSong?.id
         cancelAutoMixPreparation()
         loadGeneration += 1
         let generation = loadGeneration
@@ -1027,7 +1112,6 @@ final class PlayerStore {
         // Finish those callbacks before initializing the incoming song's timeline.
         engine.unload()
         currentSong = song
-        let cachedDetailedSong = detailedPlaybackSongs[song.id]
         resolveCurrentSongAudioAvailability(
             for: song,
             generation: generation
@@ -1062,13 +1146,23 @@ final class PlayerStore {
         )
         updateNowPlayingState()
         persistSnapshot()
+        if reportsToRoom {
+            onListenTogetherTransport?(.goTo, formerSongID)
+        }
+        if queueChanged {
+            onListenTogetherQueueEdit?()
+        }
+        return (song, generation)
+    }
 
+    private func resolveCurrentSongLoad(song: Song, generation: Int) async {
+        guard !Task.isCancelled, generation == loadGeneration else { return }
         do {
             let source: PlaybackSource
             if let downloadedSource = downloads.localPlaybackSource(songID: song.id) {
                 source = downloadedSource
                 isUsingDownloadedSource = true
-            } else if let cachedDetailedSong {
+            } else if let cachedDetailedSong = detailedPlaybackSongs[song.id] {
                 source = try await api.playbackSource(
                     for: cachedDetailedSong
                 )
@@ -1154,6 +1248,7 @@ final class PlayerStore {
         isLoading = false
         updateNowPlayingState()
         persistSnapshot()
+        onListenTogetherTransport?(.pause, currentSong?.id)
     }
 
     private func bindEngine() {
@@ -1277,14 +1372,14 @@ final class PlayerStore {
     private func bindRemoteCommands() {
         nowPlayingSession.onPlay = { [weak self] in
             guard let self else { return }
-            if self.engine.hasCurrentItem {
-                self.engine.play()
+            if self.engine.hasCurrentItem || self.isLoading {
+                self.setLocalPlaybackIntent(true)
             } else {
                 Task { @MainActor in await self.retry() }
             }
         }
         nowPlayingSession.onPause = { [weak self] in
-            self?.engine.pause()
+            self?.setLocalPlaybackIntent(false)
         }
         nowPlayingSession.onTogglePlayPause = { [weak self] in
             self?.togglePlayback()

@@ -199,6 +199,9 @@ final class PlayerStore {
     private var loadGeneration = 0
 
     @ObservationIgnored
+    private var listenTogetherLoadTask: Task<Void, Never>?
+
+    @ObservationIgnored
     private var trackCacheTask: Task<Void, Never>?
 
     @ObservationIgnored
@@ -436,7 +439,7 @@ final class PlayerStore {
         isPlaying shouldPlay: Bool,
         adoptsRoomPlayMode: Bool,
         playMode: String?
-    ) async {
+    ) {
         guard !songs.isEmpty,
               let targetIndex = songs.firstIndex(where: {
                   $0.id == targetSongID
@@ -463,20 +466,28 @@ final class PlayerStore {
 
         if !songChanged, isResolvingSource {
             currentLoadShouldAutoplay = shouldPlay
-            let clamped = clampedPlaybackPosition(targetProgress)
-            progress = clamped
-            reanchorPlaybackTimeline(to: clamped, rate: 0)
-            updateNowPlayingState()
-            persistSnapshot()
+            seek(to: targetProgress, reportsToRoom: false)
             return
         }
 
         if songChanged || !engine.hasCurrentItem {
             hasRecordedCurrentStart = false
-            await loadCurrentSong(
+            guard let load = prepareCurrentSongLoad(
                 autoplay: shouldPlay,
-                startAt: max(targetProgress, 0)
-            )
+                startAt: targetProgress
+            ) else { return }
+            // Room polling must keep receiving seeks and pauses while audio loads.
+            listenTogetherLoadTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.resolveCurrentSongLoad(
+                    song: load.song,
+                    formerSongID: load.formerSongID,
+                    generation: load.generation
+                )
+                if self.loadGeneration == load.generation {
+                    self.listenTogetherLoadTask = nil
+                }
+            }
             return
         }
 
@@ -1202,7 +1213,27 @@ final class PlayerStore {
         reportsToRoom: Bool = false,
         queueChanged: Bool = false
     ) async {
-        guard let song = playbackQueue.currentSong else { return }
+        guard let load = prepareCurrentSongLoad(
+            autoplay: autoplay,
+            startAt: startAt,
+            queueChanged: queueChanged
+        ) else { return }
+        await resolveCurrentSongLoad(
+            song: load.song,
+            formerSongID: load.formerSongID,
+            generation: load.generation,
+            reportsToRoom: reportsToRoom
+        )
+    }
+
+    private func prepareCurrentSongLoad(
+        autoplay: Bool,
+        startAt: TimeInterval,
+        queueChanged: Bool = false
+    ) -> (song: Song, formerSongID: Int?, generation: Int)? {
+        guard let song = playbackQueue.currentSong else { return nil }
+        listenTogetherLoadTask?.cancel()
+        listenTogetherLoadTask = nil
         let formerSongID = currentSong?.id
         if song.id != formerSongID {
             playbackRecoveryAttempts = 0
@@ -1223,7 +1254,6 @@ final class PlayerStore {
         // Finish those callbacks before initializing the incoming song's timeline.
         engine.unload()
         currentSong = song
-        let cachedDetailedSong = detailedPlaybackSongs[song.id]
         resolveCurrentSongAudioAvailability(
             for: song,
             generation: generation
@@ -1259,11 +1289,20 @@ final class PlayerStore {
         if queueChanged {
             onListenTogetherQueueEdit?()
         }
+        return (song, formerSongID, generation)
+    }
 
+    private func resolveCurrentSongLoad(
+        song: Song,
+        formerSongID: Int?,
+        generation: Int,
+        reportsToRoom: Bool = false
+    ) async {
+        guard !Task.isCancelled, generation == loadGeneration else { return }
         do {
             let source = try await playbackSourceRetryingTransientFailure(
                 for: song,
-                cachedDetailedSong: cachedDetailedSong,
+                cachedDetailedSong: detailedPlaybackSongs[song.id],
                 generation: generation
             )
             guard generation == loadGeneration, currentSong?.id == song.id else { return }

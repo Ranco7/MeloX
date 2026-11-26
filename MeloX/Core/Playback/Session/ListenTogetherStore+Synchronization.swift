@@ -9,27 +9,19 @@ extension ListenTogetherStore {
     }
 
     private func monitorSession() async {
-        var tick = 0
+        async let presence: Void = monitorRoomPresence()
+        await monitorPlayback()
+        await presence
+    }
+
+    private func monitorPlayback() async {
         var consecutivePollFailures = 0
         while !Task.isCancelled, isInRoom {
-            tick += 1
-            let succeeded = await pollServer(
-                includesRoomStatus: tick == 1
-                    || tick.isMultiple(of: 5)
-                    || (!player.listenTogetherReportedPlaying
-                        && tick.isMultiple(of: 2))
-            )
+            let succeeded = await pollPlayback()
             guard !Task.isCancelled, isInRoom else { return }
-            let delay: Duration
-            if succeeded {
-                consecutivePollFailures = 0
-                delay = player.listenTogetherReportedPlaying
-                    ? .seconds(1)
-                    : .seconds(5)
-            } else {
-                consecutivePollFailures += 1
-                delay = .seconds(1 << min(consecutivePollFailures, 3))
-            }
+            consecutivePollFailures = succeeded ? 0 : consecutivePollFailures + 1
+            // A paused member still needs to see another member resume promptly.
+            let delay = Duration.seconds(1 << min(consecutivePollFailures, 3))
             do {
                 try await Task.sleep(for: delay)
             } catch {
@@ -38,21 +30,34 @@ extension ListenTogetherStore {
         }
     }
 
-    private func pollServer(
-        includesRoomStatus: Bool
-    ) async -> Bool {
+    private func monitorRoomPresence() async {
         let session = sessionRevision
+        while !Task.isCancelled, isInRoom, sessionRevision == session {
+            do {
+                try await refreshRoomStatus()
+                guard isInRoom, sessionRevision == session else { return }
+                try await sendHeartbeat()
+            } catch is CancellationError {
+                return
+            } catch {
+                // Playback polling owns connection state and can succeed even
+                // when presence requests fail.
+            }
+            do {
+                try await Task.sleep(for: .seconds(5))
+            } catch {
+                return
+            }
+        }
+    }
+
+    private func pollPlayback() async -> Bool {
+        let session = sessionRevision
+        // A pending local transport report has priority over remote echoes.
+        guard transportReportTask == nil else { return true }
         do {
             try await synchronizeFromServer(initial: false)
             guard isInRoom, sessionRevision == session else { return false }
-
-            if includesRoomStatus {
-                try await refreshRoomStatus()
-                guard isInRoom, sessionRevision == session else { return false }
-                try await sendHeartbeat()
-            }
-
-            guard sessionRevision == session else { return false }
             consecutiveSyncFailures = 0
             connectionState = .connected
             lastSyncDate = .now
@@ -60,9 +65,7 @@ extension ListenTogetherStore {
         } catch is CancellationError {
             return false
         } catch {
-            guard !Task.isCancelled, sessionRevision == session else {
-                return false
-            }
+            guard !Task.isCancelled, sessionRevision == session else { return false }
             consecutiveSyncFailures += 1
             if consecutiveSyncFailures >= 2 {
                 connectionState = .reconnecting
@@ -97,8 +100,7 @@ extension ListenTogetherStore {
     func synchronizeFromServer(initial: Bool) async throws {
         guard let room, operation != .leaving else { return }
         let session = sessionRevision
-        guard synchronizingSession != session, transportReportTask == nil,
-              queueReportTask == nil else { return }
+        guard synchronizingSession != session, transportReportTask == nil else { return }
         synchronizingSession = session
         defer {
             if synchronizingSession == session {
@@ -106,13 +108,17 @@ extension ListenTogetherStore {
             }
         }
         let revision = localChangeRevision
+        // Preserve a local queue edit awaiting upload without delaying
+        // playback commands from other room members.
+        let acceptsPlaylist = queueReportTask == nil
         let payload = try await api.listenTogetherPlayback(roomID: room.id)
         try Task.checkCancellation()
         guard sessionRevision == session, localChangeRevision == revision,
               operation != .leaving else { return }
         let commandObservedAt = Date()
 
-        let playlistSignature = signature(for: payload.playlist)
+        let playlist = acceptsPlaylist ? payload.playlist : nil
+        let playlistSignature = acceptsPlaylist ? signature(for: playlist) : lastPlaylistSignature
         let commandSignature = signature(for: payload.playCommand)
         let playlistChanged = playlistSignature != lastPlaylistSignature
         let commandChanged = commandSignature != lastCommandSignature
@@ -138,7 +144,7 @@ extension ListenTogetherStore {
             observedPlayCommand = nil
         }
 
-        var songIDs = payload.playlist?.playbackSongIDs ?? []
+        var songIDs = playlist?.playbackSongIDs ?? []
         if songIDs.isEmpty {
             songIDs = player.queue.map(\.id)
         }
@@ -207,13 +213,13 @@ extension ListenTogetherStore {
             } else {
                 progress = player.estimatedProgress()
             }
-            await player.synchronizeListenTogetherPlayback(
+            player.synchronizeListenTogetherPlayback(
                 songs: songs,
                 targetSongID: transportTargetSongID,
                 progress: progress,
                 isPlaying: shouldPlay,
                 adoptsRoomPlayMode: initial || playlistChanged,
-                playMode: payload.playlist?.playMode
+                playMode: playlist?.playMode
             )
         } else if let currentSong = player.currentSong,
                   !songs.contains(where: { $0.id == currentSong.id }),
@@ -223,21 +229,20 @@ extension ListenTogetherStore {
             // The room removed the song this device is playing. Align the
             // queue and pause instead of keeping a song the room no longer has
             // and republishing it on the next local queue edit.
-            await player.synchronizeListenTogetherPlayback(
+            player.synchronizeListenTogetherPlayback(
                 songs: songs,
                 targetSongID: alignmentTarget.id,
                 progress: 0,
                 isPlaying: false,
                 adoptsRoomPlayMode: true,
-                playMode: payload.playlist?.playMode
+                playMode: playlist?.playMode
             )
         } else {
             player.synchronizeListenTogetherQueue(
                 songs: songs,
-                playMode: payload.playlist?.playMode
+                playMode: playlist?.playMode
             )
         }
-        guard sessionRevision == session, operation != .leaving else { return }
         lastPlaylistSignature = playlistSignature
         lastCommandSignature = commandSignature
     }
